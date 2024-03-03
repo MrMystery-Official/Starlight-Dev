@@ -55,6 +55,7 @@ AINBFile::Node* SelectedNode = nullptr;
 LinkInfo SelectedLink; //Is Flow Link | InputEntry* / 
 
 std::unordered_map<uint32_t, bool> CommandHeaderOpen;
+std::unordered_map<uint32_t, bool> GlobalParamHeaderOpen;
 
 //Limitation: max 42.949.600 nodes, per node max. 1000 pins
 
@@ -174,7 +175,6 @@ void UIAINBEditor::LoadAINBFile(std::string Path, bool AbsolutePath)
 	OutputToId.clear();
 	InputToId.clear();
 	NodeShapeInfo.clear();
-	CommandHeaderOpen.clear();
 	UpdateNodsIds();
 	UpdateNodeShapes();
 
@@ -227,6 +227,15 @@ void UIAINBEditor::LoadAINBFile(std::string Path, bool AbsolutePath)
 	for (AINBFile::Command Cmd : AINB.Commands)
 	{
 		CommandHeaderOpen.insert({ Cmd.GUID.Part1, false });
+	}
+
+	GlobalParamHeaderOpen.clear();
+	for (uint32_t i = 0; i < AINB.GlobalParameters.size(); i++)
+	{
+		for (uint32_t j = 0; j < AINB.GlobalParameters[i].size(); j++)
+		{
+			GlobalParamHeaderOpen.insert({ (i * 500) + j, false}); //Max 500 global params per data type
+		}
 	}
 
 	RunAutoLayout = true;
@@ -1140,6 +1149,41 @@ void UIAINBEditor::DrawAinbEditorWindow()
 
 void UIAINBEditor::DrawPropertiesWindowContent()
 {
+	ImGui::Text("General");
+	ImGui::Separator();
+
+	ImGui::Indent();
+	ImGui::Columns(2);
+
+	ImGui::Text("File name");
+	ImGui::NextColumn();
+	ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+	if (ImGui::InputText("##GeneralFileName", &AINB.Header.FileName))
+	{
+		AINB.Loaded = true;
+	}
+	ImGui::PopItemWidth();
+	ImGui::NextColumn();
+
+	ImGui::Text("Category");
+	ImGui::NextColumn();
+	ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+	const char* CategoryDropdownItems[] = { "Logic", "AI", "Sequence" };
+	int CategorySelected = 0;
+	if (AINB.Header.FileCategory == "AI") CategorySelected = 1;
+	else if (AINB.Header.FileCategory == "Sequence") CategorySelected = 2;
+	if(ImGui::Combo("##GeneralCategory", &CategorySelected, CategoryDropdownItems, IM_ARRAYSIZE(CategoryDropdownItems)))
+	{
+		if (CategorySelected == 0) AINB.Header.FileCategory = "Logic";
+		else if (CategorySelected == 1) AINB.Header.FileCategory = "AI";
+		else if (CategorySelected == 2) AINB.Header.FileCategory = "Sequence";
+	}
+	ImGui::PopItemWidth();
+
+	ImGui::Columns();
+	ImGui::Unindent();
+
+	ImGui::NewLine();
 	ImGui::Text("Commands");
 	ImGui::Separator();
 	if (ImGui::Button("Add command", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().FramePadding.x, 0)))
@@ -1154,8 +1198,8 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 	}
 	for (std::vector<AINBFile::Command>::iterator Iter = AINB.Commands.begin(); Iter != AINB.Commands.end(); )
 	{
-		ImGui::GetStateStorage()->SetInt(ImGui::GetID(("Command: " + Iter->Name).c_str()), (int)CommandHeaderOpen[Iter->GUID.Part1]);
-		if (ImGui::CollapsingHeader(("Command: " + Iter->Name).c_str()))
+		ImGui::GetStateStorage()->SetInt(ImGui::GetID(("Command: " + Iter->Name + "##" + std::to_string(Iter->GUID.Part1)).c_str()), (int)CommandHeaderOpen[Iter->GUID.Part1]);
+		if (ImGui::CollapsingHeader(("Command: " + Iter->Name + "##" + std::to_string(Iter->GUID.Part1)).c_str()))
 		{
 			ImGui::Columns(2, std::to_string(Iter->GUID.Part1).c_str());
 			ImGui::Indent();
@@ -1202,6 +1246,129 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 			CommandHeaderOpen[Iter->GUID.Part1] = false;
 		}
 		Iter++;
+	}
+	ImGui::NewLine();
+
+	ImGui::Text("Global parameters");
+	ImGui::Separator();
+	if (ImGui::Button("Add global parameter", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().FramePadding.x, 0)))
+	{
+		AINBFile::GlobalEntry Entry;
+		Entry.Name = "DummyName" + std::to_string(AINB.GlobalParameters[1].size() + 1);
+		Entry.GlobalValueType = (int)AINBFile::GlobalType::Int;
+		Entry.GlobalValue = (uint32_t)0;
+		AINB.GlobalParameters[1].push_back(Entry);
+		GlobalParamHeaderOpen.insert({ 500 + AINB.GlobalParameters[1].size() - 1, false });
+	}
+	for (int i = 0; i < AINB.GlobalParameters.size(); i++)
+	{
+		for (std::vector<AINBFile::GlobalEntry>::iterator Iter = AINB.GlobalParameters[i].begin(); Iter != AINB.GlobalParameters[i].end(); )
+		{
+			uint32_t Index = std::distance(AINB.GlobalParameters[i].begin(), Iter);
+			ImGui::GetStateStorage()->SetInt(ImGui::GetID(("Global parameter: " + Iter->Name + "##" + std::to_string(Index) + ":" + std::to_string(i)).c_str()), (int)GlobalParamHeaderOpen[(i * 500) + Index]);
+			if (ImGui::CollapsingHeader(("Global parameter: " + Iter->Name + "##" + std::to_string(Index) + ":" + std::to_string(i)).c_str()))
+			{
+				ImGui::Columns(2, ("GlobalParam" + std::to_string(Index) + ":" + std::to_string(i)).c_str());
+				ImGui::Indent();
+
+				ImGui::Text("Data type");
+				ImGui::NextColumn();
+				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+				const char* TypeDropdownItems[] = { "String", "Int", "Float", "Bool", "Vec3f", "UserDefined" };
+				if (ImGui::Combo(("##DataTypeGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), reinterpret_cast<int*>(&Iter->GlobalValueType), TypeDropdownItems, IM_ARRAYSIZE(TypeDropdownItems)))
+				{
+					if (Iter->GlobalValueType == (int)AINBFile::GlobalType::String) Iter->GlobalValue = "None";
+					if (Iter->GlobalValueType == (int)AINBFile::GlobalType::Int || Iter->GlobalValueType == (int)AINBFile::GlobalType::UserDefined) Iter->GlobalValue = (uint32_t)0;
+					if (Iter->GlobalValueType == (int)AINBFile::GlobalType::Float) Iter->GlobalValue = 0.0f;
+					if (Iter->GlobalValueType == (int)AINBFile::GlobalType::Bool) Iter->GlobalValue = false;
+					if (Iter->GlobalValueType == (int)AINBFile::GlobalType::Vec3f) Iter->GlobalValue = Vector3F(0.0f, 0.0f, 0.0f);
+				}
+				ImGui::PopItemWidth();
+				ImGui::NextColumn();
+
+				ImGui::Text("Name");
+				ImGui::NextColumn();
+				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+				ImGui::InputText(("##NameGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), &Iter->Name);
+				ImGui::PopItemWidth();
+				ImGui::NextColumn();
+
+				ImGui::Text("Default value");
+				ImGui::NextColumn();
+				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+				switch (Iter->GlobalValueType)
+				{
+				case (int)AINBFile::GlobalType::String:
+					{
+						ImGui::InputText(("##DefaultValGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), reinterpret_cast<std::string*>(&Iter->GlobalValue));
+						break;
+					}
+				case (int)AINBFile::GlobalType::Bool:
+				{
+					ImGui::Checkbox(("##DefaultValGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), reinterpret_cast<bool*>(&Iter->GlobalValue));
+					break;
+				}
+				case (int)AINBFile::GlobalType::UserDefined:
+				case (int)AINBFile::GlobalType::Int:
+				{
+					ImGui::InputScalar(("##DefaultValGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), ImGuiDataType_::ImGuiDataType_U32, reinterpret_cast<uint32_t*>(&Iter->GlobalValue));
+					break;
+				}
+				case (int)AINBFile::GlobalType::Float:
+				{
+					ImGui::InputScalar(("##DefaultValGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), ImGuiDataType_::ImGuiDataType_Float, reinterpret_cast<float*>(&Iter->GlobalValue));
+					break;
+				}
+				case (int)AINBFile::GlobalType::Vec3f:
+				{
+					ImGui::InputFloat3(("##DefaultValGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), reinterpret_cast<Vector3F*>(&Iter->GlobalValue)->GetRawData());
+					break;
+				}
+				default:
+					ImGui::Text("Unknown data type");
+					break;
+				}
+				ImGui::PopItemWidth();
+				ImGui::NextColumn();
+
+				ImGui::Text("Notes");
+				ImGui::NextColumn();
+				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+				ImGui::InputText(("##NotesGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), &Iter->Notes);
+				ImGui::PopItemWidth();
+				ImGui::NextColumn();
+
+				ImGui::Text("File Reference");
+				ImGui::NextColumn();
+				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+				ImGui::InputText(("##FileRefGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), &Iter->FileReference.FileName);
+				ImGui::PopItemWidth();
+
+				ImGui::Columns();
+
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5, 0.14, 0.14, 1));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91, 0.12, 0.15, 1));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 0, 0, 1));
+				if (ImGui::Button(("Delete##DelGP" + std::to_string(Index) + ":" + std::to_string(i)).c_str(), ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().IndentSpacing, 0)))
+				{
+					GlobalParamHeaderOpen.erase((i * 500) + Index);
+					ImGui::PopStyleColor(3);
+					Iter = AINB.GlobalParameters[i].erase(Iter);
+					ImGui::Unindent();
+					continue;
+				}
+				ImGui::PopStyleColor(3);
+
+				ImGui::Unindent();
+
+				GlobalParamHeaderOpen[(i * 500) + Index] = true;
+			}
+			else
+			{
+				GlobalParamHeaderOpen[(i * 500) + Index] = false;
+			}
+			Iter++;
+		}
 	}
 
 	if (SelectedNode != nullptr)
@@ -1383,5 +1550,14 @@ void UIAINBEditor::Save()
 	{
 		Util::CreateDir(Editor::GetWorkingDirFile("Save/" + AINB.Header.FileCategory));
 		AINB.Write(Editor::GetWorkingDirFile("Save/" + AINB.Header.FileCategory + "/" + AINB.Header.FileName + ".ainb"));
+
+		GlobalParamHeaderOpen.clear();
+		for (uint32_t i = 0; i < AINB.GlobalParameters.size(); i++)
+		{
+			for (uint32_t j = 0; j < AINB.GlobalParameters[i].size(); j++)
+			{
+				GlobalParamHeaderOpen.insert({ (i * 500) + j, false }); //Max 500 global params per data type
+			}
+		}
 	}
 }

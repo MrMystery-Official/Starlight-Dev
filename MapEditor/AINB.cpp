@@ -1405,6 +1405,19 @@ std::vector<unsigned char> AINBFile::ToBinary()
 		BasePreconditionNode += Node.PreconditionCount;
 	}
 
+	std::vector<std::vector<AINBFile::GlobalEntry>> NewGlobalsParams(6);
+	if (GlobalParameters.size() == AINBFile::GlobalTypeCount)
+	{
+		for (int i = 0; i < AINBFile::GlobalTypeCount; i++)
+		{
+			for (AINBFile::GlobalEntry Entry : this->GlobalParameters[i])
+			{
+				NewGlobalsParams[(int)Entry.GlobalValueType].push_back(Entry);
+			}
+		}
+	}
+	this->GlobalParameters = NewGlobalsParams;
+
 	bool GlobalParametersEmpty = true;
 	for (int Type = 0; Type < AINBFile::GlobalTypeCount; Type++)
 	{
@@ -1445,7 +1458,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 			{
 				AddToStringTable(Entry.Name, StringTable);
 				uint32_t NameOffset = GetOffsetInStringTable(Entry.Name, StringTable);
-				if (Entry.FileReference.FileName != "MapEditor_AINB_NoVal")
+				if (Entry.FileReference.FileName != "")
 				{
 					int FileIndex = -1;
 
@@ -1499,10 +1512,10 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				}
 				if (Type == (int)AINBFile::GlobalType::Vec3f)
 				{
-					Vector3F Vec3f = *reinterpret_cast<Vector3F*>(&Entry.GlobalValue);
-					Writer.WriteInteger(Vec3f.GetX(), sizeof(float));
-					Writer.WriteInteger(Vec3f.GetY(), sizeof(float));
-					Writer.WriteInteger(Vec3f.GetZ(), sizeof(float));
+					Vector3F* Vec3f = reinterpret_cast<Vector3F*>(&Entry.GlobalValue);
+					Writer.WriteRawUnsafeFixed((const char*)&Vec3f->GetRawData()[0], sizeof(float));
+					Writer.WriteRawUnsafeFixed((const char*)&Vec3f->GetRawData()[1], sizeof(float));
+					Writer.WriteRawUnsafeFixed((const char*)&Vec3f->GetRawData()[2], sizeof(float));
 					Size += 12;
 				}
 				if (Type == (int)AINBFile::GlobalType::String)
@@ -2607,6 +2620,35 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	}
 
 	uint32_t EmbedAINBStart = Writer.GetPosition();
+
+	this->EmbeddedAinbArray.clear();
+	std::map<std::string, uint32_t> EmbeddedAINBs;
+	for (AINBFile::Node& Node : this->Nodes)
+	{
+		if (std::find(Node.Flags.begin(), Node.Flags.end(), AINBFile::FlagsStruct::IsExternalAINB) != Node.Flags.end())
+		{
+			bool Initial = true;
+			for (auto& [Key, Val] : EmbeddedAINBs)
+			{
+				if (Key == Node.GetName())
+				{
+					Initial = false;
+					break;
+				}
+			}
+			if (!Initial) EmbeddedAINBs[Node.GetName()] = EmbeddedAINBs[Node.GetName()] + 1;
+			else EmbeddedAINBs.insert({ Node.GetName(), 1 });
+		}
+	}
+	for (auto& [Key, Val] : EmbeddedAINBs)
+	{
+		AINBFile::EmbeddedAinb EAINB;
+		EAINB.FilePath = Key + ".ainb";
+		EAINB.FileCategory = this->Header.FileCategory;
+		EAINB.Count = Val;
+		this->EmbeddedAinbArray.push_back(EAINB);
+	}
+
 	Writer.WriteInteger(this->EmbeddedAinbArray.size(), sizeof(uint32_t));
 	for (AINBFile::EmbeddedAinb AINB : this->EmbeddedAinbArray)
 	{

@@ -19,9 +19,9 @@ public:
 
 	struct AinbHeader {
 		char Magic[4];
-		std::string FileName;
-		std::string FileCategory;
-		uint32_t Version;
+		std::string FileName = "";
+		std::string FileCategory = "Logic";
+		uint32_t Version = 0x404;
 		uint32_t FileNameOffset;
 		uint32_t CommandCount;
 		uint32_t NodeCount;
@@ -107,16 +107,16 @@ file_category = {"AI" : 0, "Logic" : 1, "Sequence" : 2}
 	};
 
 	struct GlobalFileRef {
-		std::string FileName = "MapEditor_AINB_NoVal";
-		uint32_t NameHash;
-		uint32_t UnknownHash1;
-		uint32_t UnknownHash2;
+		std::string FileName = "";
+		uint32_t NameHash = 0;
+		uint32_t UnknownHash1 = 0;
+		uint32_t UnknownHash2 = 0;
 	};
 
 	struct GlobalEntry {
 		uint32_t Index = 0xFFFFFFFF;
-		std::string Name;
-		std::string Notes;
+		std::string Name = "";
+		std::string Notes = "";
 		AINBValue GlobalValue;
 		int GlobalValueType;
 		GlobalFileRef FileReference;
