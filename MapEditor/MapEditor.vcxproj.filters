@@ -1,0 +1,620 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\imgui">
+      <UniqueIdentifier>{5b4a7751-aa41-45e8-b491-850f5fbded3f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\imgui">
+      <UniqueIdentifier>{ba7ca257-2a6e-4fdd-9083-b833b85864c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui">
+      <UniqueIdentifier>{2b13197c-f341-4454-80aa-dc94c92a72b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui">
+      <UniqueIdentifier>{d49d9530-314f-4cb8-a86b-29160bbe6f7e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\util">
+      <UniqueIdentifier>{2efccbf4-e5bf-4b79-a38c-3dbfa3f2ced0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\util">
+      <UniqueIdentifier>{66dc0db7-14c4-449d-ac0c-39072734944a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\imgui_gizmo">
+      <UniqueIdentifier>{c4150c4b-d257-468b-8a9d-2b2e607a50f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\imgui_gizmo">
+      <UniqueIdentifier>{dfa2ac41-2870-4162-8061-72139e587dc7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Shaders">
+      <UniqueIdentifier>{bd11ea1b-7209-45c3-a780-0ae4e7592fc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\manager">
+      <UniqueIdentifier>{b118b473-41bf-4d36-8fc0-4434072bab4d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\manager">
+      <UniqueIdentifier>{5ce52dc5-1e88-47c2-99c5-461fe04c95da}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\engine">
+      <UniqueIdentifier>{cdb85a78-330f-4456-96b2-248727a69a52}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\engine">
+      <UniqueIdentifier>{0b271183-a0db-459a-a614-2c9799b7849a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file">
+      <UniqueIdentifier>{50222d0d-c749-42c9-aabf-1005e187e5e8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file">
+      <UniqueIdentifier>{781bbbc7-1c9a-4723-8c4e-d63f7460be88}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file\bfres">
+      <UniqueIdentifier>{790b74a5-1c25-46e5-9b78-be4cbef9b43f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\bfres">
+      <UniqueIdentifier>{70a34b92-1f5d-44b8-9fcf-3355f2bf06bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui\ui_parts">
+      <UniqueIdentifier>{75106d2d-f13e-40ee-a0b8-63fd92658ac9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui\ui_parts">
+      <UniqueIdentifier>{2ef82b8d-b7a0-4e19-8e46-80178ae229fb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui\popup">
+      <UniqueIdentifier>{26b4d043-3275-4aa6-91c2-029e54d2b993}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui\popup">
+      <UniqueIdentifier>{8a065160-8d51-4281-80cc-f6709c99679d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui\ui_parts\ainb">
+      <UniqueIdentifier>{05917dd7-b5fe-4859-b08d-66f7e30990b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui\ui_parts\ainb">
+      <UniqueIdentifier>{cd6fb507-00d6-49f7-bfe9-d8d16702225d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\imgui_node_editor">
+      <UniqueIdentifier>{cf9e2a47-4767-4cc0-8171-4844c87e13b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\imgui_node_editor">
+      <UniqueIdentifier>{2726af9e-4f17-4413-a209-ae1ea24a8d92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file\terrain">
+      <UniqueIdentifier>{2ae6f11c-6440-4b3b-9c89-f75e74e4b2a2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\terrain">
+      <UniqueIdentifier>{4c02f9dd-5851-49ce-adc3-3b923ea4d3e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file\ainb">
+      <UniqueIdentifier>{9427a4b0-7c68-4125-a81b-abc59966ee17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\ainb">
+      <UniqueIdentifier>{a3c9a081-53ef-43b2-a508-7a9351ac45f9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_demo.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_draw.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_impl_glfw.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_impl_opengl3.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_stdlib.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_tables.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_widgets.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="Logger.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="glad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_gizmo\ImSequencer.cpp">
+      <Filter>Source Files\imgui_gizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_gizmo\GraphEditor.cpp">
+      <Filter>Source Files\imgui_gizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_gizmo\ImCurveEdit.cpp">
+      <Filter>Source Files\imgui_gizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_gizmo\ImGradient.cpp">
+      <Filter>Source Files\imgui_gizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_gizmo\ImGuizmo.cpp">
+      <Filter>Source Files\imgui_gizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="Shader.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Framebuffer.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Camera.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="ShaderMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="FramebufferMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="BinaryVectorReader.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="BinaryVectorWriter.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="Bfres.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="ZStdFile.cpp">
+      <Filter>Source Files\file</Filter>
+    </ClCompile>
+    <ClCompile Include="Vector3F.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="VAO.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="VBO.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureFormatDecoder.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureToGo.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="Texture.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="TegraSwizzle.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="stb.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EBO.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="astc_decomp.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="SARC.cpp">
+      <Filter>Source Files\file</Filter>
+    </ClCompile>
+    <ClCompile Include="ActorMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="Byml.cpp">
+      <Filter>Source Files\file</Filter>
+    </ClCompile>
+    <ClCompile Include="UIOutliner.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="UI.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAddActor.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="Util.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="UIConsole.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="UIProperties.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="UIMapView.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="Exporter.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
+    <ClCompile Include="UITools.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="Frustum.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Mesh.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupGeneralInputPair.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAddRail.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAddLink.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="HashMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupGeneralConfirm.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupGeneralInputString.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupLoadScene.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="RESTBL.cpp">
+      <Filter>Source Files\file</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorConfig.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupExportMod.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBEditor.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_node_editor\crude_json.cpp">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_node_editor\imgui_canvas.cpp">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_node_editor\imgui_node_editor.cpp">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui_node_editor\imgui_node_editor_api.cpp">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </ClCompile>
+    <ClCompile Include="AINBNodeDefMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAddAINBNode.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupEditorAINBActorLinks.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="tinyfiledialogs.c">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="UIActorTool.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="BHTMP.h">
+      <Filter>Header Files\file\terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="BHTMP.cpp">
+      <Filter>Source Files\file\terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAINBElementSelector.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="AINB.cpp">
+      <Filter>Source Files\file\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="EXB.cpp">
+      <Filter>Source Files\file\ainb</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="imgui\imconfig.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_impl_glfw.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_impl_opengl3.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_impl_opengl3_loader.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_internal.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_stdlib.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imstb_rectpack.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imstb_textedit.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imstb_truetype.h">
+      <Filter>Header Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="Logger.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_gizmo\GraphEditor.h">
+      <Filter>Header Files\imgui_gizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_gizmo\ImCurveEdit.h">
+      <Filter>Header Files\imgui_gizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_gizmo\ImGradient.h">
+      <Filter>Header Files\imgui_gizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_gizmo\ImGuizmo.h">
+      <Filter>Header Files\imgui_gizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_gizmo\ImSequencer.h">
+      <Filter>Header Files\imgui_gizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_gizmo\ImZoomSlider.h">
+      <Filter>Header Files\imgui_gizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="Shader.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Framebuffer.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="FramebufferMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="BinaryVectorReader.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="BinaryVectorWriter.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="Bfres.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="ZStdFile.h">
+      <Filter>Header Files\file</Filter>
+    </ClInclude>
+    <ClInclude Include="Vector3F.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="VAO.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="VBO.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureFormatDecoder.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureToGo.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="TegraSwizzle.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="EBO.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="bcdec.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="astc_decomp.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="SARC.h">
+      <Filter>Header Files\file</Filter>
+    </ClInclude>
+    <ClInclude Include="Actor.h">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="ActorMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="Byml.h">
+      <Filter>Header Files\file</Filter>
+    </ClInclude>
+    <ClInclude Include="UIOutliner.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="UI.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAddActor.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="Util.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="UIConsole.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="UIProperties.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="UIMapView.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="Exporter.h">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="UITools.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="Frustum.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupGeneralInputPair.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAddRail.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAddLink.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="HashMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupGeneralConfirm.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupGeneralInputString.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupLoadScene.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="RESTBL.h">
+      <Filter>Header Files\file</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorConfig.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupExportMod.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBEditor.h">
+      <Filter>Header Files\ui\ui_parts\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_node_editor\imgui_canvas.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_node_editor\imgui_extra_math.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_node_editor\imgui_node_editor.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_node_editor\imgui_node_editor_internal.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_node_editor\crude_json.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui_node_editor\imgui_bezier_math.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="AINBNodeDefMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAddAINBNode.h">
+      <Filter>Header Files\ui\ui_parts\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupEditorAINBActorLinks.h">
+      <Filter>Header Files\ui\ui_parts\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="tinyfiledialogs.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="UIActorTool.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="HGHT.h">
+      <Filter>Header Files\file\terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAINBElementSelector.h">
+      <Filter>Header Files\ui\ui_parts\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="AINB.h">
+      <Filter>Header Files\file\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="EXB.h">
+      <Filter>Header Files\file\ainb</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Assets\Shaders\Default.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Default.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Selected.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Selected.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Picking.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Picking.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Instanced.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Instanced.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Game.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Game.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="imgui_node_editor\imgui_node_editor_internal.inl">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </None>
+    <None Include="imgui_node_editor\imgui_bezier_math.inl">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </None>
+    <None Include="imgui_node_editor\imgui_extra_math.inl">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </None>
+  </ItemGroup>
+</Project>
