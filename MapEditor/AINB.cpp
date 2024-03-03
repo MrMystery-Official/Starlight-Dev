@@ -132,7 +132,6 @@ AINBFile::InputEntry AINBFile::ReadInputEntry(BinaryVectorReader* Reader, int Ty
 			Entry.Flags.push_back(FlagsStruct::SetPointerFlagBitZero);
 		}
 		if ((Flags & 0xc200) == 0xc200) {
-			std::cout << "ERROR: Tried to use EXB function, which is currently unsupported!" << std::endl;
 			Entry.EXBIndex = Index;
 			Entry.Function = this->EXBFile.Commands[Entry.EXBIndex];
 			this->Functions[Entry.EXBIndex] = Entry.Function;
@@ -190,17 +189,16 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 	Reader.Seek(1, BinaryVectorReader::Position::Current);
 	magic[3] = '\0';
 	if (strcmp(magic, "AIB") != 0) {
-		std::cout << "ERROR: Expected AIB, got " << magic << std::endl;
+		Logger::Error("AINBDecoder", "Wrong magic, expected AIB");
 		return;
 	}
-	std::cout << "Magic verified!" << std::endl;
 
 	strcpy_s(Header.Magic, 4, magic);
 
 	Header.Version = Reader.ReadUInt32();
 
 	if (Header.Version != 0x404 && Header.Version != 0x407) {
-		std::cout << "ERROR: Artificial Intelligence Node Binary expected Version 0x404(4.4) or 0x407(4.7), but got " << Header.Version << "!" << std::endl;
+		Logger::Error("AINBDecoder", "Wrong version, expected 0x404(4.4) or 0x407(4.7, got " + std::to_string(Header.Version));
 		return;
 	}
 
@@ -236,7 +234,7 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 
 	if (Header.NodeCount == 0)
 	{
-		Logger::Error("AINBDecoder", "The AINB has 0 nodes");
+		Logger::Error("AINBDecoder", "AINB is empty (0 nodes)");
 		return;
 	}
 
@@ -291,7 +289,6 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 		{
 			if (i == (int)AINBFile::GlobalType::Int) { //int
 				Entry.GlobalValue = (uint32_t)Reader.ReadUInt32();
-				std::cout << "VALUE: " << *reinterpret_cast<uint32_t*>(&Entry.GlobalValue) << std::endl;
 			}
 			if (i == (int)AINBFile::GlobalType::Bool) { //bool
 				Entry.GlobalValue = (bool)Reader.ReadUInt32();
@@ -301,7 +298,6 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 			}
 			if (i == (int)AINBFile::GlobalType::String) { //string
 				Entry.GlobalValue = ReadStringFromStringPool(&Reader, Reader.ReadUInt32());
-				std::cout << "VALUE: " << *reinterpret_cast<std::string*>(&Entry.GlobalValue) << std::endl;
 			}
 			if (i == (int)AINBFile::GlobalType::Vec3f) { //vec3f
 				Entry.GlobalValue = Vector3F(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
@@ -339,13 +335,10 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 	*/
 
 	/* EXB Section */
-	if (Header.EXBOffset != 0) {
-		std::cout << "WARNING: The Artificial Intelligence Node Binary, called " << Header.FileName << ", contains a EXB Entry. This is currently not supported." << std::endl;
-		
+	if (Header.EXBOffset != 0) {		
 		Reader.Seek(Header.EXBOffset, BinaryVectorReader::Position::Begin);
 		std::vector<unsigned char> Bytes(Reader.GetSize() - Reader.GetPosition());
 		Reader.ReadStruct(Bytes.data(), Reader.GetSize() - Reader.GetPosition());
-		std::cout << "FirstByte: " << Bytes[0] << std::endl;
 		this->EXBFile = EXB(Bytes);
 		this->Functions.resize(EXBFile.Commands.size());
 	}
@@ -377,7 +370,6 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 						Parameter.Flags.push_back(FlagsStruct::SetPointerFlagBitZero);
 					}
 					if ((Flags & 0xc200) == 0xc200) {
-						std::cout << "ERROR: Tried to use EXB function, which is currently unsupported!" << std::endl;
 						Parameter.EXBIndex = Index;
 						Parameter.Function = this->EXBFile.Commands[Parameter.EXBIndex];
 						this->Functions[Parameter.EXBIndex] = Parameter.Function;
@@ -427,7 +419,8 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 						Parameter.Flags.push_back(FlagsStruct::SetPointerFlagBitZero);
 					}
 					if ((Flags & 0xc200) == 0xc200) {
-						std::cout << "ERROR: Tried to use EXB function, which is currently unsupported!" << std::endl;
+						Logger::Warning("AINBDecoder", "Found ImmediateParameter using EXB function, which is currently unsupported. Saving will break this file, please sind the following message to mrmystery0778 on Discord");
+						Logger::Warning("AINBDecoder", "Line 423, Flag 0xc200 found. GlobalParamIndex skipped. Name: " + this->Header.FileName + ", Category: " + this->Header.FileCategory);
 					}
 					else if (Flags & 0x8000)
 					{
@@ -451,8 +444,6 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 					Parameter.Value = Vector3F(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
 				}
 				Parameter.ValueType = i;
-
-				std::cout << "Set " << i << std::endl;
 				this->ImmediateParameters[i].push_back(Parameter);
 			}
 		}
@@ -556,7 +547,6 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 							Entry.Flags.push_back(FlagsStruct::SetPointerFlagBitZero);
 						}
 						if ((Flags & 0xc200) == 0xc200) {
-							std::cout << "ERROR: Tried to use EXB function, which is currently unsupported!" << std::endl;
 							Entry.EXBIndex = Index;
 							Entry.Function = this->EXBFile.Commands[Entry.EXBIndex];
 							this->Functions[Entry.EXBIndex] = Entry.Function;
@@ -993,7 +983,7 @@ AINBFile::AINBFile(std::string FilePath) {
 	}
 	else
 	{
-		std::cerr << "Could not open file \"" << FilePath << "\"!\n";
+		Logger::Error("AINBDecoder", "Could not open \"" + FilePath + "\"");
 	}
 }
 
@@ -1066,7 +1056,7 @@ int GetOffsetInStringTable(std::string Value, std::vector<std::string>& StringTa
 
 	if (Index == -1)
 	{
-		std::cerr << "ERROR: Can not find string \"" << Value << "\" in StringTable of AINB!\n";
+		Logger::Warning("AINBDecoder", "Could not find string \"" + Value + "\" in StringTable");
 		return -1;
 	}
 
@@ -1518,7 +1508,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				if (Type == (int)AINBFile::GlobalType::String)
 				{
 					AddToStringTable(*reinterpret_cast<std::string*>(&Entry.GlobalValue), StringTable);
-					std::cout << "Wrote GlobalValue: " << *reinterpret_cast<std::string*>(&Entry.GlobalValue) << std::endl;
 					Writer.WriteInteger(GetOffsetInStringTable(*reinterpret_cast<std::string*>(&Entry.GlobalValue), StringTable), sizeof(uint32_t));
 					Size += 4;
 				}
@@ -1527,7 +1516,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 		Writer.Seek(Start + Size, BinaryVectorWriter::Position::Begin);
 		for (AINBFile::GlobalFileRef File : Files)
 		{
-			std::cout << "FIleName: " << File.FileName << ", " << File.UnknownHash1 << std::endl;
 			AddToStringTable(File.FileName, StringTable);
 			Writer.WriteInteger(GetOffsetInStringTable(File.FileName, StringTable), sizeof(uint32_t));
 			Writer.WriteInteger(File.NameHash, sizeof(uint32_t));
@@ -1758,8 +1746,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				break;
 			}
 		}
-
-		std::cout << "Link Empty " << Node.Name << ": " << LinkedNodesEmpty << std::endl;
 
 		if (!ImmediateParametersEmpty)
 		{
@@ -2008,12 +1994,10 @@ std::vector<unsigned char> AINBFile::ToBinary()
 							}
 							else if (Entry.Condition != "MapEditor_AINB_NoVal")
 							{
-								std::cout << "S32COND: " << Entry.Condition << std::endl;
 								if (Entry.Condition != "Default")
 								{
 									if (Node.Type == (int)AINBFile::NodeTypes::Element_S32Selector)
 									{
-										std::cout << "S32Write: " << Entry.Condition << ", " << std::stoi(Entry.Condition) << std::endl;
 										Writer.WriteInteger(static_cast<signed int>(std::stoi(Entry.Condition)), sizeof(int32_t));
 									}
 									else
@@ -2038,14 +2022,12 @@ std::vector<unsigned char> AINBFile::ToBinary()
 							Writer.WriteInteger(Entry.NodeIndex, sizeof(uint32_t));
 							if (Entry.ConnectionName != "MapEditor_AINB_NoVal")
 							{
-								std::cout << "Writing Connection Name: " << Entry.ConnectionName << std::endl;
 								AddToStringTable(Entry.ConnectionName, StringTable);
 								Writer.WriteInteger(GetOffsetInStringTable(Entry.ConnectionName, StringTable), sizeof(uint32_t));
 							}
 							else if (Entry.Condition != "MapEditor_AINB_NoVal")
 							{
 								AddToStringTable(Entry.Condition, StringTable);
-								std::cout << "COND: " << Entry.Condition << std::endl;
 								Writer.WriteInteger(GetOffsetInStringTable(Entry.Condition, StringTable), sizeof(uint32_t));
 							}
 							Writer.Seek(Pos, BinaryVectorWriter::Position::Begin);
@@ -2083,7 +2065,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 						}
 						else
 						{
-							std::cout << "Writing Connection Name 2: " << Entry.ConnectionName << std::endl;
 							AddToStringTable(Entry.ConnectionName, StringTable);
 							Writer.WriteInteger(GetOffsetInStringTable(Entry.ConnectionName, StringTable), sizeof(uint32_t));
 						}
@@ -2310,7 +2291,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 		{
 			for (AINBFile::ImmediateParameter Entry : ImmediateParameters[Type])
 			{
-				std::cout << Entry.Class << std::endl;
 				AddToStringTable(Entry.Name, StringTable);
 				Writer.WriteInteger(GetOffsetInStringTable(Entry.Name, StringTable), sizeof(uint32_t));
 				uint16_t Flags = 0x0;
@@ -2364,7 +2344,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				{
 					AddToStringTable(*reinterpret_cast<std::string*>(&Entry.Value), StringTable);
 					Writer.WriteInteger(GetOffsetInStringTable(*reinterpret_cast<std::string*>(&Entry.Value), StringTable), sizeof(uint32_t));
-					std::cout << "Wrote " << *reinterpret_cast<std::string*>(&Entry.Value) << ", " << GetOffsetInStringTable(*reinterpret_cast<std::string*>(&Entry.Value), StringTable) << std::endl;
 				}
 				else if (Type == (int)AINBFile::ValueType::Vec3f)
 				{
@@ -2532,7 +2511,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	{
 		for (AINBFile::MultiEntry Entry : Multis)
 		{
-			std::cout << "MULTI ENTRY\n";
 			Writer.WriteInteger(Entry.NodeIndex, sizeof(int16_t));
 			Writer.WriteInteger(Entry.ParameterIndex, sizeof(int16_t));
 			uint16_t Flags = 0x0;
@@ -2614,7 +2592,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	{
 		for (int i = 0; i < PreconditionNodes.size(); i++)
 		{
-			std::cout << "WRITE PRECONDITION\n";
 			Writer.WriteInteger(PreconditionNodes[i], sizeof(uint16_t));
 			Writer.WriteInteger(0, sizeof(uint16_t)); //Purpose unknown
 		}
@@ -2625,7 +2602,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	{
 		EXBFile.Commands = EXBCommands;
 		std::vector<unsigned char> Bytes = EXBFile.ToBinary(EXBInstances);
-		std::cout << "Bytes size: " << Bytes.size() << std::endl;
+		Logger::Info("AINBEncoder", "EXB size: " + std::to_string(Bytes.size()));
 		Writer.WriteRawUnsafeFixed((const char*)Bytes.data(), Bytes.size());
 	}
 
@@ -2760,7 +2737,7 @@ std::string AINBFile::Node::GetName()
 	return AINBFile::NodeTypeToString((AINBFile::NodeTypes)this->Type);
 }
 
-//I hate this file format just like BFRES, 2600 lines of code, just for reading and writing a 800 byte file...
+//I hate this file format just like BFRES, 2749 lines of code, just for reading and writing a 800 byte file...
 
 void AINBFile::Write(std::string Path)
 {
