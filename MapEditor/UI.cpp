@@ -56,7 +56,7 @@ void UI::Initialize()
 	if (!glfwInit())
 		return;
 
-	Window = glfwCreateWindow(1280, 720, "Map Editor - The Legend of Zelda: Tears of the Kingdom", nullptr, nullptr);
+	Window = glfwCreateWindow(1280, 720, "Starlight - The Legend of Zelda: Tears of the Kingdom", nullptr, nullptr);
 	if (Window == nullptr)
 		return;
 	glfwMakeContextCurrent(Window);
