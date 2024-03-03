@@ -796,7 +796,6 @@ void UIAINBEditor::ManageLinkCreationDeletion()
 						{
 							NodeIndex = i;
 							FlowLink = true;
-							std::cout << "FlowLink\n";
 						}
 					}
 				}
@@ -861,9 +860,6 @@ void UIAINBEditor::ManageLinkCreationDeletion()
 									Input->Sources.push_back(BaseEntry);
 									Input->Sources.push_back(NewEntry);
 									Input->MultiCount = 2;
-
-									std::cout << "BaseMulti: " << BaseEntry.NodeIndex << ", " << BaseEntry.ParameterIndex << std::endl;
-									std::cout << "NewMulti: " << NewEntry.NodeIndex << ", " << NewEntry.ParameterIndex << std::endl;
 								}
 								break;
 							}
@@ -884,7 +880,6 @@ void UIAINBEditor::ManageLinkCreationDeletion()
 							Info.EditorName = IdToFlowLinkCondition[InputPinId.Get()];
 						}
 						IdToParent[InputPinId.Get()]->LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink].push_back(Info);
-						std::cout << "Added link\n";
 					}
 				}
 			}
@@ -921,10 +916,9 @@ void UIAINBEditor::DrawAinbEditorWindow()
 
 				AINB.Nodes.push_back(NewNode);
 				UpdateNodeShapes();
-				std::cout << NewNode.Name << std::endl;
 				for (std::string FileName : AINBNodeDefMgr::GetNodeDefinition(Name)->FileNames)
 				{
-					std::cout << FileName << std::endl;
+					Logger::Info("AINBEditor", "AINB that uses " + NewNode.GetName() + ": " + FileName);
 				}
 			});
 	}
@@ -1274,10 +1268,8 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 	{
 		if (ImGui::Button("Delete"))
 		{
-			std::cout << (int)SelectedLink.LinkedNodeType << ", " << SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].size() << ", " << SelectedLink.Parent->GetName() << std::endl;
 			SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].erase(
 				std::remove_if(SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].begin(), SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].end(), [&](AINBFile::LinkedNodeInfo const& LinkedNode) {
-					std::cout << LinkedNode.EditorId << ", " << SelectedLink.LinkedNodeInfo->EditorId << std::endl;
 					return LinkedNode.EditorId == SelectedLink.LinkedNodeInfo->EditorId;
 					}),
 				SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].end());
