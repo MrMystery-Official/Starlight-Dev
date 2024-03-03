@@ -419,7 +419,7 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 						Parameter.Flags.push_back(FlagsStruct::SetPointerFlagBitZero);
 					}
 					if ((Flags & 0xc200) == 0xc200) {
-						Logger::Warning("AINBDecoder", "Found ImmediateParameter using EXB function, which is currently unsupported. Saving will break this file, please sind the following message to mrmystery0778 on Discord");
+						Logger::Warning("AINBDecoder", "Found ImmediateParameter using EXB function, which is currently unsupported. Saving will break this file, please send the following message to mrmystery0778 on Discord");
 						Logger::Warning("AINBDecoder", "Line 423, Flag 0xc200 found. GlobalParamIndex skipped. Name: " + this->Header.FileName + ", Category: " + this->Header.FileCategory);
 					}
 					else if (Flags & 0x8000)

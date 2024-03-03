@@ -2,7 +2,6 @@
 
 #include "Logger.h"
 #include "BinaryVectorWriter.h"
-#include <iostream>
 
 void EXB::AddToStringTable(std::string Value, std::vector<std::string>& StringTable)
 {
@@ -27,7 +26,7 @@ int EXB::GetOffsetInStringTable(std::string Value, std::vector<std::string>& Str
 
 	if (Index == -1)
 	{
-		Logger::Warning("EXBStringMgr", "Can not find string \"" + Value + "\" in StringTable of EXB");
+		Logger::Warning("EXBDecoder", "Can not find string \"" + Value + "\" in StringTable");
 		return -1;
 	}
 
@@ -62,7 +61,6 @@ EXB::EXB(std::vector<unsigned char> Bytes)
 
 	if (Header.Magic[0] != 'E' || Header.Magic[1] != 'X' || Header.Magic[2] != 'B')
 	{
-		Logger::Info("sss", Header.Magic);
 		Logger::Error("EXBDecoder", "Wrong magic, expected magic EXB");
 		return;
 	}
@@ -98,7 +96,6 @@ EXB::EXB(std::vector<unsigned char> Bytes)
 	{
 		InstructionStruct Instruction;
 		Instruction.Type = static_cast<EXB::Command>(Reader.ReadUInt8());
-		std::cout << "InstType: " << (int)Instruction.Type << "\n";
 		if (Instruction.Type == EXB::Command::Terminator)
 		{
 			Reader.Seek(7, BinaryVectorReader::Position::Current);
@@ -160,7 +157,6 @@ EXB::EXB(std::vector<unsigned char> Bytes)
 		{
 			Instruction.StaticMemoryIndex = Reader.ReadUInt16();
 			Instruction.Signature = ReadStringFromStringPool(&Reader, SignatureOffsets[Reader.ReadUInt32()]);
-			std::cout << "Read sig: " << Instruction.Signature << std::endl;
 		}
 		Instructions[i] = Instruction;
 	}
@@ -194,9 +190,6 @@ std::vector<unsigned char> EXB::ToBinary(uint32_t EXBInstanceCount)
 
 	Writer.Seek(36, BinaryVectorWriter::Position::Current);
 	Writer.WriteInteger(this->Commands.size(), sizeof(uint32_t));
-
-	Logger::Info("EXBDebugger", "Command size: " + std::to_string(this->Commands.size()));
-	Logger::Info("EXBDebugger", "Command size: " + std::to_string(this->Instructions.size()));
 
 	uint32_t InstructionIndex = 0;
 	uint32_t MaxStatic = 0;
@@ -296,8 +289,6 @@ std::vector<unsigned char> EXB::ToBinary(uint32_t EXBInstanceCount)
 	{
 		if (Instruction.Type != EXB::Command::Terminator)
 		{
-			std::cout << "Not terminator\n";
-			std::cout << "InstType: " << (int)Instruction.Type << "\n";
 			Writer.WriteInteger((uint8_t)Instruction.Type, sizeof(uint8_t));
 			Writer.WriteInteger((uint8_t)Instruction.DataType, sizeof(uint8_t));
 			
@@ -322,7 +313,6 @@ std::vector<unsigned char> EXB::ToBinary(uint32_t EXBInstanceCount)
 					SignatureOffsets.push_back(GetOffsetInStringTable(Instruction.Signature, StringTable));
 				}
 				Writer.WriteInteger((uint32_t)std::distance(SignatureOffsets.begin(), std::find(SignatureOffsets.begin(), SignatureOffsets.end(), GetOffsetInStringTable(Instruction.Signature, StringTable))), sizeof(uint32_t));
-				std::cout << "Sig: " << Instruction.Signature << std::endl;
 			}
 		}
 		else
