@@ -17,15 +17,6 @@
 
 #define MinImmTextboxWidth 150
 
-/*
-namespace UIAinbEditor
-{
-	extern bool Open;
-
-	void DrawAinbEditorWindow();
-};
-*/
-
 struct NodeShapeInformation
 {
 	uint32_t FrameWidth = 0;
@@ -160,14 +151,35 @@ void UIAINBEditor::LoadAINBFile(std::string Path, bool AbsolutePath)
 		Logger::Error("AINBEditor", "AINB has over 42.949.600 nodes");
 		return;
 	}
+
+	for (AINBFile::Node& Node : AINB.Nodes)
+	{
+		for (int Type = 0; Type < AINBFile::LinkedNodeTypeCount; Type++)
+		{
+			for (std::vector<AINBFile::LinkedNodeInfo>::iterator Iter = Node.LinkedNodes[Type].begin(); Iter != Node.LinkedNodes[Type].end(); )
+			{
+				if (Iter->NodeIndex >= AINB.Nodes.size())
+					Iter = Node.LinkedNodes[Type].erase(Iter);
+				else
+					Iter++;
+			}
+		}
+	}
+
 	SelectedNode = nullptr;
 	SelectedLink = {false, nullptr, -1};
+	IdToParent.clear();
+	IdToFlowLinkCondition.clear();
+	LinkToInput.clear();
+	OutputToId.clear();
+	InputToId.clear();
+	NodeShapeInfo.clear();
+	CommandHeaderOpen.clear();
 	UpdateNodsIds();
 	UpdateNodeShapes();
 
 	for (AINBFile::Node& Node : AINB.Nodes)
 	{
-
 		if (Node.Type != (int)AINBFile::NodeTypes::UserDefined && 
 			Node.Type != (int)AINBFile::NodeTypes::Element_Sequential &&
 			Node.Type != (int)AINBFile::NodeTypes::Element_S32Selector &&
@@ -528,12 +540,32 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 		//ImGui::SetCursorPosX(ImGui::GetCursorPosX() + NodeShapeInfo[Node.EditorId].FrameWidth - (8 + ImGui::CalcTextSize("Add sequential output").x + 10 + ImGui::GetStyle().ItemSpacing.x));
 		if (ImGui::Button("Delete seq output"))
 		{
+			for (std::vector<AINBFile::LinkedNodeInfo>::iterator Iter = Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink].begin(); Iter != Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink].end(); )
+			{
+				if (Iter->EditorName == Node.EditorFlowLinkParams[Node.EditorFlowLinkParams.size() - 1])
+				{
+					Iter = Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink].erase(Iter);
+					break;
+				}
+				else
+				{
+					Iter++;
+				}
+			}
 			Node.EditorFlowLinkParams.pop_back();
-			Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink].pop_back();
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Add seq output"))
-			Node.EditorFlowLinkParams.push_back("Seq " + std::to_string(Util::StringToNumber<int>(Node.EditorFlowLinkParams[Node.EditorFlowLinkParams.size() - 1].substr(4, Node.EditorFlowLinkParams[Node.EditorFlowLinkParams.size() - 1].length() - 4)) + 1));
+		{
+			if (!Node.EditorFlowLinkParams.empty())
+			{
+				Node.EditorFlowLinkParams.push_back("Seq " + std::to_string(Util::StringToNumber<int>(Node.EditorFlowLinkParams[Node.EditorFlowLinkParams.size() - 1].substr(4, Node.EditorFlowLinkParams[Node.EditorFlowLinkParams.size() - 1].length() - 4)) + 1));
+			}
+			else
+			{
+				Node.EditorFlowLinkParams.push_back("Seq 0");
+			}
+		}
 	}
 	else if (Node.Type == (int)AINBFile::NodeTypes::Element_S32Selector)
 	{
@@ -913,6 +945,11 @@ void UIAINBEditor::DrawAinbEditorWindow()
 					NewNode.EditorFlowLinkParams.clear();
 					NewNode.EditorFlowLinkParams.push_back("Default");
 				}
+				else if (NewNode.Type == (int)AINBFile::NodeTypes::Element_F32Selector)
+				{
+					NewNode.EditorFlowLinkParams.clear();
+					NewNode.EditorFlowLinkParams.push_back("Default");
+				}
 
 				AINB.Nodes.push_back(NewNode);
 				UpdateNodeShapes();
@@ -1103,35 +1140,76 @@ void UIAINBEditor::DrawAinbEditorWindow()
 
 void UIAINBEditor::DrawPropertiesWindowContent()
 {
-	if (ImGui::Button("Add command"))
+	ImGui::Text("Commands");
+	ImGui::Separator();
+	if (ImGui::Button("Add command", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().FramePadding.x, 0)))
 	{
 		AINBFile::Command Command;
 		Command.LeftNodeIndex = 0;
 		Command.RightNodeIndex = -1;
-		Command.Name = "DummyName";
+		Command.Name = "DummyName" + std::to_string(AINB.Commands.size() + 1);
+		Command.GUID.Part1 = AINB.Commands.size();
 		AINB.Commands.push_back(Command);
+		CommandHeaderOpen.insert({ Command.GUID.Part1, false });
 	}
-	for (AINBFile::Command& Command : AINB.Commands)
+	for (std::vector<AINBFile::Command>::iterator Iter = AINB.Commands.begin(); Iter != AINB.Commands.end(); )
 	{
-		ImGui::GetStateStorage()->SetInt(ImGui::GetID(("Command: " + Command.Name).c_str()), (int)CommandHeaderOpen[Command.GUID.Part1]);
-		if (ImGui::CollapsingHeader(("Command: " + Command.Name).c_str()))
+		ImGui::GetStateStorage()->SetInt(ImGui::GetID(("Command: " + Iter->Name).c_str()), (int)CommandHeaderOpen[Iter->GUID.Part1]);
+		if (ImGui::CollapsingHeader(("Command: " + Iter->Name).c_str()))
 		{
+			ImGui::Columns(2, std::to_string(Iter->GUID.Part1).c_str());
 			ImGui::Indent();
-			ImGui::InputText("Name", &Command.Name);
-			ImGui::InputScalar(("Left Node Index##" + Command.Name).c_str(), ImGuiDataType_::ImGuiDataType_S16, &Command.LeftNodeIndex);
-			ImGui::InputScalar(("Right Node Index##" + Command.Name).c_str(), ImGuiDataType_::ImGuiDataType_S16, &Command.RightNodeIndex);
+
+			ImGui::Text("Name");
+			ImGui::NextColumn();
+			ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+			ImGui::InputText(("##Name" + std::to_string(Iter->GUID.Part1)).c_str(), &Iter->Name);
+			ImGui::PopItemWidth();
+			ImGui::NextColumn();
+
+			ImGui::Text("Left Node Index");
+			ImGui::NextColumn();
+			ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+			ImGui::InputScalar(("##LNI" + std::to_string(Iter->GUID.Part1)).c_str(), ImGuiDataType_::ImGuiDataType_S16, &Iter->LeftNodeIndex);
+			ImGui::PopItemWidth();
+			ImGui::NextColumn();
+
+			ImGui::Text("Right Node Index");
+			ImGui::NextColumn();
+			ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+			ImGui::InputScalar(("##RNI" + std::to_string(Iter->GUID.Part1)).c_str(), ImGuiDataType_::ImGuiDataType_S16, &Iter->RightNodeIndex);
+			ImGui::PopItemWidth();
+
+			ImGui::Columns();
+
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5, 0.14, 0.14, 1));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91, 0.12, 0.15, 1));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 0, 0, 1));
+			if (ImGui::Button(("Delete##" + std::to_string(Iter->GUID.Part1)).c_str(), ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().IndentSpacing, 0)))
+			{
+				CommandHeaderOpen.erase(Iter->GUID.Part1);
+				ImGui::PopStyleColor(3);
+				Iter = AINB.Commands.erase(Iter);
+				ImGui::Unindent();
+				continue;
+			}
+			ImGui::PopStyleColor(3);
 			ImGui::Unindent();
-			CommandHeaderOpen[Command.GUID.Part1] = true;
+			CommandHeaderOpen[Iter->GUID.Part1] = true;
 		}
 		else
 		{
-			CommandHeaderOpen[Command.GUID.Part1] = false;
+			CommandHeaderOpen[Iter->GUID.Part1] = false;
 		}
+		Iter++;
 	}
 
 	if (SelectedNode != nullptr)
 	{
-		ImGui::Text(SelectedNode->Name.c_str());
+		ImGui::NewLine();
+
+		ImGui::Text(SelectedNode->GetName().c_str());
+		ImGui::Separator();
 		std::string NodeIndex = "NodeIndex: ";
 		for (int LoopNodeIndex = 0; LoopNodeIndex < AINB.Nodes.size(); LoopNodeIndex++)
 		{
@@ -1142,7 +1220,10 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 			}
 		}
 		ImGui::Text(NodeIndex.c_str());
-		if (ImGui::Button("Duplicate"))
+
+		ImGui::Columns(2);
+
+		if (ImGui::Button("Duplicate", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
 		{
 			AINBFile::Node NewNode = *SelectedNode;
 			uint32_t NewId = 0;
@@ -1154,7 +1235,11 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 			AINB.Nodes.push_back(NewNode);
 			UpdateNodeShapes();
 		}
-		if (ImGui::Button("Delete"))
+		ImGui::NextColumn();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5, 0.14, 0.14, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91, 0.12, 0.15, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 0, 0, 1));
+		if (ImGui::Button("Delete", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
 		{
 			uint16_t NodeIndex = 0;
 			for (AINBFile::Node& Node : AINB.Nodes)
@@ -1235,11 +1320,18 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 			AINB.Nodes.erase(AINB.Nodes.begin() + NodeIndex);
 			SelectedNode = nullptr;
 		}
+		ImGui::PopStyleColor(3);
+		ImGui::Columns(2);
 		return;
 	}
 	if (SelectedLink.Entry != nullptr && !SelectedLink.FlowLink)
 	{
-		if (ImGui::Button("Delete"))
+		ImGui::Text("Link");
+		ImGui::Separator();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5, 0.14, 0.14, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91, 0.12, 0.15, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 0, 0, 1));
+		if (ImGui::Button("Delete", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().FramePadding.x, 0)))
 		{
 			if (SelectedLink.MultiIndex == -1)
 			{
@@ -1263,10 +1355,16 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 			}
 			SelectedLink = { false, nullptr, -1 };
 		}
+		ImGui::PopStyleColor(3);
 	}
 	else if (SelectedLink.FlowLink && SelectedLink.LinkedNodeInfo != nullptr && SelectedLink.Parent != nullptr)
 	{
-		if (ImGui::Button("Delete"))
+		ImGui::Text("Link");
+		ImGui::Separator();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5, 0.14, 0.14, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91, 0.12, 0.15, 1));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 0, 0, 1));
+		if (ImGui::Button("Delete", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().FramePadding.x, 0)))
 		{
 			SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].erase(
 				std::remove_if(SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].begin(), SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].end(), [&](AINBFile::LinkedNodeInfo const& LinkedNode) {
@@ -1275,6 +1373,7 @@ void UIAINBEditor::DrawPropertiesWindowContent()
 				SelectedLink.Parent->LinkedNodes[(int)SelectedLink.LinkedNodeType].end());
 			SelectedLink = { false, nullptr, -1 };
 		}
+		ImGui::PopStyleColor(3);
 	}
 }
 
