@@ -515,6 +515,11 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 
 	for (auto Iter = Node.EditorFlowLinkParams.begin(); Iter != Node.EditorFlowLinkParams.end(); )
 	{
+		if (*Iter == "MapEditor_AINB_NoVal")
+		{
+			Iter++;
+			continue;
+		}
 		if (Node.Type == (int)AINBFile::NodeTypes::Element_S32Selector && *Iter != "Default")
 		{
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + NodeShapeInfo[Node.EditorId].FrameWidth - (8 + ImGui::CalcTextSize(Iter->c_str()).x + 10 + ImGui::GetStyle().ItemSpacing.x) - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Del").x - ImGui::GetStyle().FramePadding.x);
