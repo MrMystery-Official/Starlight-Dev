@@ -1479,6 +1479,25 @@ void ActorMgr::DeleteActor(uint64_t Hash, uint32_t SRTHash)
 
 	if (DelActor == nullptr)
 	{
+		for (Actor& ActorMerged : Actors)
+		{
+			for (Actor& Child : ActorMerged.MergedActorContent)
+			{
+				if (Child.Hash == Hash && Child.SRTHash == SRTHash)
+				{
+					ActorMerged.MergedActorContent.erase(
+						std::remove_if(ActorMerged.MergedActorContent.begin(), ActorMerged.MergedActorContent.end(), [&](Actor const& Actor) {
+							return Actor.Gyml == Child.Gyml && Actor.Hash == Child.Hash && Actor.SRTHash == Child.SRTHash;
+							}),
+						ActorMerged.MergedActorContent.end());
+
+					UpdateModelOrder();
+
+					return;
+				}
+			}
+		}
+
 		Logger::Error("ActorMgr", "Actor to delete was nullptr, probably wrong Hash/SRTHash");
 		return;
 	}
