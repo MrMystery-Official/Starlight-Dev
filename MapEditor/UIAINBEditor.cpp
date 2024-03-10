@@ -67,7 +67,7 @@ void UIAINBEditor::UpdateNodeShapes()
 	for (int Index = 0; Index < AINB.Nodes.size(); Index++)
 	{
 		AINBFile::Node& Node = AINB.Nodes[Index];
-		uint32_t FrameWidth = 8 * 2 + ImGui::CalcTextSize(Node.GetName().c_str()).x + 10;
+		uint32_t FrameWidth = 8 * 2 + ImGui::CalcTextSize(Node.GetName().c_str()).x + 16;
 
 		for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 		{
@@ -98,7 +98,7 @@ void UIAINBEditor::UpdateNodeShapes()
 			{
 				int Size = 8 * 2; // Frame Padding
 				Size += ImGui::CalcTextSize(Param.Name.c_str()).x;
-				Size += 2 * ItemSpacingX + 10;
+				Size += 2 * ItemSpacingX + 16;
 				FrameWidth = std::fmax(FrameWidth, Size);
 			}
 			for (AINBFile::ImmediateParameter& Param : Node.ImmediateParameters[i])
@@ -431,7 +431,9 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 	ImGui::Text(Node.GetName().c_str());
 
 	NodeShapeInfo[Node.EditorId].HeaderMin = ImGui::GetItemRectMin() - ImVec2(18 + ImGui::GetStyle().ItemSpacing.x, 8);
-	NodeShapeInfo[Node.EditorId].HeaderMax = ImVec2(NodeShapeInfo[Node.EditorId].HeaderMin.x + NodeShapeInfo[Node.EditorId].FrameWidth + 8, ImGui::GetItemRectMax().y + 8);
+	NodeShapeInfo[Node.EditorId].HeaderMax = ImVec2(NodeShapeInfo[Node.EditorId].HeaderMin.x + NodeShapeInfo[Node.EditorId].FrameWidth, ImGui::GetItemRectMax().y + 8);
+
+	bool AddedHeader = false;
 
 	ImGui::Dummy(ImVec2(0, 8));
 	
@@ -439,6 +441,12 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 	{
 		for (AINBFile::InputEntry& Input : Node.InputParameters[i])
 		{
+			if (!AddedHeader)
+			{
+				NodeShapeInfo[Node.EditorId].HeaderMax.x += 8;
+				AddedHeader = true;
+			}
+
 			DrawPinIcon(CurrentId++, false);
 			ImGui::SameLine();
 			ImGui::TextUnformatted(Input.Name.c_str());
@@ -515,7 +523,7 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 				}
 				case (int)AINBFile::ValueType::Vec3f:
 				{
-					ImGui::Dummy(ImVec2(MinImmTextboxWidth * 3 + 2 * ImGui::GetStyle().ItemSpacing.x, 0));
+					ImGui::Dummy(ImVec2(MinImmTextboxWidth * 3 + ImGui::GetStyle().ItemSpacing.x, 0));
 					break;
 				}
 				case (int)AINBFile::ValueType::UserDefined:
@@ -532,6 +540,12 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 	{
 		for (AINBFile::OutputEntry& Output : Node.OutputParameters[i])
 		{
+			if (!AddedHeader)
+			{
+				NodeShapeInfo[Node.EditorId].HeaderMax.x += 8;
+				AddedHeader = true;
+			}
+
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + NodeShapeInfo[Node.EditorId].FrameWidth - (8 + ImGui::CalcTextSize(Output.Name.c_str()).x + 10 + ImGui::GetStyle().ItemSpacing.x));
 			ImGui::TextUnformatted(Output.Name.c_str());
 
@@ -617,6 +631,12 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 
 	for (auto Iter = Node.EditorFlowLinkParams.begin(); Iter != Node.EditorFlowLinkParams.end(); )
 	{
+		if (!AddedHeader)
+		{
+			NodeShapeInfo[Node.EditorId].HeaderMax.x += 8;
+			AddedHeader = true;
+		}
+
 		if (*Iter == "MapEditor_AINB_NoVal")
 		{
 			Iter++;
