@@ -5,6 +5,7 @@
 #include "imgui_node_editor.h"
 #include "AINB.h"
 #include <string>
+#include <vector>
 
 namespace ed = ax::NodeEditor;
 
@@ -16,8 +17,10 @@ namespace UIAINBEditor
 	extern ed::EditorContext* Context;
 	extern AINBFile AINB;
 	extern bool RunAutoLayout;
+	extern void (*SaveCallback)();
 
 	void LoadAINBFile(std::string Path, bool AbsolutePath = false);
+	void LoadAINBFile(std::vector<unsigned char> Bytes);
 
 	void Initialize();
 	void Delete();

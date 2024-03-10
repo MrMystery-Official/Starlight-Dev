@@ -20,11 +20,11 @@ void PopupAddAINBNode::Render()
 		ImGui::OpenPopup("Add AINB node");
 		if (ImGui::BeginPopupModal("Add AINB node"))
 		{
-			ImGui::InputText("Name", &Name);
+			ImGui::InputTextWithHint("##Name", "Search...", &Name);
 
 			int Selected = 0;
 
-			ImGui::BeginListBox("ListBox");
+			ImGui::BeginListBox("##ListBox");
 			for (AINBNodeDefMgr::NodeDef& Def : AINBNodeDefMgr::NodeDefinitions)
 			{
 				if (std::find(Def.AllowedAINBCategories.begin(), Def.AllowedAINBCategories.end(), AINBCategory) == Def.AllowedAINBCategories.end() && !ShowUnallowedNodes) continue;

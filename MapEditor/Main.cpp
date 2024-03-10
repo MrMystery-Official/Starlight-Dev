@@ -10,6 +10,7 @@
 #include "EditorConfig.h"
 #include "UIAINBEditor.h"
 #include "AINBNodeDefMgr.h"
+#include "MSBT.h"
 
 #include <iostream>
 #include <fstream>
@@ -82,6 +83,10 @@ int main()
 	}
 	UIAINBEditor::Initialize();
 	AINBNodeDefMgr::Initialize();
+
+	//MSBTFile MSBT("MapEditorV4/Workspace/Npc_kokiri006.msbt");
+
+	//EffectFile EFile(ZStdFile::Decompress(Editor::GetRomFSFile("Effect/BeamosBeam.Nin_NX_NVN.esetb.byml.zs"), ZStdFile::Dictionary::Base).Data);
 
 	//SearchForBytes();
 

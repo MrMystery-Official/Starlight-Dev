@@ -2,6 +2,7 @@
 
 #include "Editor.h"
 #include "Logger.h"
+#include <iostream>
 
 /* BfresModelLibrary - Start */
 std::unordered_map<std::string, BfresFile> BfresLibrary::Models;
@@ -576,7 +577,7 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
 
             Reader.Seek(8, BinaryVectorReader::Position::Current); //Padding
 
-            uint32_t BufferOffset = Reader.ReadUInt32();
+            int32_t BufferOffset = Reader.ReadInt32();
             uint8_t NumVertexAttrib = Reader.ReadUInt8();
             uint8_t NumBuffer = Reader.ReadUInt8();
             uint16_t Idx = Reader.ReadUInt16();
@@ -663,7 +664,7 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
             }
 
             uint32_t AttributeSegmentSize = 0;
-            VertexBufferAttribute* BiggestOffsetAttribute = &VertexBufferAttributes[0];
+            VertexBufferAttribute* BiggestOffsetAttribute = nullptr;
             for (VertexBufferAttribute& Attribute : VertexBufferAttributes)
             {
                 std::string NameCopy = Attribute.Name;
@@ -682,6 +683,12 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
                         BiggestOffsetAttribute = &Attribute;
                     }
                 }
+            }
+
+            if (BiggestOffsetAttribute == nullptr)
+            {
+                AttributeSegmentSize = 0;
+                goto BiggestOffsetAttributeNullPtr;
             }
 
             AttributeSegmentSize = BiggestOffsetAttribute->Offset;
@@ -706,6 +713,8 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
             default:
                 break;
             }
+
+        BiggestOffsetAttributeNullPtr:
 
             //Aligning to 4 bytes
             while (AttributeSegmentSize % 4 != 0)
@@ -752,6 +761,7 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
                             break;
                         }
                     }
+
                     UVBufferIndex++;
                 }
             }

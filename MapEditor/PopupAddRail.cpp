@@ -17,7 +17,7 @@ void PopupAddRail::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		ImGui::SetNextWindowSize(ImVec2(334, 113));
 		ImGui::OpenPopup("Add rail");
-		if (ImGui::BeginPopupModal("Add rail"))
+		if (ImGui::BeginPopupModal("Add rail", NULL, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::InputScalar("Destination", ImGuiDataType_::ImGuiDataType_U64, &Dest);
 			ImGui::InputText("Gyml", &Gyml);
@@ -41,8 +41,8 @@ void PopupAddRail::Render()
 				Dest = 0;
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		//ImGui::SameLine();
+		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }

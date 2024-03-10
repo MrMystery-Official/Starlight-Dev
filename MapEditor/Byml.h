@@ -9,16 +9,16 @@
 class BymlFile
 {
 public:
-    /* 
+    /*
     Node caching:
-    Node caching is pretty slow. When enabled, every Dictionary gets saved and compared when rewritten. If it is the same, it doesnt write the Dict, it only writes the
+    Node caching is pretty slow. When enabled, every Dictionary gets saved and compared when rewritten. If it is the same, it doesn't write the Dict, it only writes the
     offset to the first Dict. This produces smaller BYMLs, but takes a lot of time. The game normally reads a BYML file even without node caching, but for large system files it is needed.
     (e.g. ActorInfo)
     */
     bool NodeCaching = false;
 
-	enum class Type : unsigned char
-	{
+    enum class Type : unsigned char
+    {
         StringIndex = 0xa0,
         Array = 0xc0,
         Dictionary = 0xc1,
@@ -31,7 +31,7 @@ public:
         UInt64 = 0xd5,
         Double = 0xd6,
         Null = 0xff
-	};
+    };
 
     enum class TableGeneration : unsigned char
     {
@@ -39,8 +39,8 @@ public:
         Manual = 1
     };
 
-	class Node
-	{
+    class Node
+    {
     public:
         std::vector<unsigned char> m_Value;
 
@@ -62,10 +62,10 @@ public:
         std::string m_Key;
 
         std::vector<BymlFile::Node> m_Children;
-	};
+    };
 
-	BymlFile(std::string Path);
-	BymlFile(std::vector<unsigned char> Bytes);
+    BymlFile(std::string Path);
+    BymlFile(std::vector<unsigned char> Bytes);
     BymlFile() {}
 
     std::vector<BymlFile::Node>& GetNodes();
@@ -78,6 +78,7 @@ public:
 
     void GenerateHashKeyTable(BymlFile::Node* Node);
     void GenerateStringTable(BymlFile::Node* Node);
+    static std::string GenerateNodeHash(BymlFile::Node* Node);
 
     std::vector<unsigned char> ToBinary(BymlFile::TableGeneration TableGeneration);
     void WriteToFile(std::string Path, BymlFile::TableGeneration TableGeneration);
@@ -96,6 +97,5 @@ private:
     uint32_t GetStringTableIndex(std::string Value);
     uint32_t GetHashKeyTableIndex(std::string Value);
     void ParseNode(BinaryVectorReader& Reader, int Offset, BymlFile::Type Type, std::string Key, BymlFile::Node* Parent, uint32_t ChildIndex);
-    std::string GenerateNodeHash(BymlFile::Node* Node);
     void WriteNode(BinaryVectorWriter& Writer, uint32_t DataOffset, uint32_t Offset, BymlFile::Node* Node);
 };

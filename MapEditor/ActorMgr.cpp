@@ -8,6 +8,11 @@
 #include "Logger.h"
 #include "Util.h"
 #include "HashMgr.h"
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 struct ActorInformation
 {
@@ -1350,11 +1355,66 @@ void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 {
 	float TranslateXDifference = Parent->Translate.GetX() - OldActor.Translate.GetX();
 	float TranslateYDifference = Parent->Translate.GetY() - OldActor.Translate.GetY();
-	float TranslateZDifference = Parent->Translate.GetZ() - OldActor.Translate.GetZ();
+	float TranslateZDifference = Parent->Translate.GetZ() - OldActor.Translate.GetZ();;
+
+	/*
+	float getAbsoluteYRotation(const glm::vec3& rotation) {
+  // Calculate the yaw (Y rotation) from the rotation vector
+  float yaw = atan2(rotation.z, rotation.x) * 180.0f / M_PI;
+
+  // Handle negative rotations by adding 360 degrees
+  if (yaw < 0.0f) {
+    yaw += 360.0f;
+  }
+
+  return yaw;
+}
+	*/
+	/*
+
+	auto GetAbsoluteYRotation = [](Vector3F rotation) {
+		// Calculate the normalized sum of X and Z rotations
+		float sumXZ = fmodf(rotation.GetX() + rotation.GetZ(), 360.0f);
+		if (sumXZ < 0.0f) {
+			sumXZ += 360.0f;
+		}
+		float normalizedSum = sumXZ / 360.0f;
+
+		// Handle special cases for edge conditions with near-360 rotations
+		if (std::abs(normalizedSum - 1.0f) < std::numeric_limits<float>::epsilon()) {
+			// If X and Z rotations nearly sum to 360, prioritize the sign of X
+			return rotation.GetY() + (rotation.GetX() < 0.0f ? 180.0f : 0.0f);
+		}
+
+		// Adjusted Y rotation based on normalized sum and X sign
+		float adjustedY;
+		if (normalizedSum < 0.5f) {
+			adjustedY = rotation.GetY();
+		}
+		else if (rotation.GetX() < 0.0f) {
+			adjustedY = rotation.GetY() + 360.0f;
+		}
+		else {
+			adjustedY = rotation.GetY() - 360.0f;
+		}
+
+		// Wrap the adjusted Y rotation to the range [0, 360)
+		float absoluteY = fmodf(adjustedY, 360.0f);
+		if (absoluteY < 0.0f) {
+			absoluteY += 360.0f;
+		}
+
+		return absoluteY;
+		};
+		*/
 
 	float RotateXDifference = Parent->Rotate.GetX() - OldActor.Rotate.GetX();
 	float RotateYDifference = Parent->Rotate.GetY() - OldActor.Rotate.GetY();
 	float RotateZDifference = Parent->Rotate.GetZ() - OldActor.Rotate.GetZ();
+
+	RotateXDifference = Util::DegreesToRadians(RotateXDifference);
+	RotateYDifference = Util::DegreesToRadians(RotateYDifference);
+	RotateZDifference = Util::DegreesToRadians(RotateZDifference);
 
 	for (Actor& Child : Parent->MergedActorContent)
 	{
@@ -1373,6 +1433,25 @@ void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 		Child.Scale.SetX(Child.Scale.GetX() + (Parent->Scale.GetX() - OldActor.Scale.GetX()));
 		Child.Scale.SetY(Child.Scale.GetY() + (Parent->Scale.GetY() - OldActor.Scale.GetY()));
 		Child.Scale.SetZ(Child.Scale.GetZ() + (Parent->Scale.GetZ() - OldActor.Scale.GetZ()));
+
+		//Rotate
+		/*
+		float NewX = std::cosf(RotateZDifference) * Child.Translate.GetX() - std::sinf(RotateZDifference) * Child.Translate.GetY();
+		float NewY = std::sinf(RotateZDifference) * Child.Translate.GetX() + std::cosf(RotateZDifference) * Child.Translate.GetY();
+
+		NewX = std::cosf(RotateYDifference) * NewX + std::sinf(RotateYDifference) * Child.Translate.GetZ();
+		float NewZ = (-std::sinf(RotateYDifference)) * NewX + std::cosf(RotateYDifference) * Child.Translate.GetZ();
+
+		NewY = std::cosf(RotateXDifference) * NewY - std::sinf(RotateXDifference) * NewZ;
+		NewZ = std::sinf(RotateXDifference) * NewY + std::cosf(RotateXDifference) * NewZ;
+
+		Child.Translate.SetX(NewX);
+		Child.Translate.SetY(NewY);
+		Child.Translate.SetZ(NewZ);
+		*/
+
+		//Hell
+		//https://en.wikipedia.org/wiki/Rotation_matrix
 	}
 }
 

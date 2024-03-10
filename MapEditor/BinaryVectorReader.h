@@ -31,7 +31,8 @@ public:
 	float ReadFloat();
 	double ReadDouble();
 	void ReadStruct(void* Dest, uint32_t Size, int Offset = -1);
-	std::string ReadString();
+	std::string ReadString(int Size = -1);
+	std::wstring ReadWString(int Size);
 private:
 	std::vector<unsigned char>& m_Bytes;
 	int m_Offset = -1;

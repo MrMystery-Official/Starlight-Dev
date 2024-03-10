@@ -166,6 +166,9 @@ int SarcFile::GetBinaryFileAlignment(std::vector<unsigned char> Data)
         return 1;
     }
 
+    if (Data[0] == 'A' && Data[1] == 'I' && Data[2] == 'B') //AINB has alignment 8
+        return 8;
+
     int32_t FileSize = *reinterpret_cast<const int32_t*>(&Data[0x1C]);
     if (FileSize != static_cast<int32_t>(Data.size()))
     {
@@ -221,31 +224,38 @@ std::vector<unsigned char> SarcFile::ToBinary()
     }
     std::sort(Keys.begin(), Keys.end(), [](const SarcFile::HashValue& a, const SarcFile::HashValue& b) { return a.Hash < b.Hash; });
 
+    uint32_t RelStringOffset = 0;
+    uint32_t RelDataOffset = 0;
+    uint32_t FileAignment = 1;
+    std::vector<uint32_t> Alignments(Count);
+
     for (int i = 0; i < Count; i++)
     {
         std::string FileName = Keys[i].Node->Name;
         std::vector<unsigned char> Buffer(Keys[i].Node->Bytes.begin(), Keys[i].Node->Bytes.end());
 
+        uint32_t Alignment = LCM(4, GetBinaryFileAlignment(Buffer));
+        uint32_t DataStart = RelDataOffset;
+        DataStart = AlignUp(DataStart, Alignment);
+        uint32_t DataEnd = DataStart + Buffer.size();
+        Alignments[i] = Alignment;
+
         Writer.WriteInteger(Keys[i].Hash, sizeof(uint32_t));
-        Writer.WriteInteger(0, sizeof(int32_t)); //Placeholder
-        Writer.WriteInteger(0, sizeof(uint32_t)); //Placeholder
-        Writer.WriteInteger(0, sizeof(uint32_t)); //Placeholder
+        Writer.WriteInteger((0x01000000 | (RelStringOffset / 4)), sizeof(int32_t)); //Placeholder
+        Writer.WriteInteger(DataStart, sizeof(uint32_t)); //Placeholder
+        Writer.WriteInteger(DataEnd, sizeof(uint32_t)); //Placeholder
+
+        RelDataOffset = DataEnd;
+        RelStringOffset += (FileName.length() + 4) & -4;
+        FileAignment = LCM(FileAignment, Alignment);
     }
 
     Writer.WriteBytes("SFNT");
     Writer.WriteInteger(0x08, sizeof(uint16_t));
     Writer.WriteInteger(0x00, sizeof(uint16_t));
 
-    uint32_t StringBaseOffset = Writer.GetPosition();
-    std::vector<uint32_t> StringOffsets;
-
     for (int i = 0; i < Count; i++)
     {
-        uint32_t StringOffset = (Writer.GetPosition() - StringBaseOffset) / 4;
-        StringOffset &= 0xFFFF;
-        StringOffset += 16777216;
-        StringOffsets.push_back(StringOffset);
-
         std::string FileName = Keys[i].Node->Name;
         Writer.WriteBytes(FileName.c_str());
         if (!AlignWriter(&Writer, 4))
@@ -254,32 +264,20 @@ std::vector<unsigned char> SarcFile::ToBinary()
         }
     }
 
-    AlignWriter(&Writer, 128);
+    AlignWriter(&Writer, 8);
 
     uint32_t DataOffset = Writer.GetPosition();
-
     for (int i = 0; i < Count; i++)
     {
-        if (i != 0)
-        {
-            AlignWriter(&Writer, 128);
-        }
+        AlignWriter(&Writer, Alignments[i]);
         
-        uint32_t Offset = Writer.GetPosition() - DataOffset;
-
         for (unsigned char Byte : Keys[i].Node->Bytes)
         {
             Writer.WriteByte(Byte);
         }
-
-        Writer.Seek(0x20 + 4 + (i * 16), BinaryVectorWriter::Position::Begin);
-        Writer.WriteInteger(StringOffsets[i], sizeof(uint32_t));
-        Writer.WriteInteger(Offset, sizeof(uint32_t));
-        Writer.WriteInteger(Offset + Keys[i].Node->Bytes.size(), sizeof(uint32_t));
-        Writer.Seek(DataOffset + Offset + Keys[i].Node->Bytes.size(), BinaryVectorWriter::Position::Begin);
     }
 
-    uint32_t FileSize = Writer.GetPosition();
+    uint32_t FileSize = Writer.GetData().size();
 
     Writer.Seek(0, BinaryVectorWriter::Position::Begin);
 

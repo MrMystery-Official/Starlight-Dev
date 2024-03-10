@@ -18,7 +18,7 @@ void PopupAddLink::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		ImGui::SetNextWindowSize(ImVec2(334, 135));
 		ImGui::OpenPopup("Add link");
-		if (ImGui::BeginPopupModal("Add link"))
+		if (ImGui::BeginPopupModal("Add link", NULL, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::InputScalar("Source", ImGuiDataType_::ImGuiDataType_U64, &Src);
 			ImGui::InputScalar("Destination", ImGuiDataType_::ImGuiDataType_U64, &Dest);
@@ -45,8 +45,8 @@ void PopupAddLink::Render()
 				Src = 0;
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		//ImGui::SameLine();
+		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }

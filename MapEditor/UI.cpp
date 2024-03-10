@@ -28,6 +28,7 @@
 #include "ZStdFile.h"
 #include "UIAINBEditor.h"
 #include "UIActorTool.h"
+#include "UIMSBTEditor.h"
 
 #include "PopupAddActor.h"
 #include "PopupGeneralInputPair.h"
@@ -40,6 +41,7 @@
 #include "PopupAddAINBNode.h"
 #include "PopupEditorAINBActorLinks.h"
 #include "PopupAINBElementSelector.h"
+#include "PopupCredits.h"
 
 #include "ImGuizmo.h"
 
@@ -217,6 +219,9 @@ void UI::Render()
 	UITools::DrawToolsWindow();
 	UIConsole::DrawConsoleWindow();
 	UIActorTool::DrawActorToolWindow();
+#ifdef ADVANCED_MODE
+	UIMSBTEditor::DrawMSBTEditorWindow();
+#endif
 
 	//if (!UIAINBEditor::AINB.Loaded) UIAINBEditor::LoadAINBFile("Logic/Dungeon001_1800.logic.root.ainb");
 	UIAINBEditor::DrawAinbEditorWindow();
@@ -279,7 +284,17 @@ void UI::Render()
 			{
 				UIActorTool::Open = !UIActorTool::Open;
 			}
+#ifdef ADVANCED_MODE
+			if (ImGui::MenuItem("MSTB Editor", "", UIActorTool::Open))
+			{
+				UIMSBTEditor::Open = !UIMSBTEditor::Open;
+			}
+#endif
 			ImGui::EndMenu();
+		}
+		if (ImGui::MenuItem("Credits"))
+		{
+			PopupCredits::Open();
 		}
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor();
@@ -308,6 +323,9 @@ void UI::Render()
 		ImGui::DockBuilderDockWindow("Map View", DockMapViewTop);
 		ImGui::DockBuilderDockWindow("AINB Editor", DockMapViewTop);
 		ImGui::DockBuilderDockWindow("Actor Tool", DockMapViewTop);
+#ifdef ADVANCED_MODE
+		ImGui::DockBuilderDockWindow("MSBT Editor", DockMapViewTop);
+#endif
 		ImGui::DockBuilderDockWindow("Console", DockMapViewBottom);
 
 		ImGui::DockBuilderDockWindow("Properties", DockRight);
@@ -330,6 +348,7 @@ void UI::Render()
 	PopupAddAINBNode::Render();
 	PopupEditorAINBActorLinks::Render();
 	PopupAINBElementSelector::Render();
+	PopupCredits::Render();
 
     // Rendering
     ImGui::Render();

@@ -38,7 +38,7 @@ void ZStdFile::Initialize(std::string Path)
 	m_CompressDictBcettByaml = ZSTD_createCDict(DictBcettByaml->data(), DictBcettByaml->size(), 16);
 }
 
-int ZStdFile::GetDecompressedFileSize(std::string Path, ZStdFile::Dictionary Dictionary)
+int ZStdFile::GetDecompressedFileSize(std::string Path)
 {
 	std::ifstream File(Path, std::ios::binary);
 
@@ -54,18 +54,23 @@ int ZStdFile::GetDecompressedFileSize(std::string Path, ZStdFile::Dictionary Dic
 
 		File.close();
 
-		unsigned long long DecompSize = ZSTD_getFrameContentSize(Bytes.data(), Bytes.size());
-		if (DecompSize == 18446744073709551614) //Means the size could not be calculated
-		{
-			return -1;
-		}
-		return DecompSize;
+		return GetDecompressedFileSize(Bytes);
 	}
 	else
 	{
-		Logger::Error("ZStdDecompressor", "Could not open file " + Path);
+		Logger::Error("ZStdDecompressor", "Could not open file \"" + Path + "\"");
 		return -1;
 	}
+}
+
+int ZStdFile::GetDecompressedFileSize(std::vector<unsigned char> Bytes)
+{
+	unsigned long long DecompSize = ZSTD_getFrameContentSize(Bytes.data(), Bytes.size());
+	if (DecompSize == 18446744073709551614) //Means the size could not be calculated
+	{
+		return -1;
+	}
+	return DecompSize;
 }
 
 ZStdFile::Result ZStdFile::Decompress(std::vector<unsigned char> Bytes, ZStdFile::Dictionary Dictionary)

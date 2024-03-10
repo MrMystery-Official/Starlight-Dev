@@ -17,11 +17,32 @@ void Exporter::CreateExportOnlyFiles(std::string Path)
 	
 	auto RSTBEstimateBymlSize = [](std::string Path)
 		{
-			uint32_t Size = ZStdFile::GetDecompressedFileSize(Path, ZStdFile::Dictionary::BcettByaml);
+			uint32_t Size = ZStdFile::GetDecompressedFileSize(Path);
 			Size = (floor((Size + 0x1F) / 0x20)) * 0x20 + 256;
 			return Size;
 		};
-	auto RSTBEstimateAinbSize = [](std::string Path)
+
+	auto RSTBEstimateAinbSizeByte = [](std::vector<unsigned char> Bytes)
+		{
+			BinaryVectorReader Reader(Bytes);
+			Reader.Seek(0x44, BinaryVectorReader::Position::Begin);
+			uint32_t Offset = Reader.ReadUInt32();
+			bool HasEXB = Offset != 0;
+			uint32_t Size = (floor((Bytes.size() + 0x1F) / 0x20)) * 0x20 + 392;
+
+			if (HasEXB)
+			{
+				Reader.Seek(Offset + 0x20, BinaryVectorReader::Position::Begin);
+				uint32_t NewOffset = Reader.ReadUInt32();
+				Reader.Seek(NewOffset + Offset, BinaryVectorReader::Position::Begin);
+				uint32_t SignatureCount = Reader.ReadUInt32();
+				Size += 16 + floor((SignatureCount + 1) / 2) * 8;
+			}
+
+			return Size;
+		};
+
+	auto RSTBEstimateAinbSize = [&RSTBEstimateAinbSizeByte](std::string Path)
 		{
 			std::ifstream File(Path, std::ios::binary);
 
@@ -35,22 +56,28 @@ void Exporter::CreateExportOnlyFiles(std::string Path)
 
 			File.close();
 
-			BinaryVectorReader Reader(Bytes);
-			Reader.Seek(0x44, BinaryVectorReader::Position::Begin);
-			uint32_t Offset = Reader.ReadUInt32();
-			bool HasEXB = Offset != 0;
-			uint32_t Size = (floor((Bytes.size() + 0x1F) / 0x20)) * 0x20 + 392;
-			
-			if (HasEXB)
-			{
-				Reader.Seek(Offset + 0x20, BinaryVectorReader::Position::Begin);
-				uint32_t NewOffset = Reader.ReadUInt32();
-				Reader.Seek(NewOffset + Offset, BinaryVectorReader::Position::Begin);
-				uint32_t SignatureCount = Reader.ReadUInt32();
-				Size += 16 + floor((SignatureCount + 1) / 2) * 8;
-			}
+			return RSTBEstimateAinbSizeByte(Bytes);
+		};
 
-			return Size;
+	auto RSTBEstimateSarcSize = [&ResTable, &RSTBEstimateAinbSizeByte](std::string Path)
+		{
+			SarcFile Sarc(ZStdFile::Decompress(Path, ZStdFile::Dictionary::Pack).Data);
+			for (SarcFile::Entry& Entry : Sarc.GetEntries())
+			{
+				if (Entry.Bytes[0] == 'A' && Entry.Bytes[1] == 'I' && Entry.Bytes[2] == 'B')
+				{
+					ResTable.SetFileSize(Entry.Name, RSTBEstimateAinbSizeByte(Entry.Bytes) * 5);
+					continue;
+				}
+				if ((Entry.Bytes[0] == 'Y' && Entry.Bytes[1] == 'B') || (Entry.Bytes[0] == 'B' && Entry.Bytes[1] == 'Y'))
+				{
+					uint32_t Size = Entry.Bytes.size();
+					Size = (floor((Size + 0x1F) / 0x20)) * 0x20 + 256;
+					Size = (Size + 1000) * 8;
+					ResTable.SetFileSize(Entry.Name, Size);
+					continue;
+				}
+			}
 		};
 
 	using recursive_directory_iterator = std::filesystem::recursive_directory_iterator;
@@ -69,6 +96,10 @@ void Exporter::CreateExportOnlyFiles(std::string Path)
 				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 1 - Editor::GetWorkingDirFile("Save").length());
 				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
 				ResTable.SetFileSize(LocalPath, RSTBEstimateAinbSize(dirEntry.path().string()));
+			}
+			if (dirEntry.path().string().ends_with(".pack.zs"))
+			{
+				RSTBEstimateSarcSize(dirEntry.path().string());
 			}
 		}
 	}
@@ -223,6 +254,7 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 	}
 
 	Util::CreateDir(Path + "/" + Editor::BancDir);
+	UIAINBEditor::Save();
 	UIActorTool::Save(Path);
 
 	if (Editor::Identifier.length() != 0)
@@ -275,8 +307,6 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 		ZStdFile::Compress(StaticByml.ToBinary(BymlFile::TableGeneration::Auto), ZStdFile::Dictionary::BcettByaml).WriteToFile(Path + "/" + Editor::BancPrefix + Editor::Identifier + "_Static.bcett.byml.zs");
 		ZStdFile::Compress(DynamicByml.ToBinary(BymlFile::TableGeneration::Auto), ZStdFile::Dictionary::BcettByaml).WriteToFile(Path + "/" + Editor::BancPrefix + Editor::Identifier + "_Dynamic.bcett.byml.zs");
 	}
-
-	UIAINBEditor::Save();
 
 Copy:
 

@@ -603,7 +603,7 @@ std::vector<unsigned char> BymlFile::ToBinary(BymlFile::TableGeneration TableGen
         Writer.WriteByte(0x00);
     }
 
-    
+
     Writer.WriteByte(0xC2);
     Writer.WriteInteger(this->m_StringTable.size(), 3); //3 = uint24
     uint32_t StringTableJumpback = Writer.GetPosition();
@@ -697,7 +697,7 @@ BymlFile::BymlFile(std::vector<unsigned char> Bytes)
     {
         this->ParseTable(Reader, &this->m_StringTable, StringTableOffset);
     }
-    
+
     /* Parsing actual BYML data */
     Reader.Seek(DataOffset, BinaryVectorReader::Position::Begin);
     uint8_t RootNodeType = Reader.ReadUInt8();

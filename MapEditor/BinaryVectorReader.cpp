@@ -140,16 +140,37 @@ void BinaryVectorReader::ReadStruct(void* Dest, uint32_t Size, int Offset)
 	this->m_Offset += Size;
 }
 
-std::string BinaryVectorReader::ReadString()
+std::string BinaryVectorReader::ReadString(int Size)
 {
 	std::string Result;
 	char CurrentCharacter = this->ReadInt8();
 	Result += CurrentCharacter;
-	while (CurrentCharacter != 0x00)
+
+	if (Size == -1)
 	{
-		CurrentCharacter = this->ReadInt8();
-		Result += CurrentCharacter;
+		while (CurrentCharacter != 0x00)
+		{
+			CurrentCharacter = this->ReadInt8();
+			Result += CurrentCharacter;
+		}
+		Result.pop_back();
 	}
-	Result.pop_back();
+	else
+	{
+		for (int i = 0; i < Size-1; i++)
+			Result += this->ReadInt8();
+	}
+
+	return Result;
+}
+
+std::wstring BinaryVectorReader::ReadWString(int Size)
+{
+	std::wstring Result;
+	wchar_t CurrentCharacter = static_cast<wchar_t>(this->ReadUInt16());
+	Result += CurrentCharacter;
+	for (int i = 0; i < Size - 1; i++)
+		Result += static_cast<wchar_t>(this->ReadUInt16());
+
 	return Result;
 }

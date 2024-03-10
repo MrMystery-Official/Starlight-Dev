@@ -2388,7 +2388,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 		if (!OutputParameters[i].empty()) OutputParametersEmpty = false;
 	}
 
-	if (!InputParametersEmpty && !OutputParametersEmpty)
+	if (!InputParametersEmpty || !OutputParametersEmpty)
 	{
 		for (int Type = 0; Type < AINBFile::ValueTypeCount; Type++)
 		{
@@ -2664,7 +2664,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	Writer.WriteInteger(0, sizeof(uint32_t)); //Entry Strings size
 
 	uint32_t HashStart = Writer.GetPosition();
-	Writer.WriteInteger(0x4d724d79, sizeof(uint64_t)); //Setting two placeholder hashes, they are unused in game
+	Writer.WriteInteger(0x53746172, sizeof(uint64_t)); //Setting two placeholder hashes, they are unused in game
 
 	uint32_t ChildReplaceStart = Writer.GetPosition();
 	Writer.WriteInteger(0, sizeof(uint16_t)); //Set at rutime

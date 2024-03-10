@@ -22,7 +22,8 @@ namespace ZStdFile
 		void WriteToFile(std::string Path);
 	};
 
-	int GetDecompressedFileSize(std::string Path, ZStdFile::Dictionary Dictionary);
+	int GetDecompressedFileSize(std::string Path);
+	int GetDecompressedFileSize(std::vector<unsigned char> Bytes);
 
 	ZStdFile::Result Decompress(std::vector<unsigned char> Bytes, ZStdFile::Dictionary Dictionary);
 	ZStdFile::Result Decompress(std::string Path, ZStdFile::Dictionary Dictionary);

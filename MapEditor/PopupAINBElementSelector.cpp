@@ -19,7 +19,7 @@ void PopupAINBElementSelector::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		ImGui::SetNextWindowSize(ImVec2(432, 66));
 		ImGui::OpenPopup(PopupTitle.c_str());
-		if (ImGui::BeginPopupModal(PopupTitle.c_str()))
+		if (ImGui::BeginPopupModal(PopupTitle.c_str(), NULL, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::InputText(Key.c_str(), &Value);
 			if (ImGui::Button(ConfirmButtonText.c_str()))
@@ -45,8 +45,8 @@ void PopupAINBElementSelector::Render()
 				ConfirmButtonText = "";
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		//ImGui::SameLine();
+		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }

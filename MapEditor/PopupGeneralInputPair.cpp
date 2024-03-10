@@ -17,7 +17,7 @@ void PopupGeneralInputPair::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		ImGui::SetNextWindowSize(ImVec2(334, 88));
 		ImGui::OpenPopup(PopupTitle.c_str());
-		if (ImGui::BeginPopupModal(PopupTitle.c_str()))
+		if (ImGui::BeginPopupModal(PopupTitle.c_str(), NULL, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::InputText("Key", &Key);
 			ImGui::InputText("Value", &Value);
@@ -38,8 +38,8 @@ void PopupGeneralInputPair::Render()
 				Value = "";
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		//ImGui::SameLine();
+		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }

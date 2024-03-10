@@ -94,6 +94,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -112,6 +113,7 @@
       <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -129,6 +131,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -147,6 +150,7 @@
       <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -171,6 +175,7 @@
     <ClCompile Include="EBO.cpp" />
     <ClCompile Include="Editor.cpp" />
     <ClCompile Include="EditorConfig.cpp" />
+    <ClCompile Include="EffectFile.cpp" />
     <ClCompile Include="EXB.cpp" />
     <ClCompile Include="Exporter.cpp" />
     <ClCompile Include="Framebuffer.cpp" />
@@ -198,9 +203,11 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="MSBT.cpp" />
     <ClCompile Include="PopupAddActor.cpp" />
     <ClCompile Include="PopupAddAINBNode.cpp" />
     <ClCompile Include="PopupAINBElementSelector.cpp" />
+    <ClCompile Include="PopupCredits.cpp" />
     <ClCompile Include="PopupEditorAINBActorLinks.cpp" />
     <ClCompile Include="PopupExportMod.cpp" />
     <ClCompile Include="PopupGeneralConfirm.cpp" />
@@ -226,6 +233,7 @@
     <ClCompile Include="UIAINBEditor.cpp" />
     <ClCompile Include="UIConsole.cpp" />
     <ClCompile Include="UIMapView.cpp" />
+    <ClCompile Include="UIMSBTEditor.cpp" />
     <ClCompile Include="UIOutliner.cpp" />
     <ClCompile Include="UIProperties.cpp" />
     <ClCompile Include="UITools.cpp" />
@@ -250,6 +258,7 @@
     <ClInclude Include="EBO.h" />
     <ClInclude Include="Editor.h" />
     <ClInclude Include="EditorConfig.h" />
+    <ClInclude Include="EffectFile.h" />
     <ClInclude Include="EXB.h" />
     <ClInclude Include="Exporter.h" />
     <ClInclude Include="Framebuffer.h" />
@@ -281,9 +290,11 @@
     <ClInclude Include="imgui_node_editor\imgui_node_editor_internal.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Mesh.h" />
+    <ClInclude Include="MSBT.h" />
     <ClInclude Include="PopupAddActor.h" />
     <ClInclude Include="PopupAddAINBNode.h" />
     <ClInclude Include="PopupAINBElementSelector.h" />
+    <ClInclude Include="PopupCredits.h" />
     <ClInclude Include="PopupEditorAINBActorLinks.h" />
     <ClInclude Include="PopupExportMod.h" />
     <ClInclude Include="PopupGeneralConfirm.h" />
@@ -308,6 +319,7 @@
     <ClInclude Include="UIAINBEditor.h" />
     <ClInclude Include="UIConsole.h" />
     <ClInclude Include="UIMapView.h" />
+    <ClInclude Include="UIMSBTEditor.h" />
     <ClInclude Include="UIOutliner.h" />
     <ClInclude Include="UIProperties.h" />
     <ClInclude Include="UITools.h" />

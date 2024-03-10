@@ -41,6 +41,7 @@ bool UIAINBEditor::RunAutoLayout = false;
 bool UIAINBEditor::FocusOnZero = false;
 ed::EditorContext* UIAINBEditor::Context = nullptr;
 AINBFile UIAINBEditor::AINB;
+void (*UIAINBEditor::SaveCallback)() = nullptr;
 
 std::unordered_map<uint32_t, NodeShapeInformation> NodeShapeInfo;
 
@@ -145,6 +146,7 @@ void UIAINBEditor::UpdateNodsIds()
 
 void UIAINBEditor::LoadAINBFile(std::string Path, bool AbsolutePath)
 {
+	SaveCallback = nullptr;
 	AINB = AINBFile(AbsolutePath ? Path : Editor::GetRomFSFile(Path));
 
 	if (AINB.Nodes.size() > 42'949'600)
@@ -235,6 +237,106 @@ void UIAINBEditor::LoadAINBFile(std::string Path, bool AbsolutePath)
 		for (uint32_t j = 0; j < AINB.GlobalParameters[i].size(); j++)
 		{
 			GlobalParamHeaderOpen.insert({ (i * 500) + j, false}); //Max 500 global params per data type
+		}
+	}
+
+	RunAutoLayout = true;
+	FocusOnZero = true;
+}
+
+void UIAINBEditor::LoadAINBFile(std::vector<unsigned char> Bytes)
+{
+	SaveCallback = nullptr;
+	AINB = AINBFile(Bytes);
+
+	if (AINB.Nodes.size() > 42'949'600)
+	{
+		Logger::Error("AINBEditor", "AINB has over 42.949.600 nodes");
+		return;
+	}
+
+	for (AINBFile::Node& Node : AINB.Nodes)
+	{
+		for (int Type = 0; Type < AINBFile::LinkedNodeTypeCount; Type++)
+		{
+			for (std::vector<AINBFile::LinkedNodeInfo>::iterator Iter = Node.LinkedNodes[Type].begin(); Iter != Node.LinkedNodes[Type].end(); )
+			{
+				if (Iter->NodeIndex >= AINB.Nodes.size())
+					Iter = Node.LinkedNodes[Type].erase(Iter);
+				else
+					Iter++;
+			}
+		}
+	}
+
+	SelectedNode = nullptr;
+	SelectedLink = { false, nullptr, -1 };
+	IdToParent.clear();
+	IdToFlowLinkCondition.clear();
+	LinkToInput.clear();
+	OutputToId.clear();
+	InputToId.clear();
+	NodeShapeInfo.clear();
+	UpdateNodsIds();
+	UpdateNodeShapes();
+
+	for (AINBFile::Node& Node : AINB.Nodes)
+	{
+		if (Node.Type != (int)AINBFile::NodeTypes::UserDefined &&
+			Node.Type != (int)AINBFile::NodeTypes::Element_Sequential &&
+			Node.Type != (int)AINBFile::NodeTypes::Element_S32Selector &&
+			Node.Type != (int)AINBFile::NodeTypes::Element_F32Selector)
+		{
+			std::string DisplayName = Node.GetName();
+			AINBNodeDefMgr::NodeDef* Def = AINBNodeDefMgr::GetNodeDefinition(DisplayName);
+			if (Def != nullptr)
+			{
+				Node.EditorFlowLinkParams = Def->LinkedNodeParams;
+			}
+			continue;
+		}
+
+		if (Node.Type == (int)AINBFile::NodeTypes::Element_S32Selector)
+		{
+			for (AINBFile::LinkedNodeInfo& Info : Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink])
+			{
+				Node.EditorFlowLinkParams.push_back(Info.Condition);
+			}
+			if (std::find(Node.EditorFlowLinkParams.begin(), Node.EditorFlowLinkParams.end(), "Default") == Node.EditorFlowLinkParams.end())
+				Node.EditorFlowLinkParams.push_back("Default");
+			continue;
+		}
+		if (Node.Type == (int)AINBFile::NodeTypes::Element_F32Selector)
+		{
+			for (AINBFile::LinkedNodeInfo& Info : Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink])
+			{
+				if (Info.Condition != "Default") Node.EditorFlowLinkParams.push_back(std::to_string(Info.ConditionMin) + " <= Input <= " + std::to_string(Info.ConditionMax));
+			}
+			Node.EditorFlowLinkParams.push_back("Default");
+			continue;
+		}
+		if (Node.Type == (int)AINBFile::NodeTypes::Element_Sequential)
+		{
+			for (int i = 0; i < Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink].size(); i++)
+			{
+				Node.EditorFlowLinkParams.push_back("Seq " + std::to_string(i));
+				Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink][i].EditorName = "Seq " + std::to_string(i);
+			}
+		}
+	}
+
+	CommandHeaderOpen.clear();
+	for (AINBFile::Command Cmd : AINB.Commands)
+	{
+		CommandHeaderOpen.insert({ Cmd.GUID.Part1, false });
+	}
+
+	GlobalParamHeaderOpen.clear();
+	for (uint32_t i = 0; i < AINB.GlobalParameters.size(); i++)
+	{
+		for (uint32_t j = 0; j < AINB.GlobalParameters[i].size(); j++)
+		{
+			GlobalParamHeaderOpen.insert({ (i * 500) + j, false }); //Max 500 global params per data type
 		}
 	}
 
@@ -1553,6 +1655,12 @@ void UIAINBEditor::Save()
 {
 	if (AINB.Loaded)
 	{
+		if (SaveCallback != nullptr)
+		{
+			SaveCallback();
+			return;
+		}
+
 		Util::CreateDir(Editor::GetWorkingDirFile("Save/" + AINB.Header.FileCategory));
 		AINB.Write(Editor::GetWorkingDirFile("Save/" + AINB.Header.FileCategory + "/" + AINB.Header.FileName + ".ainb"));
 

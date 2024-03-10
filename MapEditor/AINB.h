@@ -328,6 +328,7 @@ file_category = {"AI" : 0, "Logic" : 1, "Sequence" : 2}
 	std::vector<uint32_t> AttachmentArray;
 	bool IsReplaced;
 	bool Loaded = false;
+	std::string EditorFileName = ""; //Editor only
 
 	uint32_t EXBInstances = 0;
 	EXB EXBFile;

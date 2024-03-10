@@ -15,9 +15,9 @@ void PopupExportMod::Render()
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(334, 88));
+		ImGui::SetNextWindowSize(ImVec2(650, 67));
 		ImGui::OpenPopup("Export mod");
-		if (ImGui::BeginPopupModal("Export mod"))
+		if (ImGui::BeginPopupModal("Export mod", NULL, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::InputText("Directory", &Path);
 			if (ImGui::Button("Export"))
@@ -37,8 +37,8 @@ void PopupExportMod::Render()
 				Path = Editor::ExportDir;
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		//ImGui::SameLine();
+		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }

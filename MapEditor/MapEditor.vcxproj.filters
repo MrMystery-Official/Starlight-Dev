@@ -100,6 +100,18 @@
     <Filter Include="Source Files\file\ainb">
       <UniqueIdentifier>{a3c9a081-53ef-43b2-a508-7a9351ac45f9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\file\effect">
+      <UniqueIdentifier>{0f5a5092-431a-4a19-872c-ece90a23c48b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\effect">
+      <UniqueIdentifier>{9528b9b1-d3cb-48bb-90db-4875dd823ae5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file\text">
+      <UniqueIdentifier>{868fb252-0fa0-4eb9-a283-efe9693d7b5b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\text">
+      <UniqueIdentifier>{522cd3db-62a3-4d35-8584-50591169240e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -332,6 +344,18 @@
     </ClCompile>
     <ClCompile Include="EXB.cpp">
       <Filter>Source Files\file\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="EffectFile.cpp">
+      <Filter>Source Files\file\effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MSBT.cpp">
+      <Filter>Source Files\file\text</Filter>
+    </ClCompile>
+    <ClCompile Include="UIMSBTEditor.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupCredits.cpp">
+      <Filter>Source Files\ui\popup</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -574,6 +598,18 @@
     </ClInclude>
     <ClInclude Include="EXB.h">
       <Filter>Header Files\file\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="EffectFile.h">
+      <Filter>Header Files\file\effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MSBT.h">
+      <Filter>Header Files\file\text</Filter>
+    </ClInclude>
+    <ClInclude Include="UIMSBTEditor.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupCredits.h">
+      <Filter>Header Files\ui\popup</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

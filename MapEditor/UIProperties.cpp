@@ -110,19 +110,21 @@ void UIProperties::DrawPropertiesWindow()
 						{
 							for (Actor& Merged : ActorMgr::GetActors())
 							{
+								if (Merged.Dynamic.DynamicString.empty()) continue;
 								if (Merged.Dynamic.DynamicString.count("BancPath"))
 								{
 									if (Merged.Dynamic.DynamicString["BancPath"] == Path)
 									{
 										UIOutliner::SelectedActor->ActorType = Actor::Type::Merged;
 										Merged.MergedActorContent.push_back(*UIOutliner::SelectedActor);
+										UIOutliner::SelectedActor = &Merged.MergedActorContent.back();
+
 										ActorMgr::GetActors().erase(
 											std::remove_if(ActorMgr::GetActors().begin(), ActorMgr::GetActors().end(), [&](Actor const& Actor) {
-												return Actor.Gyml == UIOutliner::SelectedActor->Gyml && Actor.Hash == UIOutliner::SelectedActor->Hash && Actor.SRTHash == UIOutliner::SelectedActor->SRTHash;
+												return Actor.Gyml == Merged.MergedActorContent.back().Gyml && Actor.Hash == Merged.MergedActorContent.back().Hash && Actor.SRTHash == Merged.MergedActorContent.back().SRTHash;
 												}),
 											ActorMgr::GetActors().end());
 										ActorMgr::UpdateModelOrder();
-										UIOutliner::SelectedActor = &Merged.MergedActorContent[Merged.MergedActorContent.size() - 1];
 									}
 								}
 							}
@@ -140,8 +142,9 @@ void UIProperties::DrawPropertiesWindow()
 							return Actor.Gyml == UIOutliner::SelectedActor->Gyml && Actor.Hash == UIOutliner::SelectedActor->Hash && Actor.SRTHash == UIOutliner::SelectedActor->SRTHash;
 							}),
 						UIOutliner::SelectedActor->MergedActorParent->MergedActorContent.end());
-					ActorMgr::GetActors()[ActorMgr::GetActors().size() - 1].MergedActorParent = nullptr;
+					ActorMgr::GetActors().back().MergedActorParent = nullptr;
 					ActorMgr::UpdateModelOrder();
+					UIOutliner::SelectedActor = &ActorMgr::GetActors().back();
 				}
 			}
 			ImGui::NextColumn();

@@ -2,6 +2,8 @@
 
 #include <sstream>
 #include <filesystem>
+#include <windows.h>
+#include <iostream>
 
 #define PI 3.14159265358979323846
 
@@ -99,4 +101,11 @@ bool Util::ReplaceString(std::string& str, const std::string& from, const std::s
 		startPos += to.length(); // In case the replacement string contains the target substring
 	}
 	return true;
+}
+
+std::string Util::WideCharToString(wchar_t WChar)
+{
+	std::string Result(2, 0);
+	WideCharToMultiByte(CP_UTF8, 0, &WChar, 1, &Result[0], 2, NULL, NULL);
+	return Result;
 }
