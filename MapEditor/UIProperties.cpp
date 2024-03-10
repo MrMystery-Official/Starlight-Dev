@@ -4,7 +4,6 @@
 #include "imgui_stdlib.h"
 #include "imgui_internal.h"
 #include "UIOutliner.h"
-#include <iostream>
 #include "ImGuizmo.h"
 #include "Editor.h"
 #include "UIMapView.h"
@@ -42,7 +41,6 @@ void UIProperties::DrawPropertiesWindow()
 				{
 					ActorMgr::UpdateModel(UIOutliner::SelectedActor);
 					ActorMgr::UpdateModelOrder();
-					std::cout << UIOutliner::SelectedActor->Gyml << std::endl;
 				}
 			}
 			ImGui::PopItemWidth();

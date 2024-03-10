@@ -9,7 +9,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <iostream>
 #include "Logger.h"
 #include "ShaderMgr.h"
 #include "FramebufferMgr.h"

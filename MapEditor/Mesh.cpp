@@ -47,8 +47,6 @@ Mesh::Mesh
 	Ebo.Unbind();
 }
 
-#include <iostream>
-
 void Mesh::Draw(Shader* GameShader, int AlbedoTexCount)
 {
 	Vao.Bind();

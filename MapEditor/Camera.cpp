@@ -5,7 +5,6 @@
 #include<glm/gtc/type_ptr.hpp>
 #include<glm/gtx/rotate_vector.hpp>
 #include<glm/gtx/vector_angle.hpp>
-#include <iostream>
 
 Camera::Camera(int Width, int Height, glm::vec3 Position, GLFWwindow* Window)
 {

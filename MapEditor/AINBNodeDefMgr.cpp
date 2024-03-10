@@ -161,7 +161,6 @@ void AINBNodeDefMgr::Initialize()
 
 		std::vector<unsigned char> EXBBytes(Reader.GetSize() - Reader.GetPosition());
 		Reader.ReadStruct(EXBBytes.data(), Reader.GetSize() - Reader.GetPosition());
-		std::cout << "FirstByteDef: " << EXBBytes[0] << std::endl;
 		EXBFile = EXB(EXBBytes);
 
 		Logger::Info("AINBNodeDefMgr", "Initialized, found " + std::to_string(AINBNodeDefMgr::NodeDefinitions.size()) + " nodes");
@@ -429,7 +428,6 @@ void AINBNodeDefMgr::Generate()
 	{
 		if (DirEntry.is_regular_file())
 		{
-			std::cout << DirEntry.path().string() << std::endl;
 			std::ifstream File(DirEntry.path().string(), std::ios::binary);
 
 			if (!File.eof() && !File.fail())
@@ -449,7 +447,7 @@ void AINBNodeDefMgr::Generate()
 			}
 			else
 			{
-				std::cerr << "Could not open file \"" << DirEntry.path().string() << "\"!\n";
+				Logger::Error("AINBNodeDefMgr", "Could not open file \"" + DirEntry.path().string() + "\"");
 			}
 		}
 	}
@@ -457,7 +455,6 @@ void AINBNodeDefMgr::Generate()
 	{
 		if (DirEntry.is_regular_file())
 		{
-			std::cout << DirEntry.path().string() << std::endl;
 			std::ifstream File(DirEntry.path().string(), std::ios::binary);
 
 			if (!File.eof() && !File.fail())
@@ -477,7 +474,7 @@ void AINBNodeDefMgr::Generate()
 			}
 			else
 			{
-				std::cerr << "Could not open file \"" << DirEntry.path().string() << "\"!\n";
+				Logger::Error("AINBNodeDefMgr", "Could not open file \"" + DirEntry.path().string() + "\"");
 			}
 		}
 	}
@@ -490,7 +487,6 @@ void AINBNodeDefMgr::Generate()
 				ZStdFile::Result Result = ZStdFile::Decompress(DirEntry.path().string(), ZStdFile::Dictionary::Pack);
 				if (Result.Data.size() > 0)
 				{
-					std::cout << "Actor Pack: " << DirEntry.path().string() << std::endl;
 					SarcFile File(Result.Data);
 					for (SarcFile::Entry& Entry : File.GetEntries())
 					{

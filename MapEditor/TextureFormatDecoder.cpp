@@ -258,8 +258,6 @@ void TextureFormatDecoder::DecodeBC3SRG(unsigned int Width, unsigned int Height,
 	Dest.resize(Width * Height * 4);
 }
 
-#include <iostream>
-
 void TextureFormatDecoder::DecodeBC4(unsigned int Width, unsigned int Height, std::vector<unsigned char>& Data, std::vector<unsigned char>& Dest, TextureToGo* TexToGo)
 {
 	if (Width * Height <= 1)

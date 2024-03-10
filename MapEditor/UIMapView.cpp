@@ -7,7 +7,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "UIOutliner.h"
 #include "Frustum.h"
-#include <iostream>
 #include "TextureMgr.h"
 
 bool UIMapView::Open = true;

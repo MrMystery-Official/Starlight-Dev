@@ -3,7 +3,6 @@
 #include <sstream>
 #include <filesystem>
 #include <windows.h>
-#include <iostream>
 
 #define PI 3.14159265358979323846
 

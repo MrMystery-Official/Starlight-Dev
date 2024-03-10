@@ -1,5 +1,7 @@
 #include "SARC.h"
 
+#include "Logger.h"
+
 void SarcFile::Entry::WriteToFile(std::string Path)
 {
     std::ofstream File(Path, std::ios::binary);
@@ -56,7 +58,7 @@ SarcFile::SarcFile(std::vector<unsigned char> Bytes)
     Reader.Read(Magic, 4);
     if (Magic[0] != 'S' || Magic[1] != 'A' || Magic[2] != 'R' || Magic[3] != 'C')
     {
-        std::cerr << "Expected SARC as magic, but got " << Magic << "!\n";
+        Logger::Error("SarcDecoder", "Wrong magic, expected SARC");
         return;
     }
 
@@ -323,6 +325,6 @@ SarcFile::SarcFile(std::string Path)
     }
     else
     {
-        std::cerr << "Could not open file \"" << Path << "\"!\n";
+        Logger::Error("SarcDecoder", "Could not open file\"" + Path + "\"");
     }
 }

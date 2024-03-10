@@ -2,7 +2,6 @@
 
 #include "Editor.h"
 #include "Logger.h"
-#include <iostream>
 
 /* BfresModelLibrary - Start */
 std::unordered_map<std::string, BfresFile> BfresLibrary::Models;

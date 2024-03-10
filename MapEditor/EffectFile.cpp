@@ -3,7 +3,6 @@
 #include "BinaryVectorReader.h"
 #include "Byml.h"
 #include "Logger.h"
-#include <iostream>
 
 EffectFile::EffectFile(std::vector<unsigned char> Bytes)
 {

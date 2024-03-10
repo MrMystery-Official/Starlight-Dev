@@ -5,10 +5,10 @@
 #include "ZStdFile.h"
 #include "RESTBL.h"
 #include <filesystem>
-#include <iostream>
 #include "UIAINBEditor.h"
 #include "BinaryVectorReader.h"
 #include "UIActorTool.h"
+#include "Logger.h"
 
 void Exporter::CreateExportOnlyFiles(std::string Path)
 {
@@ -148,12 +148,12 @@ void Exporter::CreateRSTBL(std::string Path)
 					UnknownActors.push_back(Name);
 			}
 
-			std::cout << "Recompiling actors: " << !UnknownActors.empty() << std::endl;
+			Logger::Info("Exporter", "Recreating ActorInfo, takes ~20 seconds");
 
 			for (std::string Name : UnknownActors)
 			{
-				std::cout << "Adding actor " << Name << std::endl;
-				
+				Logger::Info("Exporter", "Adding actor " + Name);
+
 				BymlFile::Node NewActorDict(BymlFile::Type::Dictionary, std::to_string(ActorInfo.GetNodes().size()));
 
 				BymlFile::Node NewActorCalcRadius(BymlFile::Type::Float, "CalcRadius");

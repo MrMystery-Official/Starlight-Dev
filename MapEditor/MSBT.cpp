@@ -2,7 +2,6 @@
 
 #include "Logger.h"
 #include <fstream>
-#include <iostream>
 #include "Util.h"
 #include <locale>
 #include <codecvt>
@@ -332,7 +331,6 @@ MSBTFile::MSBTFile(std::vector<unsigned char> Bytes)
 
 		std::string Signature = Reader.ReadString(4);
 		uint32_t SectionSize = Reader.ReadUInt32();
-		std::cout << Signature << std::endl;
 		if (Signature == "LBL1")
 		{
 			this->ReadLBL1(Reader);
@@ -377,12 +375,6 @@ void MSBTFile::MessageToBinary(std::vector<uint16_t>& Bytes, std::string Message
 		}
 		if (ch == '>')
 		{
-			std::cout << "Data for key " << Key << std::endl;
-			for (auto& [Key, Val] : Args)
-			{
-				std::cout << "Argument: " << Key << ", " << Val << std::endl;
-			}
-			
 			if (Key == "anim")
 			{
 				Bytes.push_back(0x000E);
@@ -393,7 +385,6 @@ void MSBTFile::MessageToBinary(std::vector<uint16_t>& Bytes, std::string Message
 				std::wstring AnimName;
 				AnimName.resize(Args[0].second.length());
 				MultiByteToWideChar(CP_ACP, 0, Args[0].second.data(), Args[0].second.length(), AnimName.data(), Args[0].second.length());
-				std::wcout << AnimName << std::endl;
 				for (wchar_t AnimChar : AnimName)
 				{
 					Bytes.push_back((uint16_t)AnimChar);
