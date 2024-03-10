@@ -6,7 +6,7 @@
 #include "UIAINBEditor.h"
 
 bool PopupAddAINBNode::IsOpen = false;
-bool PopupAddAINBNode::ShowUnallowedNodes = false;
+bool PopupAddAINBNode::ShowUnallowedNodes = true;
 std::string PopupAddAINBNode::Name = "";
 void (*PopupAddAINBNode::Func)(std::string) = nullptr;
 AINBNodeDefMgr::NodeDef::CategoryEnum PopupAddAINBNode::AINBCategory = AINBNodeDefMgr::NodeDef::CategoryEnum::Logic;
@@ -18,7 +18,7 @@ void PopupAddAINBNode::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		ImGui::SetNextWindowSize(ImVec2(680, 221));
 		ImGui::OpenPopup("Add AINB node");
-		if (ImGui::BeginPopupModal("Add AINB node"))
+		if (ImGui::BeginPopupModal("Add AINB node", NULL, ImGuiWindowFlags_NoResize))
 		{
 			ImGui::InputTextWithHint("##Name", "Search...", &Name);
 
@@ -36,7 +36,9 @@ void PopupAddAINBNode::Render()
 				}
 			}
 			ImGui::EndListBox();
-			ImGui::Checkbox("Show unallowed nodes (Those nodes won't work in this AINB)", &ShowUnallowedNodes);
+			ImGui::BeginDisabled();
+			ImGui::Checkbox("Show all nodes", &ShowUnallowedNodes);
+			ImGui::EndDisabled();
 
 			if (ImGui::Button("Add"))
 			{
@@ -53,8 +55,8 @@ void PopupAddAINBNode::Render()
 				Name = "";
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		//ImGui::SameLine();
+		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }
