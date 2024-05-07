@@ -163,6 +163,7 @@ void PopupSettings::Render()
 				ActorMgr::UpdateModelOrder();
 				EditorConfig::Save();
 				PreferencesConfig::Save();
+				Editor::InitializeWithEdtc();
 			}
 
 			ImGui::PopStyleColor();
