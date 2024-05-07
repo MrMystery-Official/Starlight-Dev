@@ -8,6 +8,7 @@
 #include "UIOutliner.h"
 #include "Frustum.h"
 #include "TextureMgr.h"
+#include "Logger.h"
 
 bool UIMapView::Open = true;
 bool UIMapView::Focused = false;
@@ -36,6 +37,21 @@ float UIMapView::ObjectMatrix[16] =
 
 ImGuizmo::MODE UIMapView::ImGuizmoMode = ImGuizmo::WORLD;
 ImGuizmo::OPERATION UIMapView::ImGuizmoOperation = ImGuizmo::TRANSLATE;
+
+void UIMapView::GLFWKeyCallback(GLFWwindow* Window, int Key, int Scancode, int Action, int Mods)
+{
+	if (ImGui::GetIO().WantTextInput || CameraView.IsInCameraMovement() || Action != GLFW_PRESS) return;
+
+	//Rotation hot key
+	if (Key == GLFW_KEY_R)
+		ImGuizmoOperation = ImGuizmo::ROTATE;
+
+	if (Key == GLFW_KEY_S)
+		ImGuizmoOperation = ImGuizmo::SCALE;
+
+	if (Key == GLFW_KEY_G)
+		ImGuizmoOperation = ImGuizmo::TRANSLATE;
+}
 
 void UIMapView::Initialize(GLFWwindow* pWindow)
 {
@@ -71,6 +87,7 @@ void UIMapView::DrawOverlay()
 	{
 		UIMapView::ImGuizmoOperation = ImGuizmo::TRANSLATE;
 	}
+	ImGui::SetItemTooltip("Translate Gizmo (G)");
 	ImGui::SameLine();
 	ImGui::PopStyleColor();
 
@@ -79,6 +96,7 @@ void UIMapView::DrawOverlay()
 	{
 		UIMapView::ImGuizmoOperation = ImGuizmo::ROTATE;
 	}
+	ImGui::SetItemTooltip("Rotate Gizmo (R)");
 	ImGui::SameLine();
 	ImGui::PopStyleColor();
 
@@ -87,12 +105,15 @@ void UIMapView::DrawOverlay()
 	{
 		UIMapView::ImGuizmoOperation = ImGuizmo::SCALE;
 	}
+	ImGui::SetItemTooltip("Scale Gizmo (S)");
 	ImGui::PopStyleColor();
 
 }
 
 void UIMapView::DrawActor(Actor& Actor, Shader* Shader)
 {
+	BfresFile::LOD* LODModel = &Actor.Model->GetModels()[0].LODs[0];
+
 	glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
 
 	GLMModel = glm::translate(GLMModel, glm::vec3(Actor.Translate.GetX(), Actor.Translate.GetY(), Actor.Translate.GetZ()));
@@ -102,8 +123,6 @@ void UIMapView::DrawActor(Actor& Actor, Shader* Shader)
 	GLMModel = glm::rotate(GLMModel, glm::radians(Actor.Rotate.GetX()), glm::vec3(1.0, 0.0f, 0.0));
 
 	GLMModel = glm::scale(GLMModel, glm::vec3(Actor.Scale.GetX(), Actor.Scale.GetY(), Actor.Scale.GetZ()));
-
-	BfresFile::LOD* LODModel = &Actor.Model->GetModels()[0].LODs[0];
 
 	for (uint32_t SubModelIndexOpaque : LODModel->OpaqueObjects)
 	{
@@ -186,31 +205,39 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 		{
 			Actor& CurrentActor = ActorMgr::GetActors()[ActorIndex];
 			if (!CurrentActor.Model->IsDefaultModel() && !RenderSettings.RenderVisibleActors) continue;
-			if (CurrentActor.Model->IsDefaultModel() && !RenderSettings.RenderInvisibleActors) continue;
+			if (CurrentActor.Model->IsDefaultModel() && !RenderSettings.RenderInvisibleActors && !CurrentActor.IsUMii) continue;
 			if (CurrentActor.Gyml.ends_with("_Far") && !RenderSettings.RenderFarActors) continue;
+			if (CurrentActor.Gyml.starts_with("Npc_") && !RenderSettings.RenderNPCs) continue;
 			if (CurrentActor.Gyml.find("Area") != std::string::npos && CurrentActor.Model->IsDefaultModel() && !RenderSettings.RenderAreas) continue;
 
 			int R = (ActorIndex & 0x000000FF) >> 0;
 			int G = (ActorIndex & 0x0000FF00) >> 8;
 			int B = (ActorIndex & 0x00FF0000) >> 16;
 
-			glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
-
-			GLMModel = glm::translate(GLMModel, glm::vec3(CurrentActor.Translate.GetX(), CurrentActor.Translate.GetY(), CurrentActor.Translate.GetZ()));
-
-			GLMModel = glm::rotate(GLMModel, glm::radians(CurrentActor.Rotate.GetZ()), glm::vec3(0.0, 0.0f, 1.0));
-			GLMModel = glm::rotate(GLMModel, glm::radians(CurrentActor.Rotate.GetY()), glm::vec3(0.0f, 1.0, 0.0));
-			GLMModel = glm::rotate(GLMModel, glm::radians(CurrentActor.Rotate.GetX()), glm::vec3(1.0, 0.0f, 0.0));
-
-			GLMModel = glm::scale(GLMModel, glm::vec3(CurrentActor.Scale.GetX(), CurrentActor.Scale.GetY(), CurrentActor.Scale.GetZ()));
-
-			BfresFile::LOD* LODModel = &CurrentActor.Model->GetModels()[0].LODs[0];
-
 			glUniform4f(glGetUniformLocation(PickingShader->ID, "PickingColor"), R / 255.0f, G / 255.0f, B / 255.0f, 1.0f);
 
-			for (Mesh& SubMesh : LODModel->GL_Meshes)
+			if (!CurrentActor.IsUMii)
 			{
-				SubMesh.DrawPicking(PickingShader, &CameraView, GLMModel);
+				glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+
+				GLMModel = glm::translate(GLMModel, glm::vec3(CurrentActor.Translate.GetX(), CurrentActor.Translate.GetY(), CurrentActor.Translate.GetZ()));
+
+				GLMModel = glm::rotate(GLMModel, glm::radians(CurrentActor.Rotate.GetZ()), glm::vec3(0.0, 0.0f, 1.0));
+				GLMModel = glm::rotate(GLMModel, glm::radians(CurrentActor.Rotate.GetY()), glm::vec3(0.0f, 1.0, 0.0));
+				GLMModel = glm::rotate(GLMModel, glm::radians(CurrentActor.Rotate.GetX()), glm::vec3(1.0, 0.0f, 0.0));
+
+				GLMModel = glm::scale(GLMModel, glm::vec3(CurrentActor.Scale.GetX(), CurrentActor.Scale.GetY(), CurrentActor.Scale.GetZ()));
+
+				BfresFile::LOD* LODModel = &CurrentActor.Model->GetModels()[0].LODs[0];
+
+				for (Mesh& SubMesh : LODModel->GL_Meshes)
+				{
+					SubMesh.DrawPicking(PickingShader, &CameraView, GLMModel);
+				}
+			}
+			else
+			{
+				CurrentActor.UMiiData.Draw(CurrentActor.Translate, CurrentActor.Rotate, CurrentActor.Scale, PickingShader, true, &CameraView);
 			}
 		}
 
@@ -223,8 +250,9 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 			for (Actor& MergedActor : MergedActorMain.MergedActorContent)
 			{
 				if (!MergedActor.Model->IsDefaultModel() && !RenderSettings.RenderVisibleActors) continue;
-				if (MergedActor.Model->IsDefaultModel() && !RenderSettings.RenderInvisibleActors) continue;
+				if (MergedActor.Model->IsDefaultModel() && !RenderSettings.RenderInvisibleActors && !MergedActor.IsUMii) continue;
 				if (MergedActor.Gyml.ends_with("_Far") && !RenderSettings.RenderFarActors) continue;
+				if (MergedActor.Gyml.starts_with("Npc_") && !RenderSettings.RenderNPCs) continue;
 				if (MergedActor.Gyml.find("Area") != std::string::npos && MergedActor.Model->IsDefaultModel() && !RenderSettings.RenderAreas) continue;
 
 				int R = (MergedActorIndex & 0x000000FF) >> 0;
@@ -323,9 +351,11 @@ void UIMapView::DrawMapViewWindow()
 
 	for (auto& [Model, ActorPtrs] : ActorMgr::OpaqueActors)
 	{
+		if (ActorPtrs[0]->IsUMii) continue;
 		if (!Model->IsDefaultModel() && !RenderSettings.RenderVisibleActors) continue;
 		if (Model->IsDefaultModel() && !RenderSettings.RenderInvisibleActors) continue;
 		if (ActorPtrs[0]->Gyml.ends_with("_Far") && !RenderSettings.RenderFarActors) continue;
+		if (ActorPtrs[0]->Gyml.starts_with("Npc_") && !RenderSettings.RenderNPCs) continue;
 		if (ActorPtrs[0]->Gyml.find("Area") != std::string::npos && Model->IsDefaultModel() && !RenderSettings.RenderAreas) continue;
 
 		DrawInstancedActor(Model, ActorPtrs);
@@ -333,8 +363,10 @@ void UIMapView::DrawMapViewWindow()
 
 	for (auto& [Model, ActorPtrs] : ActorMgr::TransparentActors)
 	{
+		if (ActorPtrs[0]->IsUMii) continue;
 		if (Model->IsDefaultModel()) continue;
 		if (!Model->IsDefaultModel() && !RenderSettings.RenderVisibleActors) continue;
+		if (ActorPtrs[0]->Gyml.starts_with("Npc_") && !RenderSettings.RenderNPCs) continue;
 		if (ActorPtrs[0]->Gyml.ends_with("_Far") && !RenderSettings.RenderFarActors) continue;
 
 		DrawInstancedActor(Model, ActorPtrs);
@@ -342,12 +374,24 @@ void UIMapView::DrawMapViewWindow()
 
 	for (auto& [Model, ActorPtrs] : ActorMgr::TransparentActors)
 	{
+		if (ActorPtrs[0]->IsUMii) continue;
 		if (!Model->IsDefaultModel()) continue;
 		if (Model->IsDefaultModel() && !RenderSettings.RenderInvisibleActors) continue;
 		if (ActorPtrs[0]->Gyml.ends_with("_Far") && !RenderSettings.RenderFarActors) continue;
+		if (ActorPtrs[0]->Gyml.starts_with("Npc_") && !RenderSettings.RenderNPCs) continue;
 		if (ActorPtrs[0]->Gyml.find("Area") != std::string::npos && Model->IsDefaultModel() && !RenderSettings.RenderAreas) continue;
 
 		DrawInstancedActor(Model, ActorPtrs);
+	}
+
+	if (RenderSettings.RenderNPCs)
+	{
+		DefaultShader->Activate();
+		for (Actor* NPC : ActorMgr::UMiiActors)
+		{
+			if (NPC == UIOutliner::SelectedActor) continue;
+			NPC->UMiiData.Draw(NPC->Translate, NPC->Rotate, NPC->Scale, DefaultShader);
+		}
 	}
 
 	//Selected actor
@@ -355,11 +399,18 @@ void UIMapView::DrawMapViewWindow()
 	{
 		SelectedShader->Activate();
 		CameraView.Matrix(SelectedShader, "camMatrix");
-		DrawActor(*UIOutliner::SelectedActor, SelectedShader);
-
-		for (Actor& Child : UIOutliner::SelectedActor->MergedActorContent)
+		if (!UIOutliner::SelectedActor->IsUMii)
 		{
-			DrawActor(Child, SelectedShader);
+			DrawActor(*UIOutliner::SelectedActor, SelectedShader);
+
+			for (Actor& Child : UIOutliner::SelectedActor->MergedActorContent)
+			{
+				DrawActor(Child, SelectedShader);
+			}
+		}
+		else
+		{
+			UIOutliner::SelectedActor->UMiiData.Draw(UIOutliner::SelectedActor->Translate, UIOutliner::SelectedActor->Rotate, UIOutliner::SelectedActor->Scale, SelectedShader);
 		}
 	}
 

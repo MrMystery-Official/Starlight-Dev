@@ -14,6 +14,13 @@ public:
 	float GetY();
 	float GetZ();
 	float* GetRawData();
+	float GetDotProduct();
+	float GetDistance();
+	bool operator==(Vector3F V);
+	Vector3F operator-(Vector3F V);
+	Vector3F operator+(Vector3F V);
+	Vector3F operator*(Vector3F V);
+	Vector3F operator*(float Multiplier);
 private:
 	float m_Data[3];
 };

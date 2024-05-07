@@ -2,15 +2,16 @@
 
 #include "Editor.h"
 #include "Logger.h"
+#include <iostream>
 
 /* BfresModelLibrary - Start */
-std::unordered_map<std::string, BfresFile> BfresLibrary::Models;
+std::map<std::string, BfresFile> BfresLibrary::Models;
 
 void BfresLibrary::Initialize()
 {
-    BfresLibrary::Models.insert({ "None", BfresFile::CreateDefaultModel("None", 0, 0, 255, 255) });
     BfresLibrary::Models.insert({ "Area", BfresFile::CreateDefaultModel("Area", 0, 255, 0, 50) });
-    BfresLibrary::Models.insert({ "EditorCollision", BfresFile::CreateDefaultModel("EditorCollision", 255, 255, 0, 50) });
+    BfresLibrary::Models.insert({ "Default", BfresFile::CreateDefaultModel("Default", 0, 0, 255, 255) });
+    //BfresLibrary::Models.insert({ "MapEditor_Collision_", BfresFile::CreateDefaultModel("MapEditor_Collision_", 255, 255, 0, 50) });
 }
 
 bool BfresLibrary::IsModelLoaded(std::string ModelName)
@@ -65,8 +66,7 @@ void GLTextureLibrary::Cleanup()
 }
 /* GLTextureLibrary - End */
 
-float MaxBfres(float a, float b) {
-    return a > b ? a : b;
+float MaxBfres(float a, float b) {   return a > b ? a : b;
 }
 
 void BfresFile::GenerateBoundingBox() {
@@ -86,6 +86,9 @@ void BfresFile::CreateOpenGLObjects()
     {
         for (BfresFile::LOD& LODModel : Model.LODs)
         {
+            LODModel.TransparentObjects.clear();
+            LODModel.OpaqueObjects.clear();
+            LODModel.GL_Meshes.clear();
             LODModel.GL_Meshes.resize(LODModel.Faces.size());
             int FaceOffset = 0;
             for (int SubModelIndex = 0; SubModelIndex < LODModel.Faces.size(); SubModelIndex++)
@@ -360,9 +363,10 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
     for (uint16_t FMDLIndex = 0; FMDLIndex < FMDLCount; FMDLIndex++)
     {
         uint64_t FMDLBaseOffset = Reader.GetPosition();
-        Reader.Seek(4, BinaryVectorReader::Position::Current); //Skipping magic, should be FMDL
+        //Reader.Seek(4, BinaryVectorReader::Position::Current); //Skipping magic, should be FMDL
 
-        Reader.Seek(FMDLBaseOffset + 32, BinaryVectorReader::Position::Begin);
+        Reader.Seek(FMDLBaseOffset + 24, BinaryVectorReader::Position::Begin);
+        uint64_t FSKLOffset = Reader.ReadUInt64();
         uint64_t FVTXOffset = Reader.ReadUInt64();
         uint64_t FSHPOffset = Reader.ReadUInt64();
         uint64_t FMATValuesOffset = Reader.ReadUInt64();
@@ -495,6 +499,50 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
             Reader.Seek(FMATBaseOffset + 176, BinaryVectorReader::Position::Begin);
         }
 
+        //Parsing FSKL
+        Reader.Seek(FSKLOffset, BinaryVectorReader::Position::Begin);
+        {
+            uint32_t FSKLBaseOffset = Reader.GetPosition();
+            Reader.Seek(4, BinaryVectorReader::Position::Current);
+
+            uint32_t FSKLFlags = Reader.ReadUInt32();
+            uint64_t BoneDictOffset = Reader.ReadUInt64();
+            uint64_t BoneArrayOffset = Reader.ReadUInt64();
+            uint64_t MatrixToBoneListOffset = Reader.ReadUInt64();
+            uint64_t InverseModelMatricesOffset = Reader.ReadUInt64();
+
+            Reader.Seek(8, BinaryVectorReader::Position::Current); //Padding
+            uint64_t FSKLUserPointer = Reader.ReadUInt64();
+            uint16_t NumBones = Reader.ReadUInt16();
+            uint16_t NumSmoothMatrices = Reader.ReadUInt16();
+            uint16_t NumRigidMatrices = Reader.ReadUInt16();
+            
+            //std::cout << "NumBones: " << NumBones << ", NumSmoothMatrices: " << NumSmoothMatrices << ", NumRigidMatrices: " << NumRigidMatrices << std::endl;
+
+            /*
+            Reader.Seek(BoneDictOffset, BinaryVectorReader::Position::Begin);
+            Reader.Seek(4, BinaryVectorReader::Position::Current); //Always 0x00000000
+            uint32_t NumBoneEntries = Reader.ReadUInt32();
+            */
+            this->m_SkeletonBones.resize(NumBones);
+
+            Reader.Seek(MatrixToBoneListOffset, BinaryVectorReader::Position::Begin);
+
+            if (NumRigidMatrices > 0)
+            {
+                m_Rigids.resize(NumSmoothMatrices + NumRigidMatrices);
+                Reader.ReadStruct(m_Rigids.data(), (NumSmoothMatrices + NumRigidMatrices) * 2);
+            }
+
+            for (int BoneNodeIndex = 0; BoneNodeIndex < NumBones; BoneNodeIndex++)
+            {
+                Reader.Seek(BoneArrayOffset + (BoneNodeIndex * 0x58), BinaryVectorReader::Position::Begin); //BaseOffset + Index * BoneSize
+                Reader.Seek(32, BinaryVectorReader::Position::Current); //Not important
+                Reader.ReadStruct(&this->m_SkeletonBones[BoneNodeIndex], sizeof(BfresFile::SkeletonBone));
+                //std::cout << "BONE " << BoneNodeIndex << ": " << this->m_SkeletonBones[BoneNodeIndex].Position[0] << ", " << this->m_SkeletonBones[BoneNodeIndex].Position[1] << ", " << this->m_SkeletonBones[BoneNodeIndex].Position[2] << std::endl;
+            }
+        }
+
         //Parsing FSHP
         Reader.Seek(FSHPOffset, BinaryVectorReader::Position::Begin);
         for (int FSHPIndex = 0; FSHPIndex < FSHPCount; FSHPIndex++)
@@ -502,7 +550,7 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
             uint64_t FSHPBaseOffset = Reader.GetPosition();
             Reader.Seek(24, BinaryVectorReader::Position::Current);
             uint64_t MeshArrayOffset = Reader.ReadUInt64();
-            uint64_t LODModelOffset = Reader.ReadUInt64();
+            uint64_t SkinBoneIndexListOffset = Reader.ReadUInt64();
             Reader.Seek(24, BinaryVectorReader::Position::Current);
             uint64_t BoundingBoxOffset = Reader.ReadUInt64();
             uint64_t RadiusOffset = Reader.ReadUInt64();
@@ -510,8 +558,13 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
 
             Reader.Seek(FSHPBaseOffset + 82, BinaryVectorReader::Position::Begin);
             uint16_t MaterialIndex = Reader.ReadUInt16();
+            uint16_t BoneIndex = Reader.ReadUInt16();
+            uint16_t VertexBufferIndex = Reader.ReadUInt16();
+            uint16_t NumSkinBoneIndex = Reader.ReadUInt16();
+            uint8_t VertexSkinCount = Reader.ReadUInt8();
 
-            Reader.Seek(7, BinaryVectorReader::Position::Current);
+            //std::cout << "BoneIndex: " << BoneIndex << ", " << NumSkinBoneIndex << std::endl;
+
             uint8_t NumLODs = Reader.ReadUInt8();
 
             Reader.Seek(MeshArrayOffset, BinaryVectorReader::Position::Begin);
@@ -636,11 +689,7 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
                 if (VertexBuffers[i].BufferOffset % 8 != 0) VertexBuffers[i].BufferOffset = VertexBuffers[i].BufferOffset + (8 - (VertexBuffers[i].BufferOffset % 8));
 
                 Reader.Seek(VertexBuffers[i].BufferOffset, BinaryVectorReader::Position::Begin);
-
-                for (int j = 0; j < VertexBuffers[i].Size; j++)
-                {
-                    VertexBuffers[i].Data[j] = (unsigned char)Reader.ReadUInt8();
-                }
+                Reader.ReadStruct(VertexBuffers[i].Data.data(), VertexBuffers[i].Size);
             }
 
             this->m_Models[FMDLIndex].Vertices[FVTXIndex].resize(VertexCount * 3);
@@ -662,65 +711,7 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
                 }
             }
 
-            uint32_t AttributeSegmentSize = 0;
-            VertexBufferAttribute* BiggestOffsetAttribute = nullptr;
-            for (VertexBufferAttribute& Attribute : VertexBufferAttributes)
-            {
-                std::string NameCopy = Attribute.Name;
-                NameCopy.pop_back();
-                if (NameCopy != "_p" && NameCopy != "_i" && NameCopy != "_w")
-                {
-                    if (BiggestOffsetAttribute != nullptr)
-                    {
-                        if (Attribute.Offset > BiggestOffsetAttribute->Offset)
-                        {
-                            BiggestOffsetAttribute = &Attribute;
-                        }
-                    }
-                    else
-                    {
-                        BiggestOffsetAttribute = &Attribute;
-                    }
-                }
-            }
-
-            if (BiggestOffsetAttribute == nullptr)
-            {
-                AttributeSegmentSize = 0;
-                goto BiggestOffsetAttributeNullPtr;
-            }
-
-            AttributeSegmentSize = BiggestOffsetAttribute->Offset;
-
-            switch (BiggestOffsetAttribute->Format) {
-            case (uint16_t)VertexBufferFormat::Format_32_32_Single:
-                AttributeSegmentSize += 8;
-                break;
-            case (uint16_t)VertexBufferFormat::Format_10_10_10_2_SNorm:
-            case (uint16_t)VertexBufferFormat::Format_8_8_8_8_SNorm:
-            case (uint16_t)VertexBufferFormat::Format_8_8_8_8_UInt:
-            case (uint16_t)VertexBufferFormat::Format_8_8_8_8_UNorm:
-            case (uint16_t)VertexBufferFormat::Format_16_16_Single:
-            case (uint16_t)VertexBufferFormat::Format_16_16_UNorm:
-            case (uint16_t)VertexBufferFormat::Format_16_16_SNorm:
-                AttributeSegmentSize += 4;
-                break;
-            case (uint16_t)VertexBufferFormat::Format_8_8_SNorm:
-            case (uint16_t)VertexBufferFormat::Format_8_8_UNorm:
-                AttributeSegmentSize += 2;
-                break;
-            default:
-                break;
-            }
-
-        BiggestOffsetAttributeNullPtr:
-
-            //Aligning to 4 bytes
-            while (AttributeSegmentSize % 4 != 0)
-            {
-                AttributeSegmentSize++;
-            }
-
+            bool TransformedRoot = false;
             int UVBufferIndex = 0;
             /* Parsing UV Data */
             for (BfresFile::VertexBufferAttribute& Attribute : VertexBufferAttributes)
@@ -730,38 +721,103 @@ BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
                     if (!(this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures.size()-1 >= UVBufferIndex)) continue;
                     this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates.resize(VertexCount * 2);
 
+                    //std::cout << "VERTEX BUFFER UV " << Attribute.BufferIndex << ": " << VertexBuffers[Attribute.BufferIndex].Stride << std::endl;
+                    //std::cout << "SegSize: " << AttributeSegmentSize << std::endl;
+
                     for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
                     {
                         switch (Attribute.Format)
                         {
                         case (uint16_t)VertexBufferFormat::Format_16_16_Single:
-                            this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->ShortToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 1]);
-                            this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->ShortToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 3]);                            
+                            this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->ShortToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1]);
+                            this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->ShortToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]);                            
                             break;
                         case (uint16_t)VertexBufferFormat::Format_16_16_UNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 1]) / 65536.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 3]) / 65536.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1]) / 65536.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]) / 65536.0f;
                             break;
                         case (uint16_t)VertexBufferFormat::Format_16_16_SNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 1]) / 32768.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 3]) / 32768.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1]) / 32768.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]) / 32768.0f;
                             break;
                         case (uint16_t)VertexBufferFormat::Format_8_8_UNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset] / 256.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 1] / 256.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset] / 256.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1] / 256.0f;
                             break;
                         case (uint16_t)VertexBufferFormat::Format_8_8_SNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset] / 128.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 1] / 128.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset] / 128.0f;
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1] / 128.0f;
                             break;
                         case (uint16_t)VertexBufferFormat::Format_32_32_Single:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->UInt32ToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 1], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 3]);
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->UInt32ToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 4], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 5], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 6], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * AttributeSegmentSize + Attribute.Offset + 7]);
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->UInt32ToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]);
+                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->UInt32ToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 4], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 5], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 6], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 7]);
                             break;
                         }
                     }
 
                     UVBufferIndex++;
+                }
+
+                if (Attribute.Name[0] == '_' && Attribute.Name[1] == 'i' && !this->m_Rigids.empty() && VertexSkinCount == 1) //UV Buffer Attribute
+                {
+                    for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+                    {
+                        BfresFile::SkeletonBone RootBone = this->m_SkeletonBones[this->m_Rigids[VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset]]];
+                        //Vector3F Translation(RootBone.Position[0], RootBone.Position[1], RootBone.Position[2]);
+
+                        auto ApplyTransformOfParent = [&RootBone](int32_t ParentIndex, std::vector<BfresFile::SkeletonBone>& Bones, float& X, float& Y, float& Z)
+                            {
+                                if (ParentIndex == -1) return false;
+
+                                X += Bones[ParentIndex].Position[0];
+                                Y += Bones[ParentIndex].Position[1];
+                                Z += Bones[ParentIndex].Position[2];
+
+                                Vector3F Rotation(Bones[ParentIndex].Rotation[0], Bones[ParentIndex].Rotation[1], Bones[ParentIndex].Rotation[2]);
+
+                                float NewX = Bones[ParentIndex].Position[0] + ((X - Bones[ParentIndex].Position[0]) * (std::cosf(Rotation.GetZ()) * std::cosf(Rotation.GetY()))) +
+                                    ((Y - Bones[ParentIndex].Position[1]) * (std::cosf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::sinf(Rotation.GetX()) - std::sinf(Rotation.GetZ()) * std::cosf(Rotation.GetX()))) +
+                                    ((Z - Bones[ParentIndex].Position[2]) * (std::cosf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::cosf(Rotation.GetX()) + std::sinf(Rotation.GetZ()) * std::sinf(Rotation.GetX())));
+
+                                float NewY = Bones[ParentIndex].Position[1] + ((X - Bones[ParentIndex].Position[0]) * (std::sinf(Rotation.GetZ()) * std::cosf(Rotation.GetY()))) +
+                                    ((Y - Bones[ParentIndex].Position[1]) * (std::sinf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::sinf(Rotation.GetX()) + std::cosf(Rotation.GetZ()) * std::cosf(Rotation.GetX()))) +
+                                    ((Z - Bones[ParentIndex].Position[2]) * (std::sinf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::cosf(Rotation.GetX()) - std::cosf(Rotation.GetZ()) * std::sinf(Rotation.GetX())));
+
+                                float NewZ = Bones[ParentIndex].Position[2] + ((X - Bones[ParentIndex].Position[0]) * (-std::sinf(Rotation.GetY()))) +
+                                    ((Y - Bones[ParentIndex].Position[1]) * (std::cosf(Rotation.GetY()) * std::sinf(Rotation.GetX()))) +
+                                    ((Z - Bones[ParentIndex].Position[2]) * (std::cosf(Rotation.GetY()) * std::cosf(Rotation.GetX())));
+
+                                X = NewX;
+                                Y = NewY;
+                                Z = NewZ;
+
+                                RootBone = Bones[ParentIndex];
+
+                                return true;
+                            };
+
+                        if (ApplyTransformOfParent(RootBone.Index, m_SkeletonBones, this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2]))
+                        {
+                            while (true)
+                            {
+                                if (!ApplyTransformOfParent(RootBone.ParentIndex, m_SkeletonBones, this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2]))
+                                    break;
+                            }
+                        }
+
+                        TransformedRoot = true;
+                        //std::cout << "_i Buffer Element: " << (int)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset] << std::endl;
+                    }
+                }
+            }
+
+            if (!TransformedRoot)
+            {
+                for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+                {
+                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3] += this->m_SkeletonBones[0].Position[0];
+                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1] += this->m_SkeletonBones[0].Position[1];
+                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2] += this->m_SkeletonBones[0].Position[2];
                 }
             }
 

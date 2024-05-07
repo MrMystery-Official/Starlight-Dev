@@ -1,5 +1,8 @@
 #include "Vector3F.h"
 
+#include <math.h>
+#include <cmath>
+
 Vector3F::Vector3F(float x, float y, float z)
 {
 	this->m_Data[0] = x;
@@ -40,4 +43,38 @@ float Vector3F::GetZ()
 float* Vector3F::GetRawData()
 {
 	return this->m_Data;
+}
+
+float Vector3F::GetDotProduct()
+{
+	return this->GetX() + this->GetY() + this->GetZ();
+}
+
+float Vector3F::GetDistance()
+{
+	return std::sqrtf( std::powf(this->GetX(), 2) + std::powf(this->GetY(), 2) + std::powf(this->GetZ(), 2) );
+}
+
+bool Vector3F::operator==(Vector3F V) {
+	return this->GetRawData()[0] == V.m_Data[0] && this->GetRawData()[1] == V.m_Data[1] && this->GetRawData()[2] == V.m_Data[2];
+}
+
+Vector3F Vector3F::operator-(Vector3F V)
+{
+	return Vector3F(this->GetX() - V.GetX(), this->GetY() - V.GetY(), this->GetZ() - V.GetZ());
+}
+
+Vector3F Vector3F::operator+(Vector3F V)
+{
+	return Vector3F(this->GetX() + V.GetX(), this->GetY() + V.GetY(), this->GetZ() + V.GetZ());
+}
+
+Vector3F Vector3F::operator*(Vector3F V)
+{
+	return Vector3F(this->GetX() * V.GetX(), this->GetY() * V.GetY(), this->GetZ() * V.GetZ());
+}
+
+Vector3F Vector3F::operator*(float Multiplier)
+{
+	return Vector3F(this->GetX() * Multiplier, this->GetY() * Multiplier, this->GetZ() * Multiplier);
 }

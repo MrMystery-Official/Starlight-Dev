@@ -24,4 +24,7 @@ namespace Editor
 	std::string GetWorkingDirFile(std::string File);
 	std::string GetBfresFile(std::string Name);
 	std::string GetInternalGameVersion();
+
+	//If any paths are updated or the program starts, call this function to initialize ZStd, ActorTool, ...
+	void InitializeWithEdtc();
 }

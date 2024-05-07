@@ -44,7 +44,7 @@ void AINBNodeDefMgr::Initialize()
 		uint8_t Version = Reader.ReadUInt8();
 		if (Version != 0x03)
 		{
-			Logger::Error("AINBNodeDefMgr", "AINB node definition file has wrong version, expected 0x03");
+			Logger::Error("AINBNodeDefMgr", "AINB node definition file has wrong version, expected 0x03. Did you update the WorkingDir/Definitions.eainbdef file?");
 			return;
 		}
 
@@ -195,6 +195,7 @@ void AINBNodeDefMgr::DecodeAINB(std::vector<unsigned char> Bytes, std::string Fi
 			{
 				NodeFound = true;
 				if (Definition.FileNames.size() < 10) Definition.FileNames.push_back(FileName);
+				//Definition.FileNames.push_back(FileName);
 				if (std::find(Definition.AllowedAINBCategories.begin(), Definition.AllowedAINBCategories.end(), FileCategory) == Definition.AllowedAINBCategories.end()) Definition.AllowedAINBCategories.push_back(FileCategory);
 				for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 				{
@@ -322,6 +323,7 @@ void AINBNodeDefMgr::DecodeAINB(std::vector<unsigned char> Bytes, std::string Fi
 		Def.Name = Node.Name;
 		Def.DisplayName = Node.GetName();
 		if (Def.FileNames.size() < 10) Def.FileNames.push_back(FileName);
+		//Def.FileNames.push_back(FileName);
 		Def.NameHash = Node.NameHash;
 		Def.Type = Node.Type;
 		Def.OutputParameters.resize(6);

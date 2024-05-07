@@ -26,7 +26,7 @@ public:
 };
 */
 
-BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes)
+BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes, std::string Name)
 {
 	BinaryVectorReader Reader(Bytes);
 
@@ -48,7 +48,6 @@ BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes)
 		BiggestTile = std::fmax(BiggestTile, this->Tiles[i]);
 	}
 	
-	/*
 	std::vector<uint8_t> PixelData(this->Tiles.size() * 4);
 
 	for (int i = 0; i < this->Tiles.size(); i++)
@@ -62,12 +61,13 @@ BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes)
 	int Length = 0;
 	unsigned char* PNG = stbi_write_png_to_mem_forward(PixelData.data(), Width * 4, Width, Height, 4, &Length);
 
-	std::ofstream OutputFile(Editor::GetWorkingDirFile("Test.png"), std::ios::binary);
+	std::ofstream OutputFile("MapEditorV4/TerrainExport/" + Name + ".png", std::ios::binary);
 	OutputFile.write((char*)PNG, Length);
 	OutputFile.close();
 
 	free(PNG);
-	*/
+
+    /*
 
     BfresModel.IsDefaultModel() = true;
 
@@ -159,6 +159,7 @@ BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes)
     Actor& TerrainActor = ActorMgr::AddActor("MapEditor_Terrain", true, false);
     TerrainActor.Model = &BfresLibrary::Models["MapEditor_Terrain"];
     ActorMgr::UpdateModelOrder();
+    */
 }
 
 BHTMPFile::BHTMPFile(std::string Path)
@@ -175,7 +176,7 @@ BHTMPFile::BHTMPFile(std::string Path)
 		File.seekg(0, std::ios_base::beg);
 		File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
 
-		this->BHTMPFile::BHTMPFile(Bytes);
+		this->BHTMPFile::BHTMPFile(Bytes, "");
 
 		File.close();
 	}

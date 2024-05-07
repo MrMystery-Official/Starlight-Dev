@@ -1,8 +1,9 @@
 #include "BinaryVectorReader.h"
 
 #include <cstring>
+#include <intrin.h>
 
-BinaryVectorReader::BinaryVectorReader(std::vector<unsigned char>& Bytes) : m_Bytes(Bytes) {}
+BinaryVectorReader::BinaryVectorReader(std::vector<unsigned char>& Bytes, bool BigEndian) : m_Bytes(Bytes) {}
 
 void BinaryVectorReader::Seek(int Offset, BinaryVectorReader::Position Position)
 {
@@ -69,22 +70,28 @@ uint32_t BinaryVectorReader::ReadUInt24() {
 		(static_cast<uint32_t>(this->m_Bytes[this->m_Offset]) << 16);
 }
 
-uint32_t BinaryVectorReader::ReadUInt32()
+uint32_t BinaryVectorReader::ReadUInt32(bool BigEndian)
 {
 	this->m_Offset += 4;
-	return (static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 3])) |
+	return !BigEndian ? (static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 3])) |
 		(static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 2]) << 8) |
 		(static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 1]) << 16) |
-		static_cast<uint32_t>(this->m_Bytes[this->m_Offset] << 24);
+		static_cast<uint32_t>(this->m_Bytes[this->m_Offset] << 24) : _byteswap_ulong(static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 3]) |
+			(static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 2]) << 8) |
+			(static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 1]) << 16) |
+			static_cast<uint32_t>(this->m_Bytes[this->m_Offset] << 24));
 }
 
-int32_t BinaryVectorReader::ReadInt32()
+int32_t BinaryVectorReader::ReadInt32(bool BigEndian)
 {
 	this->m_Offset += 4;
-	return (static_cast<int32_t>(this->m_Bytes[this->m_Offset - 3])) |
+	return !BigEndian ? (static_cast<int32_t>(this->m_Bytes[this->m_Offset - 3])) |
 		(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 2]) << 8) |
 		(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 1]) << 16) |
-		static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24);
+		static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24) : _byteswap_ulong(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 3])) |
+			(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 2]) << 8) |
+			(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 1]) << 16) |
+			static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24);
 }
 
 uint64_t BinaryVectorReader::ReadUInt64()

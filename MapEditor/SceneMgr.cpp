@@ -65,6 +65,7 @@ void SceneMgr::LoadScene(SceneMgr::Type Type, std::string Identifier)
 
 	auto DecodeByml = [](BymlFile& File, Actor::Type Type)
 		{
+			if (!File.HasChild("Actors")) return;
 			for (BymlFile::Node& ActorNode : File.GetNode("Actors")->GetChildren())
 			{
 				Actor* NewActor = ActorMgr::AddActorFromByml(ActorNode);
@@ -83,4 +84,39 @@ void SceneMgr::LoadScene(SceneMgr::Type Type, std::string Identifier)
 	UIMapView::CameraView.Position.x = ActorMgr::GetActors()[0].Translate.GetX();
 	UIMapView::CameraView.Position.y = ActorMgr::GetActors()[0].Translate.GetY();
 	UIMapView::CameraView.Position.z = ActorMgr::GetActors()[0].Translate.GetZ();
+}
+
+void SceneMgr::Reload()
+{
+	Logger::Info("SceneMgr", "Reloading map " + Editor::Identifier);
+
+	BymlFile DynamicActorsByml(ZStdFile::Decompress(Editor::GetRomFSFile(Editor::BancPrefix + Editor::Identifier + "_Dynamic.bcett.byml.zs"), ZStdFile::Dictionary::BcettByaml).Data);
+	BymlFile StaticActorsByml(ZStdFile::Decompress(Editor::GetRomFSFile(Editor::BancPrefix + Editor::Identifier + "_Static.bcett.byml.zs"), ZStdFile::Dictionary::BcettByaml).Data);
+
+	ActorMgr::GetActors().clear();
+	ActorMgr::OpaqueActors.clear();
+	ActorMgr::TransparentActors.clear();
+	UIOutliner::SelectedActor = nullptr;
+
+	Editor::DynamicActorsByml = DynamicActorsByml;
+	Editor::StaticActorsByml = StaticActorsByml;
+
+	auto DecodeByml = [](BymlFile& File, Actor::Type Type)
+		{
+			if (!File.HasChild("Actors")) return;
+			for (BymlFile::Node& ActorNode : File.GetNode("Actors")->GetChildren())
+			{
+				Actor* NewActor = ActorMgr::AddActorFromByml(ActorNode);
+				if (NewActor == nullptr) return;
+
+				NewActor->ActorType = Type;
+			}
+		};
+
+	DecodeByml(DynamicActorsByml, Actor::Type::Dynamic);
+	DecodeByml(StaticActorsByml, Actor::Type::Static);
+
+	ActorMgr::UpdateModelOrder();
+	HashMgr::Initialize();
+	Logger::Info("SceneMgr", "Scene reload completed");
 }

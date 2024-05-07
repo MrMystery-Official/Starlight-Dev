@@ -14,6 +14,7 @@
 #include "tinyfiledialogs.h"
 #include "PopupAINBElementSelector.h"
 #include <filesystem>
+#include <iostream>
 
 #define MinImmTextboxWidth 150
 
@@ -71,10 +72,54 @@ void UIAINBEditor::UpdateNodeShapes()
 
 		for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 		{
+			std::string TypeName = "";
+			switch (i)
+			{
+			case (int)AINBFile::ValueType::Int:
+			{
+				TypeName = "Int";
+				break;
+			}
+			case (int)AINBFile::ValueType::Float:
+			{
+				TypeName = "Float";
+				break;
+			}
+			case (int)AINBFile::ValueType::Bool:
+				TypeName = "Bool";
+				break;
+			case (int)AINBFile::ValueType::String:
+			{
+				TypeName = "String";
+				break;
+			}
+			case (int)AINBFile::ValueType::Vec3f:
+			{
+				TypeName = "Vec3f";
+				break;
+			}
+			case (int)AINBFile::ValueType::UserDefined: //Don't know what the fuck this is
+			{
+				TypeName = "UserDefined";
+				break;
+			}
+			default:
+			{
+				Logger::Warning("AINBEditor", "Unknown value type " + std::to_string(i) + " (that shouldn't be possible)");
+				break;
+			}
+			}
+
 			for (AINBFile::InputEntry& Param : Node.InputParameters[i])
 			{
 				int Size = 8 * 2; // Frame Padding
-				Size += ImGui::CalcTextSize(Param.Name.c_str()).x;
+
+				if (i == (int)AINBFile::ValueType::UserDefined)
+				{
+					TypeName = Param.Class;
+				}
+
+				Size += ImGui::CalcTextSize((Param.Name + " (" + TypeName + ")").c_str()).x;
 				Size += ItemSpacingX + 10;
 				switch (Param.ValueType) {
 				case (int)AINBFile::ValueType::Int:
@@ -96,8 +141,12 @@ void UIAINBEditor::UpdateNodeShapes()
 			}
 			for (AINBFile::OutputEntry& Param : Node.OutputParameters[i])
 			{
+				if (i == (int)AINBFile::ValueType::UserDefined)
+				{
+					TypeName = Param.Class;
+				}
 				int Size = 8 * 2; // Frame Padding
-				Size += ImGui::CalcTextSize(Param.Name.c_str()).x;
+				Size += ImGui::CalcTextSize((Param.Name + " (" + TypeName + ")").c_str()).x;
 				Size += 2 * ItemSpacingX + 16;
 				FrameWidth = std::fmax(FrameWidth, Size);
 			}
@@ -449,7 +498,46 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 
 			DrawPinIcon(CurrentId++, false);
 			ImGui::SameLine();
-			ImGui::TextUnformatted(Input.Name.c_str());
+
+			std::string TypeName = "";
+			switch (Input.ValueType)
+			{
+			case (int)AINBFile::ValueType::Int:
+			{
+				TypeName = "Int";
+				break;
+			}
+			case (int)AINBFile::ValueType::Float:
+			{
+				TypeName = "Float";
+				break;
+			}
+			case (int)AINBFile::ValueType::Bool:
+				TypeName = "Bool";
+				break;
+			case (int)AINBFile::ValueType::String:
+			{
+				TypeName = "String";
+				break;
+			}
+			case (int)AINBFile::ValueType::Vec3f:
+			{
+				TypeName = "Vec3f";
+				break;
+			}
+			case (int)AINBFile::ValueType::UserDefined: //Don't know what the fuck this is
+			{
+				TypeName = Input.Class;
+				break;
+			}
+			default:
+			{
+				Logger::Warning("AINBEditor", "Input parameter has unknown value type " + std::to_string(Input.ValueType));
+				break;
+			}
+			}
+
+			ImGui::TextUnformatted((Input.Name + " (" + TypeName + ")").c_str());
 
 			InputToId.insert({ &Input, CurrentId - 1 });
 
@@ -487,7 +575,7 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 					ImGui::InputScalarNWidth(("##" + Input.Name + std::to_string(CurrentId)).c_str(), ImGuiDataType_Float, reinterpret_cast<Vector3F*>(&Input.Value)->GetRawData(), 3, MinImmTextboxWidth * 3);
 					break;
 				}
-				case (int)AINBFile::ValueType::UserDefined: //Don't know what the fuck this is
+				case (int)AINBFile::ValueType::UserDefined:
 				{
 					ImGui::NewLine();
 					break;
@@ -538,6 +626,43 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 
 	for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 	{
+		std::string TypeName = "";
+		switch (i)
+		{
+		case (int)AINBFile::ValueType::Int:
+		{
+			TypeName = "Int";
+			break;
+		}
+		case (int)AINBFile::ValueType::Float:
+		{
+			TypeName = "Float";
+			break;
+		}
+		case (int)AINBFile::ValueType::Bool:
+			TypeName = "Bool";
+			break;
+		case (int)AINBFile::ValueType::String:
+		{
+			TypeName = "String";
+			break;
+		}
+		case (int)AINBFile::ValueType::Vec3f:
+		{
+			TypeName = "Vec3f";
+			break;
+		}
+		case (int)AINBFile::ValueType::UserDefined: //Don't know what the fuck this is
+		{
+			TypeName = "UserDefined";
+			break;
+		}
+		default:
+		{
+			Logger::Warning("AINBEditor", "Unknown value type " + std::to_string(i) + " (that shouldn't be possible)");
+			break;
+		}
+		}
 		for (AINBFile::OutputEntry& Output : Node.OutputParameters[i])
 		{
 			if (!AddedHeader)
@@ -546,8 +671,13 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 				AddedHeader = true;
 			}
 
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + NodeShapeInfo[Node.EditorId].FrameWidth - (8 + ImGui::CalcTextSize(Output.Name.c_str()).x + 10 + ImGui::GetStyle().ItemSpacing.x));
-			ImGui::TextUnformatted(Output.Name.c_str());
+			if (i == (int)AINBFile::ValueType::UserDefined)
+			{
+				TypeName = Output.Class;
+			}
+
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + NodeShapeInfo[Node.EditorId].FrameWidth - (8 + ImGui::CalcTextSize((Output.Name + " (" + TypeName + ")").c_str()).x + 10 + ImGui::GetStyle().ItemSpacing.x));
+			ImGui::TextUnformatted((Output.Name + " (" + TypeName + ")").c_str());
 
 			ImGui::SameLine();
 
@@ -814,61 +944,16 @@ void UIAINBEditor::DrawLinks(AINBFile::Node& Node, int& CurrentId)
 		{
 			if (Input.NodeIndex >= 0)
 			{
-				AINBFile::OutputEntry* Output = nullptr;
-
-				for (int j = 0; j < AINBFile::ValueTypeCount; j++)
-				{
-					for (int k = 0; k < AINB.Nodes[Input.NodeIndex].OutputParameters[j].size(); k++)
-					{
-						if (k == Input.ParameterIndex)
-						{
-							Output = &AINB.Nodes[Input.NodeIndex].OutputParameters[j][k];
-							goto LoopBreak0;
-						}
-					}
-				}
-				
-			LoopBreak0:
-				if (Output == nullptr)
-				{
-					Logger::Warning("AINBEditor", "Link had a nullptr as output");
-					Input.NodeIndex = -1;
-					Input.ParameterIndex = -1;
-					return;
-				}
-
-				ed::Link(CurrentId++, OutputToId[Output], InputToId[&Input], ImColor(140, 140, 40));
+				ed::Link(CurrentId++, OutputToId[&AINB.Nodes[Input.NodeIndex].OutputParameters[i][Input.ParameterIndex]], InputToId[&Input], ImColor(140, 140, 40));
 				LinkToInput.insert({ CurrentId - 1, LinkInfo{false, &Input, -1} });
 			}
 			if (!Input.Sources.empty())
 			{
 				for (int MultiIndex = 0; MultiIndex < Input.Sources.size(); MultiIndex++)
 				{
-					AINBFile::OutputEntry* Output = nullptr;
 					AINBFile::MultiEntry& Entry = Input.Sources[MultiIndex];
 
-					for (int j = 0; j < AINBFile::ValueTypeCount; j++)
-					{
-						for (int k = 0; k < AINB.Nodes[Entry.NodeIndex].OutputParameters[j].size(); k++)
-						{
-							if (k == Entry.ParameterIndex)
-							{
-								Output = &AINB.Nodes[Entry.NodeIndex].OutputParameters[j][k];
-								goto LoopBreak2;
-							}
-						}
-					}
-
-				LoopBreak2:
-					if (Output == nullptr)
-					{
-						Logger::Warning("AINBEditor", "Multi Link had a nullptr as output");
-						Entry.NodeIndex = -1;
-						Entry.ParameterIndex = -1;
-						return;
-					}
-
-					ed::Link(CurrentId++, OutputToId[Output], InputToId[&Input], ImColor(140, 140, 40));
+					ed::Link(CurrentId++, OutputToId[&AINB.Nodes[Entry.NodeIndex].OutputParameters[i][Entry.ParameterIndex]], InputToId[&Input], ImColor(140, 140, 40));
 					LinkToInput.insert({ CurrentId - 1, LinkInfo{false, &Input, MultiIndex} });
 				}
 			}
@@ -939,6 +1024,7 @@ void UIAINBEditor::ManageLinkCreationDeletion()
 			{
 				int16_t NodeIndex = -1;
 				int16_t ParameterIndex = 0;
+				int16_t OutputType = -1;
 
 				bool FlowLink = false;
 
@@ -974,12 +1060,14 @@ void UIAINBEditor::ManageLinkCreationDeletion()
 					{
 						for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 						{
+							ParameterIndex = 0;
 							for (AINBFile::OutputEntry& OutputEntry : AINB.Nodes[NodeIndex].OutputParameters[i])
 							{
 								if (OutputToId.count(&OutputEntry))
 								{
 									if (OutputToId[&OutputEntry] == InputPinId.Get())
 									{
+										OutputType = i;
 										goto LoopBreak1;
 									}
 								}
@@ -987,10 +1075,14 @@ void UIAINBEditor::ManageLinkCreationDeletion()
 							}
 						}
 					LoopBreak1:
+
 						for (auto& [Input, Id] : InputToId)
 						{
 							if (Id == OutputPinId.Get())
 							{
+								if (OutputType != Input->ValueType)
+									break;
+
 								if (Input->NodeIndex < 0)
 								{
 									if (Input->Sources.empty())

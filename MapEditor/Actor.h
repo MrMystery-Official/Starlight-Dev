@@ -3,6 +3,7 @@
 #include "Vector3F.h"
 #include "Bfres.h"
 #include "Byml.h"
+#include "UMii.h"
 
 struct Actor
 {
@@ -107,7 +108,7 @@ struct Actor
 		std::map<std::string, Vector3F> DynamicVector;
 	};
 
-	Actor::Type ActorType = Actor::Type::Static;
+	Actor::Type ActorType = Actor::Type::Dynamic;
 
 	std::string Gyml = "";
 	uint64_t Hash = 0;
@@ -140,4 +141,10 @@ struct Actor
 	std::vector<Actor> MergedActorContent;
 	BymlFile MergedActorByml;
 	Actor* MergedActorParent = nullptr;
+
+	/* UMii */
+	bool IsUMii = false;
+	UMii UMiiData;
+
+	bool operator==(Actor AnotherActor);
 };

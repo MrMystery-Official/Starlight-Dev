@@ -18,7 +18,7 @@ void HashMgr::Initialize()
 
 HashMgr::Hash HashMgr::GetHash(bool Physics)
 {
-	if (Physics) Logger::Warning("HashMgr", "A physics hash was requested, altough this is not implemented yet. Returning non-physics hash");
+	if (Physics) Logger::Warning("HashMgr", "A physics hash was requested, although this is not implemented yet. Returning non-physics hash");
 
 	BiggestHash++;
 	BiggestSRTHash++;

@@ -16,6 +16,9 @@ TextureMgr::Texture* TextureMgr::GetTexture(std::string Name)
     if (image_data == NULL)
         return nullptr;
 
+    TextureMgr::Texture Tex;
+    Tex.Pixels = std::vector<unsigned char>(image_data, image_data + image_width * image_height);
+
     GLuint image_texture;
     glGenTextures(1, &image_texture);
     glBindTexture(GL_TEXTURE_2D, image_texture);
@@ -30,7 +33,11 @@ TextureMgr::Texture* TextureMgr::GetTexture(std::string Name)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
     stbi_image_free(image_data);
 
-    Textures.insert({ Name, TextureMgr::Texture{ image_texture, (uint32_t)image_width, (uint32_t)image_height } });
+    Tex.Width = image_width;
+    Tex.Height = image_height;
+    Tex.ID = image_texture;
+
+    Textures.insert({ Name, Tex });
 
     Logger::Info("TextureMgr", "Loaded texture " + Name);
 

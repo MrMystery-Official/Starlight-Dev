@@ -161,6 +161,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Actor.cpp" />
     <ClCompile Include="ActorMgr.cpp" />
     <ClCompile Include="AINB.cpp" />
     <ClCompile Include="AINBNodeDefMgr.cpp" />
@@ -204,6 +205,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="MSBT.cpp" />
+    <ClCompile Include="PhiveShape.cpp" />
     <ClCompile Include="PopupAddActor.cpp" />
     <ClCompile Include="PopupAddAINBNode.cpp" />
     <ClCompile Include="PopupAINBElementSelector.cpp" />
@@ -216,11 +218,14 @@
     <ClCompile Include="PopupAddRail.cpp" />
     <ClCompile Include="PopupGeneralInputString.cpp" />
     <ClCompile Include="PopupLoadScene.cpp" />
+    <ClCompile Include="PopupSettings.cpp" />
+    <ClCompile Include="PreferencesConfig.cpp" />
     <ClCompile Include="RESTBL.cpp" />
     <ClCompile Include="SARC.cpp" />
     <ClCompile Include="SceneMgr.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderMgr.cpp" />
+    <ClCompile Include="StarImGui.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="TegraSwizzle.cpp" />
     <ClCompile Include="Texture.cpp" />
@@ -237,6 +242,7 @@
     <ClCompile Include="UIOutliner.cpp" />
     <ClCompile Include="UIProperties.cpp" />
     <ClCompile Include="UITools.cpp" />
+    <ClCompile Include="UMii.cpp" />
     <ClCompile Include="Util.cpp" />
     <ClCompile Include="VAO.cpp" />
     <ClCompile Include="VBO.cpp" />
@@ -291,6 +297,7 @@
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="MSBT.h" />
+    <ClInclude Include="PhiveShape.h" />
     <ClInclude Include="PopupAddActor.h" />
     <ClInclude Include="PopupAddAINBNode.h" />
     <ClInclude Include="PopupAINBElementSelector.h" />
@@ -303,11 +310,14 @@
     <ClInclude Include="PopupAddRail.h" />
     <ClInclude Include="PopupGeneralInputString.h" />
     <ClInclude Include="PopupLoadScene.h" />
+    <ClInclude Include="PopupSettings.h" />
+    <ClInclude Include="PreferencesConfig.h" />
     <ClInclude Include="RESTBL.h" />
     <ClInclude Include="SARC.h" />
     <ClInclude Include="SceneMgr.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="ShaderMgr.h" />
+    <ClInclude Include="StarImGui.h" />
     <ClInclude Include="TegraSwizzle.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="TextureFormatDecoder.h" />
@@ -323,6 +333,7 @@
     <ClInclude Include="UIOutliner.h" />
     <ClInclude Include="UIProperties.h" />
     <ClInclude Include="UITools.h" />
+    <ClInclude Include="UMii.h" />
     <ClInclude Include="Util.h" />
     <ClInclude Include="VAO.h" />
     <ClInclude Include="VBO.h" />

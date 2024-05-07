@@ -125,7 +125,6 @@ void Exporter::CreateRSTBL(std::string Path)
 		if (!ModActors.empty())
 		{
 			BymlFile ActorInfo(ZStdFile::Decompress(Editor::GetRomFSFile("RSDB/ActorInfo.Product." + Editor::GetInternalGameVersion() + ".rstbl.byml.zs"), ZStdFile::Dictionary::Base).Data);
-			ActorInfo.NodeCaching = true; //TODO: Make this fucking piece of shit faster, it takes a fucking minute to write
 			std::vector<std::string> UnknownActors;
 
 			for (std::string Name : ModActors)
@@ -148,7 +147,7 @@ void Exporter::CreateRSTBL(std::string Path)
 					UnknownActors.push_back(Name);
 			}
 
-			Logger::Info("Exporter", "Recreating ActorInfo, takes ~20 seconds");
+			if(!UnknownActors.empty()) Logger::Info("Exporter", "Recreating ActorInfo, takes ~20 seconds");
 
 			for (std::string Name : UnknownActors)
 			{
@@ -278,6 +277,24 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 				}
 				for (Actor MergedActor : ExportedActor.MergedActorContent)
 				{
+					Vector3F RadianRotate(Util::DegreesToRadians(-ExportedActor.Rotate.GetX()), Util::DegreesToRadians(-ExportedActor.Rotate.GetY()), Util::DegreesToRadians(-ExportedActor.Rotate.GetZ()));
+
+					float NewX = ExportedActor.Translate.GetX() + ((MergedActor.Translate.GetX() - ExportedActor.Translate.GetX()) * (std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+						((MergedActor.Translate.GetY() - ExportedActor.Translate.GetY()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) - std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+						((MergedActor.Translate.GetZ() - ExportedActor.Translate.GetZ()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) + std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+					float NewY = ExportedActor.Translate.GetY() + ((MergedActor.Translate.GetX() - ExportedActor.Translate.GetX()) * (std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+						((MergedActor.Translate.GetY() - ExportedActor.Translate.GetY()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) + std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+						((MergedActor.Translate.GetZ() - ExportedActor.Translate.GetZ()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) - std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+					float NewZ = ExportedActor.Translate.GetZ() + ((MergedActor.Translate.GetX() - ExportedActor.Translate.GetX()) * (-std::sinf(RadianRotate.GetY()))) +
+						((MergedActor.Translate.GetY() - ExportedActor.Translate.GetY()) * (std::cosf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()))) +
+						((MergedActor.Translate.GetZ() - ExportedActor.Translate.GetZ()) * (std::cosf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX())));
+
+					MergedActor.Translate.SetX(NewX);
+					MergedActor.Translate.SetY(NewY);
+					MergedActor.Translate.SetZ(NewZ);
+
 					MergedActor.Translate.SetX(MergedActor.Translate.GetX() - ExportedActor.Translate.GetX());
 					MergedActor.Translate.SetY(MergedActor.Translate.GetY() - ExportedActor.Translate.GetY());
 					MergedActor.Translate.SetZ(MergedActor.Translate.GetZ() - ExportedActor.Translate.GetZ());
@@ -286,12 +303,40 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 					MergedActor.Scale.SetY(MergedActor.Scale.GetY() / ExportedActor.Scale.GetY());
 					MergedActor.Scale.SetZ(MergedActor.Scale.GetZ() / ExportedActor.Scale.GetZ());
 
+					MergedActor.Rotate.SetX(MergedActor.Rotate.GetX() + ExportedActor.Rotate.GetX());
+					MergedActor.Rotate.SetY(MergedActor.Rotate.GetY() + ExportedActor.Rotate.GetY());
+					MergedActor.Rotate.SetZ(MergedActor.Rotate.GetZ() + ExportedActor.Rotate.GetZ());
+
+					/*
+								MergedActor.Rotate.SetX(MergedActor.Rotate.GetX() - BymlActor.Rotate.GetX());
+			MergedActor.Rotate.SetY(MergedActor.Rotate.GetY() - BymlActor.Rotate.GetY());
+			MergedActor.Rotate.SetZ(MergedActor.Rotate.GetZ() - BymlActor.Rotate.GetZ());
+
+			Vector3F RadianRotate(Util::DegreesToRadians(BymlActor.Rotate.GetX()), Util::DegreesToRadians(BymlActor.Rotate.GetY()), Util::DegreesToRadians(BymlActor.Rotate.GetZ()));
+
+			float NewX = BymlActor.Translate.GetX() + ((MergedActor.Translate.GetX() - BymlActor.Translate.GetX()) * (std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+				((MergedActor.Translate.GetY() - BymlActor.Translate.GetY()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) - std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+				((MergedActor.Translate.GetZ() - BymlActor.Translate.GetZ()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) + std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+			float NewY = BymlActor.Translate.GetY() + ((MergedActor.Translate.GetX() - BymlActor.Translate.GetX()) * (std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+				((MergedActor.Translate.GetY() - BymlActor.Translate.GetY()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) + std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+				((MergedActor.Translate.GetZ() - BymlActor.Translate.GetZ()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) - std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+			float NewZ = BymlActor.Translate.GetZ() + ((MergedActor.Translate.GetX() - BymlActor.Translate.GetX()) * (-std::sinf(RadianRotate.GetY()))) +
+				((MergedActor.Translate.GetY() - BymlActor.Translate.GetY()) * (std::cosf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()))) +
+				((MergedActor.Translate.GetZ() - BymlActor.Translate.GetZ()) * (std::cosf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX())));
+
+			MergedActor.Translate.SetX(NewX);
+			MergedActor.Translate.SetY(NewY);
+			MergedActor.Translate.SetZ(NewZ);
+					*/
+
 					ExportedActor.MergedActorByml.GetNode("Actors")->AddChild(ActorMgr::ActorToByml(MergedActor));
 				}
 				size_t Found = ExportedActor.Dynamic.DynamicString["BancPath"].find_last_of("/\\");
 				Util::CreateDir(Path + "/" + ExportedActor.Dynamic.DynamicString["BancPath"].substr(0, Found));
 				ZStdFile::Compress(ExportedActor.MergedActorByml.ToBinary(BymlFile::TableGeneration::Auto), ZStdFile::Dictionary::BcettByaml).WriteToFile(Path + "/" + ExportedActor.Dynamic.DynamicString["BancPath"] + ".zs");
-				ExportedActor.Scale = Vector3F(1, 1, 1);
+				//ExportedActor.Scale = Vector3F(1, 1, 1);
 			}
 
 			if (ExportedActor.ActorType == Actor::Type::Static)
@@ -317,4 +362,6 @@ Copy:
 
 		Util::CopyDirectoryRecursively(Editor::GetWorkingDirFile("Save"), OldPath);
 	}
+
+	UIActorTool::UpdateActorList();
 }

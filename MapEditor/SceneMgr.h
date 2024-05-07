@@ -19,4 +19,5 @@ namespace SceneMgr
 	extern SceneMgr::Type SceneType;
 
 	void LoadScene(SceneMgr::Type Type, std::string Identifier);
+	void Reload();
 };

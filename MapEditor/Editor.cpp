@@ -2,6 +2,10 @@
 
 #include <filesystem>
 #include "Util.h"
+#include "EditorConfig.h"
+#include "ZStdFile.h"
+#include "UIActorTool.h"
+#include "Logger.h"
 
 std::string Editor::WorkingDir = std::filesystem::current_path().string() + "/WorkingDir";
 std::string Editor::RomFSDir = "";
@@ -66,4 +70,20 @@ std::string Editor::GetBfresFile(std::string Name)
 std::string Editor::GetInternalGameVersion()
 {
 	return Editor::InternalGameVersion;
+}
+
+void Editor::InitializeWithEdtc()
+{
+	EditorConfig::Load();
+
+	if (Editor::RomFSDir.empty())
+	{
+		Logger::Error("Editor", "RomFS path invalud");
+		return;
+	}
+
+	Editor::DetectInternalGameVersion();
+	ZStdFile::Initialize(Editor::GetRomFSFile("Pack/ZsDic.pack.zs"));
+	UIActorTool::UpdateActorList();
+	Logger::Info("Editor", "Initialized");
 }

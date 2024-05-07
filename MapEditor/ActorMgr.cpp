@@ -8,21 +8,18 @@
 #include "Logger.h"
 #include "Util.h"
 #include "HashMgr.h"
+#include "UMii.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-struct ActorInformation
-{
-	BfresFile* Model;
-};
-
 std::vector<Actor> ActorMgr::Actors;
 std::unordered_map<BfresFile*, std::vector<Actor*>> ActorMgr::OpaqueActors;
 std::unordered_map<BfresFile*, std::vector<Actor*>> ActorMgr::TransparentActors;
-std::unordered_map<std::string, ActorInformation> ActorInfo; //Gyml -> ActorInfo
+std::unordered_map<std::string, ActorMgr::ActorInformation> ActorMgr::ActorInfo; //Gyml -> ActorInfo
+std::vector<Actor*> ActorMgr::UMiiActors;
 
 Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nullptr is data is corrupted
 {
@@ -330,6 +327,13 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 		}
 
 		Logger::Info("ActorMgr", "Loading merged actor " + BymlActor.Dynamic.DynamicString["BancPath"]);
+
+		if (!Util::FileExists(Editor::GetRomFSFile(BymlActor.Dynamic.DynamicString["BancPath"] + ".zs")))
+		{
+			Logger::Error("ActorMgr", "Could not load " + BymlActor.Dynamic.DynamicString["BancPath"] + ".zs: File not found");
+			goto FinishedMergedActorLoading;
+		}
+
 		BymlFile File(ZStdFile::Decompress(Editor::GetRomFSFile(BymlActor.Dynamic.DynamicString["BancPath"] + ".zs"), ZStdFile::Dictionary::BcettByaml).Data);
 		for (BymlFile::Node& ActorNode : File.GetNode("Actors")->GetChildren())
 		{
@@ -344,6 +348,28 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 			MergedActor.Scale.SetX(MergedActor.Scale.GetX() * BymlActor.Scale.GetX());
 			MergedActor.Scale.SetY(MergedActor.Scale.GetY() * BymlActor.Scale.GetY());
 			MergedActor.Scale.SetZ(MergedActor.Scale.GetZ() * BymlActor.Scale.GetZ());
+
+			MergedActor.Rotate.SetX(MergedActor.Rotate.GetX() - BymlActor.Rotate.GetX());
+			MergedActor.Rotate.SetY(MergedActor.Rotate.GetY() - BymlActor.Rotate.GetY());
+			MergedActor.Rotate.SetZ(MergedActor.Rotate.GetZ() - BymlActor.Rotate.GetZ());
+
+			Vector3F RadianRotate(Util::DegreesToRadians(BymlActor.Rotate.GetX()), Util::DegreesToRadians(BymlActor.Rotate.GetY()), Util::DegreesToRadians(BymlActor.Rotate.GetZ()));
+
+			float NewX = BymlActor.Translate.GetX() + ((MergedActor.Translate.GetX() - BymlActor.Translate.GetX()) * (std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+				((MergedActor.Translate.GetY() - BymlActor.Translate.GetY()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) - std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+				((MergedActor.Translate.GetZ() - BymlActor.Translate.GetZ()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) + std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+			float NewY = BymlActor.Translate.GetY() + ((MergedActor.Translate.GetX() - BymlActor.Translate.GetX()) * (std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+				((MergedActor.Translate.GetY() - BymlActor.Translate.GetY()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) + std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+				((MergedActor.Translate.GetZ() - BymlActor.Translate.GetZ()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) - std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+			float NewZ = BymlActor.Translate.GetZ() + ((MergedActor.Translate.GetX() - BymlActor.Translate.GetX()) * (-std::sinf(RadianRotate.GetY()))) +
+				((MergedActor.Translate.GetY() - BymlActor.Translate.GetY()) * (std::cosf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()))) +
+				((MergedActor.Translate.GetZ() - BymlActor.Translate.GetZ()) * (std::cosf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX())));
+
+			MergedActor.Translate.SetX(NewX);
+			MergedActor.Translate.SetY(NewY);
+			MergedActor.Translate.SetZ(NewZ);
 
 			BymlActor.MergedActorContent.push_back(MergedActor);
 		}
@@ -489,13 +515,6 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 		ActorNode.AddChild(Bakeable);
 	}
 
-	if (ExportedActor.ExtraCreateRadius != 0.0f)
-	{
-		BymlFile::Node ExtraCreateRadius(BymlFile::Type::Float, "ExtraCreateRadius");
-		ExtraCreateRadius.SetValue<float>(ExportedActor.ExtraCreateRadius);
-		ActorNode.AddChild(ExtraCreateRadius);
-	}
-
 	if (!ExportedActor.Dynamic.DynamicString.empty() || !ExportedActor.Dynamic.DynamicVector.empty())
 	{
 		BymlFile::Node Dynamic(BymlFile::Type::Dictionary, "Dynamic");
@@ -535,6 +554,13 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 			WriteBymlVector(&Dynamic, Key, Value, Vector3F(0, 0, 0), true);
 		}
 		ActorNode.AddChild(Dynamic);
+	}
+
+	if (ExportedActor.ExtraCreateRadius != 0.0f)
+	{
+		BymlFile::Node ExtraCreateRadius(BymlFile::Type::Float, "ExtraCreateRadius");
+		ExtraCreateRadius.SetValue<float>(ExportedActor.ExtraCreateRadius);
+		ActorNode.AddChild(ExtraCreateRadius);
 	}
 
 	BymlFile::Node Gyml(BymlFile::Type::StringIndex, "Gyaml");
@@ -1116,17 +1142,16 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 	return ActorNode;
 }
 
-std::string GetDefaultModelKey(Actor& Actor)
+std::string ActorMgr::GetDefaultModelKey(Actor& Actor)
 {
-	if (Actor.Gyml.starts_with("MapEditor_Collision_"))
+	for (auto& [Key, Val] : BfresLibrary::Models)
 	{
-		return "EditorCollision";
+		if (Actor.Gyml.find(Key) != std::string::npos)
+		{
+			return Key;
+		}
 	}
-	if (Actor.Gyml.find("Area") != std::string::npos)
-	{
-		return "Area";
-	}
-	return "None";
+	return "Default";
 }
 
 Actor& ActorMgr::AddActor(Actor Template, bool UpdateOrder)
@@ -1148,7 +1173,7 @@ Actor& ActorMgr::AddActor(std::string Gyml, bool UpdateOrder, bool UseCachedData
 	Actor NewActor;
 	NewActor.Gyml = Gyml;
 
-	HashMgr::Hash Hash = HashMgr::GetHash(false); //TODO: Check if actor needs physics, research in actor pack
+	HashMgr::Hash Hash = HashMgr::GetHash(false); //TODO: Check if actor needs physics, search in actor pack
 	NewActor.Hash = Hash.Hash;
 	NewActor.SRTHash = Hash.SRTHash;
 
@@ -1169,6 +1194,28 @@ Actor& ActorMgr::AddActor(std::string Gyml, bool UpdateOrder, bool UseCachedData
 		}
 
 		SarcFile ActorPack(Result.Data);
+
+		std::string UMiiParamPath = "";
+		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
+		{
+			if (Entry.Name.starts_with("Component/UMiiParam/"))
+			{
+				UMiiParamPath = Entry.Name;
+				break;
+			}
+		}
+
+		bool IsNpc = UMiiParamPath.length() > 0;
+
+		if (IsNpc)
+		{
+			Logger::Info("ActorMgr", "Decoding UMii " + Gyml);
+			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)), true, UMii(ActorPack.GetEntry(UMiiParamPath).Bytes) } });
+			//BfresFile* Model = BfresLibrary::GetModel("UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number + "." + "UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number);
+
+			goto ActorInfoInterpretation;
+		}
+
 		std::string ModelInfoPath = "";
 		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
 		{
@@ -1189,14 +1236,21 @@ Actor& ActorMgr::AddActor(std::string Gyml, bool UpdateOrder, bool UseCachedData
 		if (ModelInfo.GetNodes().size() == 0)
 		{
 			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
+			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (No ModelInfo found)");
 			goto ActorInfoInterpretation;
 		}
 
 		if (!ModelInfo.HasChild("ModelProjectName") || !ModelInfo.HasChild("FmdbName"))
 		{
 			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
+			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (No ModelProjectName or FmdbName found)");
+			goto ActorInfoInterpretation;
+		}
+
+		if (ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>().empty() || ModelInfo.GetNode("FmdbName")->GetValue<std::string>().empty())
+		{
+			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
+			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (ModelProjectName or FmdbName were empty)");
 			goto ActorInfoInterpretation;
 		}
 
@@ -1213,6 +1267,11 @@ Actor& ActorMgr::AddActor(std::string Gyml, bool UpdateOrder, bool UseCachedData
 
 	ActorInfoInterpretation:
 	NewActor.Model = ActorInfo[Gyml].Model;
+	if (ActorInfo[NewActor.Gyml].IsUMii)
+	{
+		NewActor.IsUMii = true;
+		NewActor.UMiiData = ActorInfo[NewActor.Gyml].UMiiData;
+	}
 
 	Actors.push_back(NewActor);
 
@@ -1305,6 +1364,28 @@ void ActorMgr::UpdateModel(Actor* ModelActor)
 		}
 
 		SarcFile ActorPack(Result.Data);
+
+		std::string UMiiParamPath = "";
+		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
+		{
+			if (Entry.Name.starts_with("Component/UMiiParam/"))
+			{
+				UMiiParamPath = Entry.Name;
+				break;
+			}
+		}
+
+		bool IsNpc = UMiiParamPath.length() > 0;
+
+		if (IsNpc)
+		{
+			Logger::Info("ActorMgr", "Decoding UMii " + ModelActor->Gyml);
+			ActorInfo.insert({ ModelActor->Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor)), true, UMii(ActorPack.GetEntry(UMiiParamPath).Bytes) } });
+			//BfresFile* Model = BfresLibrary::GetModel("UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number + "." + "UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number);
+
+			goto ActorInfoInterpretation;
+		}
+
 		std::string ModelInfoPath = "";
 		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
 		{
@@ -1349,72 +1430,22 @@ void ActorMgr::UpdateModel(Actor* ModelActor)
 
 ActorInfoInterpretation:
 	ModelActor->Model = ActorInfo[ModelActor->Gyml].Model;
+	if (ActorInfo[ModelActor->Gyml].IsUMii)
+	{
+		ModelActor->IsUMii = true;
+		ModelActor->UMiiData = ActorInfo[ModelActor->Gyml].UMiiData;
+	}
 }
 
 void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 {
 	float TranslateXDifference = Parent->Translate.GetX() - OldActor.Translate.GetX();
 	float TranslateYDifference = Parent->Translate.GetY() - OldActor.Translate.GetY();
-	float TranslateZDifference = Parent->Translate.GetZ() - OldActor.Translate.GetZ();;
-
-	/*
-	float getAbsoluteYRotation(const glm::vec3& rotation) {
-  // Calculate the yaw (Y rotation) from the rotation vector
-  float yaw = atan2(rotation.z, rotation.x) * 180.0f / M_PI;
-
-  // Handle negative rotations by adding 360 degrees
-  if (yaw < 0.0f) {
-    yaw += 360.0f;
-  }
-
-  return yaw;
-}
-	*/
-	/*
-
-	auto GetAbsoluteYRotation = [](Vector3F rotation) {
-		// Calculate the normalized sum of X and Z rotations
-		float sumXZ = fmodf(rotation.GetX() + rotation.GetZ(), 360.0f);
-		if (sumXZ < 0.0f) {
-			sumXZ += 360.0f;
-		}
-		float normalizedSum = sumXZ / 360.0f;
-
-		// Handle special cases for edge conditions with near-360 rotations
-		if (std::abs(normalizedSum - 1.0f) < std::numeric_limits<float>::epsilon()) {
-			// If X and Z rotations nearly sum to 360, prioritize the sign of X
-			return rotation.GetY() + (rotation.GetX() < 0.0f ? 180.0f : 0.0f);
-		}
-
-		// Adjusted Y rotation based on normalized sum and X sign
-		float adjustedY;
-		if (normalizedSum < 0.5f) {
-			adjustedY = rotation.GetY();
-		}
-		else if (rotation.GetX() < 0.0f) {
-			adjustedY = rotation.GetY() + 360.0f;
-		}
-		else {
-			adjustedY = rotation.GetY() - 360.0f;
-		}
-
-		// Wrap the adjusted Y rotation to the range [0, 360)
-		float absoluteY = fmodf(adjustedY, 360.0f);
-		if (absoluteY < 0.0f) {
-			absoluteY += 360.0f;
-		}
-
-		return absoluteY;
-		};
-		*/
+	float TranslateZDifference = Parent->Translate.GetZ() - OldActor.Translate.GetZ();
 
 	float RotateXDifference = Parent->Rotate.GetX() - OldActor.Rotate.GetX();
 	float RotateYDifference = Parent->Rotate.GetY() - OldActor.Rotate.GetY();
 	float RotateZDifference = Parent->Rotate.GetZ() - OldActor.Rotate.GetZ();
-
-	RotateXDifference = Util::DegreesToRadians(RotateXDifference);
-	RotateYDifference = Util::DegreesToRadians(RotateYDifference);
-	RotateZDifference = Util::DegreesToRadians(RotateZDifference);
 
 	for (Actor& Child : Parent->MergedActorContent)
 	{
@@ -1422,19 +1453,41 @@ void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 		float NewTranslateY = Parent->Translate.GetY() + (Child.Translate.GetY() - Parent->Translate.GetY()) * (Parent->Scale.GetY() / OldActor.Scale.GetY());
 		float NewTranslateZ = Parent->Translate.GetZ() + (Child.Translate.GetZ() - Parent->Translate.GetZ()) * (Parent->Scale.GetZ() / OldActor.Scale.GetZ());
 
-		Child.Translate.SetX(NewTranslateX);
-		Child.Translate.SetY(NewTranslateY);
-		Child.Translate.SetZ(NewTranslateZ);
-		
-		Child.Translate.SetX(Child.Translate.GetX() + TranslateXDifference);
-		Child.Translate.SetY(Child.Translate.GetY() + TranslateYDifference);
-		Child.Translate.SetZ(Child.Translate.GetZ() + TranslateZDifference);
+		Child.Translate.SetX(NewTranslateX + TranslateXDifference);
+		Child.Translate.SetY(NewTranslateY + TranslateYDifference);
+		Child.Translate.SetZ(NewTranslateZ + TranslateZDifference);
 
 		Child.Scale.SetX(Child.Scale.GetX() + (Parent->Scale.GetX() - OldActor.Scale.GetX()));
 		Child.Scale.SetY(Child.Scale.GetY() + (Parent->Scale.GetY() - OldActor.Scale.GetY()));
 		Child.Scale.SetZ(Child.Scale.GetZ() + (Parent->Scale.GetZ() - OldActor.Scale.GetZ()));
 
+		/*
 		//Rotate
+		Child.Rotate.SetX(Child.Rotate.GetX() + RotateXDifference);
+		Child.Rotate.SetY(Child.Rotate.GetY() + RotateYDifference);
+		Child.Rotate.SetZ(Child.Rotate.GetZ() + RotateZDifference);
+
+		
+		Vector3F RadianRotate(Util::DegreesToRadians(RotateXDifference), Util::DegreesToRadians(RotateYDifference), Util::DegreesToRadians(RotateZDifference));
+	
+
+		float NewX = Parent->Translate.GetX() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) - std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) + std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+		float NewY = Parent->Translate.GetY() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) + std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) - std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+		float NewZ = Parent->Translate.GetZ() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (-std::sinf(RadianRotate.GetY()))) +
+			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::cosf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()))) +
+			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::cosf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX())));
+
+		Child.Translate.SetX(NewX);
+		Child.Translate.SetY(NewY);
+		Child.Translate.SetZ(NewZ);
+		*/
+
 		/*
 		float NewX = std::cosf(RotateZDifference) * Child.Translate.GetX() - std::sinf(RotateZDifference) * Child.Translate.GetY();
 		float NewY = std::sinf(RotateZDifference) * Child.Translate.GetX() + std::cosf(RotateZDifference) * Child.Translate.GetY();
@@ -1459,11 +1512,18 @@ void ActorMgr::UpdateModelOrder()
 {
 	OpaqueActors.clear();
 	TransparentActors.clear();
+	UMiiActors.clear();
 
 	std::vector<Actor*> MergedActorContents;
 
 	for (Actor& CurrentActor : Actors)
 	{
+		if (CurrentActor.IsUMii)
+		{
+			UMiiActors.push_back(&CurrentActor);
+			continue;
+		}
+
 		for (Actor& Child : CurrentActor.MergedActorContent)
 		{
 			Child.MergedActorParent = &CurrentActor;
@@ -1496,6 +1556,12 @@ void ActorMgr::UpdateModelOrder()
 
 	for (Actor* CurrentActor : MergedActorContents)
 	{
+		if (CurrentActor->IsUMii)
+		{
+			UMiiActors.push_back(CurrentActor);
+			continue;
+		}
+
 		if (CurrentActor->Model->GetModels()[0].LODs[0].TransparentObjects.empty())
 		{
 			if (OpaqueActors.count(CurrentActor->Model))

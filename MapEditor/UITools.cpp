@@ -49,6 +49,7 @@ void UITools::DrawToolsWindow()
 			if (!UIMapView::RenderSettings.RenderInvisibleActors) ImGui::EndDisabled();
 			ImGui::Unindent();
 			ImGui::Checkbox("Far actors", &UIMapView::RenderSettings.RenderFarActors);
+			ImGui::Checkbox("NPCs", &UIMapView::RenderSettings.RenderNPCs);
 			ImGui::Unindent();
 		}
 		if (SceneMgr::SceneType == SceneMgr::Type::SmallDungeon)

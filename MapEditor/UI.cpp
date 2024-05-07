@@ -28,6 +28,7 @@
 #include "UIAINBEditor.h"
 #include "UIActorTool.h"
 #include "UIMSBTEditor.h"
+#include "PreferencesConfig.h"
 
 #include "PopupAddActor.h"
 #include "PopupGeneralInputPair.h"
@@ -41,6 +42,7 @@
 #include "PopupEditorAINBActorLinks.h"
 #include "PopupAINBElementSelector.h"
 #include "PopupCredits.h"
+#include "PopupSettings.h"
 
 #include "ImGuizmo.h"
 
@@ -60,6 +62,7 @@ void UI::Initialize()
 	Window = glfwCreateWindow(1280, 720, "Starlight - The Legend of Zelda: Tears of the Kingdom", nullptr, nullptr);
 	if (Window == nullptr)
 		return;
+
 	glfwMakeContextCurrent(Window);
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -72,10 +75,12 @@ void UI::Initialize()
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
+	io.IniFilename = nullptr;
+	io.LogFilename = nullptr;
 
 	ImGui::StyleColorsDark();
 
@@ -177,14 +182,30 @@ void UI::Initialize()
 	Style.Colors[ImGuiCol_Button] = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
 	Style.Colors[ImGuiCol_MenuBarBg] = Style.Colors[ImGuiCol_WindowBg];
 
+	glfwSetKeyCallback(Window, UIMapView::GLFWKeyCallback);
+
 	ImGui_ImplGlfw_InitForOpenGL(Window, true);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
 	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 	glEnable(GL_STENCIL_TEST);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	/*
+	GLFWimage Icons[2];
+	TextureMgr::Texture* WindowIcon = TextureMgr::GetTexture("LogoWhiteYellow64x64");
+	TextureMgr::Texture* WindowIconSmall = TextureMgr::GetTexture("LogoWhiteYellow64x64");
+	Icons[0].width = WindowIcon->Width;
+	Icons[0].height = WindowIcon->Height;
+	Icons[0].pixels = WindowIcon->Pixels.data();
+	Icons[1].width = WindowIconSmall->Width;
+	Icons[1].height = WindowIconSmall->Height;
+	Icons[1].pixels = WindowIconSmall->Pixels.data();
+	glfwSetWindowIcon(Window, 2, Icons);
+	*/
 
 	UIMapView::Initialize(Window);
 	UIOutliner::Initalize(UIMapView::CameraView);
@@ -239,19 +260,19 @@ void UI::Render()
 						SceneMgr::LoadScene(Type, Identifier);
 ;					});
 			}
+			if (Editor::Identifier.empty())
+				ImGui::BeginDisabled();
+			if (ImGui::MenuItem("Reload"))
+			{
+				SceneMgr::Reload();
+			}
+			if (Editor::Identifier.empty())
+				ImGui::EndDisabled();
 			ImGui::EndMenu();
 		}
-		if (ImGui::BeginMenu("Edit"))
+		if (ImGui::MenuItem("Settings"))
 		{
-			ImGui::InputText("RomFS Directory", &Editor::RomFSDir);
-			ImGui::InputText("Bfres Directory", &Editor::BfresDir);
-			if (ImGui::Button("Save"))
-			{
-				EditorConfig::Save();
-				Editor::DetectInternalGameVersion();
-				ZStdFile::Initialize(Editor::GetRomFSFile("Pack/ZsDic.pack.zs"));
-			}
-			ImGui::EndMenu();
+			PopupSettings::Open();
 		}
 		if (ImGui::BeginMenu("Window"))
 		{
@@ -287,8 +308,10 @@ void UI::Render()
 			if (ImGui::MenuItem("MSTB Editor", "", UIActorTool::Open))
 			{
 				UIMSBTEditor::Open = !UIMSBTEditor::Open;
+				UpdatePreferences = true;
 			}
 #endif
+
 			ImGui::EndMenu();
 		}
 		if (ImGui::MenuItem("Credits"))
@@ -340,6 +363,7 @@ void UI::Render()
 	PopupGeneralInputPair::Render();
 	PopupAddRail::Render();
 	PopupAddLink::Render();
+	PopupSettings::Render();
 	PopupGeneralConfirm::Render();
 	PopupGeneralInputString::Render();
 	PopupLoadScene::Render();
@@ -348,6 +372,8 @@ void UI::Render()
 	PopupEditorAINBActorLinks::Render();
 	PopupAINBElementSelector::Render();
 	PopupCredits::Render();
+
+	PreferencesConfig::Frame();
 
     // Rendering
     ImGui::Render();

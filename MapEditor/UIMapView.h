@@ -18,6 +18,7 @@ namespace UIMapView
 		bool RenderInvisibleActors = true;
 		bool RenderAreas = true;
 		bool RenderFarActors = true;
+		bool RenderNPCs = true;
 		bool AllowSelectingActor = true;
 	};
 
@@ -37,6 +38,7 @@ namespace UIMapView
 	extern ImGuizmo::OPERATION ImGuizmoOperation;
 	extern RenderingSettingsStruct RenderSettings;
 
+	void GLFWKeyCallback(GLFWwindow* Window, int Key, int Scancode, int Action, int Mods);
 	void Initialize(GLFWwindow* pWindow);
 	void DrawOverlay();
 	void DrawInstancedActor(BfresFile* Model, std::vector<Actor*>& ActorPtrs);

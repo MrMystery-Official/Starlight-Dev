@@ -1,6 +1,7 @@
 #include "AINB.h"
 
 #include "Logger.h"
+#include <iostream>
 
 std::ostream& operator<<(std::ostream& os, Vector3F& vec) {
 	os << vec.GetX() << ", " << vec.GetY() << ", " << vec.GetZ();
@@ -110,15 +111,18 @@ AINBFile::AttachmentEntry AINBFile::ReadAttachmentEntry(BinaryVectorReader* Read
 	return Entry;
 }
 
-AINBFile::InputEntry AINBFile::ReadInputEntry(BinaryVectorReader* Reader, int Type) {
+AINBFile::InputEntry AINBFile::ReadInputEntry(BinaryVectorReader* Reader, int Type)
+{
 	AINBFile::InputEntry Entry;
 	Entry.Name = ReadStringFromStringPool(Reader, Reader->ReadUInt32());
-	if (Type == 5) { //userdefined
+	if (Type == 5)
+	{ //userdefined
 		Entry.Class = ReadStringFromStringPool(Reader, Reader->ReadUInt32());
 	}
 	Entry.NodeIndex = Reader->ReadInt16();
 	Entry.ParameterIndex = Reader->ReadInt16();
-	if (Entry.NodeIndex <= -100 && Entry.NodeIndex >= -8192) {
+	if (Entry.NodeIndex <= -100 && Entry.NodeIndex >= -8192)
+	{
 		Entry.MultiIndex = -100 - Entry.NodeIndex;
 		Entry.MultiCount = Entry.ParameterIndex;
 	}
@@ -155,7 +159,12 @@ AINBFile::InputEntry AINBFile::ReadInputEntry(BinaryVectorReader* Reader, int Ty
 		Entry.Value = ReadStringFromStringPool(Reader, Reader->ReadUInt32());
 	}
 	if (Type == 4) { //vec3f
-		Entry.Value = Vector3F(Reader->ReadFloat(), Reader->ReadFloat(), Reader->ReadFloat());
+		//Don't try to change this... I don't know why, but you have to store the data first in variables and then in a vec3f
+		float X = Reader->ReadFloat();
+		float Y = Reader->ReadFloat();
+		float Z = Reader->ReadFloat();
+		Vector3F Vec3f(X, Y, Z);
+		Entry.Value = Vector3F(X, Y, Z);
 	}
 	if (Type == 5) { //userdefined
 		Entry.Value = (uint32_t)Reader->ReadUInt32();
@@ -231,12 +240,14 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 	Header.EntryStringOffset = Reader.ReadUInt32();
 	Header.x6cSection = Reader.ReadUInt32();
 	Header.FileHashOffset = Reader.ReadUInt32();
-
+	
+	/*
 	if (Header.NodeCount == 0)
 	{
 		Logger::Error("AINBDecoder", "AINB is empty (0 nodes)");
-		return;
+		if(SkipErrors) return;
 	}
+	*/
 
 	/* Commands */
 	this->Commands.resize(Header.CommandCount);
@@ -393,7 +404,12 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 					Parameter.Value = ReadStringFromStringPool(&Reader, Reader.ReadUInt32());
 				}
 				if (i == 4) { //vec3f
-					Parameter.Value = Vector3F(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
+					//Don't try to change this... I don't know why, but you have to store the data first in variables and then in a vec3f
+					float X = Reader.ReadFloat();
+					float Y = Reader.ReadFloat();
+					float Z = Reader.ReadFloat();
+					Vector3F Vec3f(X, Y, Z);
+					Parameter.Value = Vector3F(X, Y, Z);
 				}
 				Parameter.ValueType = i;
 
@@ -420,7 +436,7 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 					}
 					if ((Flags & 0xc200) == 0xc200) {
 						Logger::Warning("AINBDecoder", "Found ImmediateParameter using EXB function, which is currently unsupported. Saving will break this file, please send the following message to mrmystery0778 on Discord");
-						Logger::Warning("AINBDecoder", "Line 423, Flag 0xc200 found. GlobalParamIndex skipped. Name: " + this->Header.FileName + ", Category: " + this->Header.FileCategory);
+						Logger::Warning("AINBDecoder", "Line 437, Flag 0xc200 found. GlobalParamIndex skipped. Name: " + this->Header.FileName + ", Category: " + this->Header.FileCategory);
 					}
 					else if (Flags & 0x8000)
 					{
@@ -1320,6 +1336,10 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	for (AINBFile::Node& Node : this->Nodes)
 	{
 		Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink].clear();
+	}
+
+	for (AINBFile::Node& Node : this->Nodes)
+	{
 		for (int Type = 0; Type < AINBFile::ValueTypeCount; Type++)
 		{
 			for (AINBFile::InputEntry& Entry : Node.InputParameters[Type])
@@ -1340,6 +1360,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 						Info.Parameter = this->Nodes[Entry.NodeIndex].OutputParameters[Entry.ValueType][Entry.ParameterIndex].Name;
 						this->Nodes[Entry.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink].push_back(Info);
 					}
+					continue;
 				}
 				for (AINBFile::MultiEntry Multi : Entry.Sources)
 				{

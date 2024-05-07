@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <chrono>
 #include "Logger.h"
-#include "Vector3F.h"
 
 /* --- Node --- */
 BymlFile::Node::Node(BymlFile::Type Type, std::string Key) : m_Type(Type), m_Key(Key)
@@ -19,68 +18,6 @@ BymlFile::Type& BymlFile::Node::GetType()
 std::string& BymlFile::Node::GetKey()
 {
     return this->m_Key;
-}
-
-template<> bool BymlFile::Node::GetValue() //For booleans
-{
-    return this->m_Value[0];
-}
-
-template<> Vector3F BymlFile::Node::GetValue() //For Vec3f, like Translate, Rotate, Scale, etc.
-{
-    Vector3F Vec;
-    Vec.SetX(this->GetChild(0)->GetValue<float>());
-    Vec.SetY(this->GetChild(1)->GetValue<float>());
-    Vec.SetZ(this->GetChild(2)->GetValue<float>());
-    return Vec;
-}
-
-
-template<> std::string BymlFile::Node::GetValue() //For strings
-{
-    std::vector<unsigned char> Input = this->m_Value;
-
-    if (this->m_Type != BymlFile::Type::StringIndex)
-    {
-        std::string Number = "";
-        switch (this->m_Type)
-        {
-        case BymlFile::Type::UInt32:
-            Number = std::to_string(this->GetValue<uint32_t>());
-            break;
-        case BymlFile::Type::UInt64:
-            Number = std::to_string(this->GetValue<uint64_t>());
-            break;
-        case BymlFile::Type::Int32:
-            Number = std::to_string(this->GetValue<int32_t>());
-            break;
-        case BymlFile::Type::Int64:
-            Number = std::to_string(this->GetValue<int64_t>());
-            break;
-        case BymlFile::Type::Float:
-            Number = std::to_string(this->GetValue<float>());
-            break;
-        case BymlFile::Type::Bool:
-            return this->GetValue<bool>() ? "true" : "false";
-        }
-
-        Input.resize(Number.length());
-        memcpy(Input.data(), Number.data(), Number.length());
-    }
-
-    std::string Result;
-    for (char Character : Input)
-    {
-        Result += Character;
-    }
-    return Result;
-}
-
-template<class T> T BymlFile::Node::GetValue() //For all numbers
-{
-    T Value;
-    memcpy(&Value, this->m_Value.data(), sizeof(Value));
-    return Value;
 }
 
 template<> void BymlFile::Node::SetValue(std::string Value) //Value is a string
@@ -136,6 +73,15 @@ BymlFile::Node* BymlFile::Node::GetChild(int Index)
 {
     return &this->m_Children[Index];
 }
+
+bool BymlFile::Node::operator==(const BymlFile::Node& Comp) const
+{
+    return m_Key == Comp.m_Key &&
+        m_Value == Comp.m_Value &&
+        m_Type == Comp.m_Type &&
+        m_Children == Comp.m_Children;
+}
+
 /* --- Node --- */
 
 bool BymlFile::HasChild(std::string Key)
@@ -401,145 +347,148 @@ uint32_t BymlFile::GetHashKeyTableIndex(std::string Value)
     return 0;
 }
 
-std::string BymlFile::GenerateNodeHash(BymlFile::Node* Node)
+void BymlFile::WriteNode(BinaryVectorWriter& Writer, uint32_t DataOffset, uint32_t Offset, BymlFile::Node& Node)
 {
-    std::string Result = (char)Node->GetType() + Node->GetKey() + Node->GetValue<std::string>();
-    for (BymlFile::Node& Child : Node->GetChildren())
-    {
-        Result += GenerateNodeHash(&Child);
-    }
-    return Result;
-}
-
-void BymlFile::WriteNode(BinaryVectorWriter& Writer, uint32_t DataOffset, uint32_t Offset, BymlFile::Node* Node)
-{
-    if (Node->GetType() == BymlFile::Type::Null)
+    if (Node.GetType() == BymlFile::Type::Null)
     {
         return;
     }
 
     Writer.Seek(Offset, BinaryVectorWriter::Position::Begin);
 
-    switch (Node->GetType())
+    switch (Node.GetType())
     {
     case BymlFile::Type::Float:
     {
-        float Value = Node->GetValue<float>();
+        float Value = Node.GetValue<float>();
         Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&Value), sizeof(float));
         break;
     }
     case BymlFile::Type::UInt32:
     {
-        Writer.WriteInteger(Node->GetValue<uint32_t>(), sizeof(uint32_t));
+        Writer.WriteInteger(Node.GetValue<uint32_t>(), sizeof(uint32_t));
         break;
     }
     case BymlFile::Type::Int32:
     {
-        Writer.WriteInteger(Node->GetValue<int32_t>(), sizeof(int32_t));
+        Writer.WriteInteger(Node.GetValue<int32_t>(), sizeof(int32_t));
         break;
     }
     case BymlFile::Type::Bool:
     {
-        Writer.WriteInteger(Node->GetValue<bool>(), sizeof(uint32_t));
+        Writer.WriteInteger(Node.GetValue<bool>(), sizeof(uint32_t));
         break;
     }
     case BymlFile::Type::StringIndex:
     {
-        Writer.WriteInteger(GetStringTableIndex(Node->GetValue<std::string>()), sizeof(uint32_t));
+        Writer.WriteInteger(GetStringTableIndex(Node.GetValue<std::string>()), sizeof(uint32_t));
         break;
     }
     case BymlFile::Type::UInt64:
     {
+        if (this->m_CachedValues.contains(Node.m_Value))
+        {
+            Writer.WriteInteger(this->m_CachedValues[Node.m_Value], sizeof(uint32_t));
+            break;
+        }
         Writer.WriteInteger(DataOffset + this->m_WriterReservedDataOffset, sizeof(uint32_t));
         Writer.Seek(DataOffset + this->m_WriterReservedDataOffset, BinaryVectorWriter::Position::Begin);
-        Writer.WriteInteger(Node->GetValue<uint64_t>(), sizeof(uint64_t));
+        Writer.WriteInteger(Node.GetValue<uint64_t>(), sizeof(uint64_t));
+        this->m_CachedValues.insert({ Node.m_Value, DataOffset + this->m_WriterReservedDataOffset });
         this->m_WriterReservedDataOffset += 8;
         break;
     }
     case BymlFile::Type::Int64:
     {
+        if (this->m_CachedValues.contains(Node.m_Value))
+        {
+            Writer.WriteInteger(this->m_CachedValues[Node.m_Value], sizeof(uint32_t));
+            break;
+        }
         Writer.WriteInteger(DataOffset + this->m_WriterReservedDataOffset, sizeof(uint32_t));
         Writer.Seek(DataOffset + this->m_WriterReservedDataOffset, BinaryVectorWriter::Position::Begin);
-        Writer.WriteInteger(Node->GetValue<int64_t>(), sizeof(int64_t));
+        Writer.WriteInteger(Node.GetValue<int64_t>(), sizeof(int64_t));
+        this->m_CachedValues.insert({ Node.m_Value, DataOffset + this->m_WriterReservedDataOffset });
         this->m_WriterReservedDataOffset += 8;
         break;
     }
     case BymlFile::Type::Double:
     {
+        if (this->m_CachedValues.contains(Node.m_Value))
+        {
+            Writer.WriteInteger(this->m_CachedValues[Node.m_Value], sizeof(uint32_t));
+            break;
+        }
         Writer.WriteInteger(DataOffset + this->m_WriterReservedDataOffset, sizeof(uint32_t));
         Writer.Seek(DataOffset + this->m_WriterReservedDataOffset, BinaryVectorWriter::Position::Begin);
-        Writer.WriteInteger(Node->GetValue<double>(), sizeof(double));
+        Writer.WriteInteger(Node.GetValue<double>(), sizeof(double));
+        this->m_CachedValues.insert({ Node.m_Value, DataOffset + this->m_WriterReservedDataOffset });
         this->m_WriterReservedDataOffset += 8;
         break;
     }
     case BymlFile::Type::Array:
     {
-        Writer.WriteInteger(DataOffset + this->m_WriterReservedDataOffset, sizeof(uint32_t));
-        Writer.Seek(DataOffset + this->m_WriterReservedDataOffset, BinaryVectorWriter::Position::Begin);
-        Writer.WriteByte(0xC0);
-        Writer.WriteInteger(Node->GetChildren().size(), 3); //3 = uint24
-        for (BymlFile::Node& Child : Node->GetChildren())
+        if (!this->m_CachedNodes.contains(Node))
         {
-            Writer.WriteByte((uint8_t)Child.GetType());
+            Writer.WriteInteger(DataOffset + this->m_WriterReservedDataOffset, sizeof(uint32_t));
+            Writer.Seek(DataOffset + this->m_WriterReservedDataOffset, BinaryVectorWriter::Position::Begin);
+            uint32_t LocalOffset = DataOffset + this->m_WriterReservedDataOffset;
+            Writer.WriteByte(0xC0);
+            Writer.WriteInteger(Node.GetChildren().size(), 3); //3 = uint24
+            for (BymlFile::Node& Child : Node.GetChildren())
+            {
+                Writer.WriteByte((uint8_t)Child.GetType());
+            }
+            while (Writer.GetPosition() % 4 != 0) //Aligning up after array content by 4 bytes
+            {
+                Writer.WriteByte(0x00);
+            }
+            this->m_WriterReservedDataOffset = Writer.GetPosition() - DataOffset + 4 * Node.GetChildren().size();
+            uint32_t EntryOffset = Writer.GetPosition();
+            for (int i = 0; i < Node.GetChildren().size(); i++)
+            {
+                this->WriteNode(Writer, DataOffset, EntryOffset + 4 * i, *Node.GetChild(i));
+            }
+            this->m_CachedNodes.insert({ Node, LocalOffset });
         }
-        while (Writer.GetPosition() % 4 != 0) //Aligning up after array content by 4 bytes
+        else
         {
-            Writer.WriteByte(0x00);
-        }
-        this->m_WriterReservedDataOffset = Writer.GetPosition() - DataOffset + 4 * Node->GetChildren().size();
-        uint32_t EntryOffset = Writer.GetPosition();
-        for (int i = 0; i < Node->GetChildren().size(); i++)
-        {
-            this->WriteNode(Writer, DataOffset, EntryOffset + 4 * i, Node->GetChild(i));
+            Writer.WriteInteger(this->m_CachedNodes[Node], sizeof(uint32_t));
         }
         break;
     }
     case BymlFile::Type::Dictionary:
     {
-        uint32_t CloneOffset = 0;
-        std::string Hash;
-        if (this->NodeCaching)
-        {
-            Hash = GenerateNodeHash(Node);
-            for (auto const& [Key, Value] : this->m_CachedNodes) {
-                if (Key == Hash) {
-                    CloneOffset = Value;
-                    break;
-                }
-            }
-        }
-
-        if (CloneOffset == 0)
+        if (!this->m_CachedNodes.contains(Node))
         {
             uint32_t LocalOffset = DataOffset + this->m_WriterReservedDataOffset;
             Writer.WriteInteger(LocalOffset, sizeof(uint32_t));
-            this->m_WriterReservedDataOffset += 4 + 8 * Node->GetChildren().size();
+            this->m_WriterReservedDataOffset += 4 + 8 * Node.GetChildren().size();
             Writer.Seek(LocalOffset, BinaryVectorWriter::Position::Begin);
             Writer.WriteByte(0xC1);
-            Writer.WriteInteger(Node->GetChildren().size(), 3); // 3 = uint24
-            for (int i = 0; i < Node->GetChildren().size(); i++)
+            Writer.WriteInteger(Node.GetChildren().size(), 3); // 3 = uint24
+            for (int i = 0; i < Node.GetChildren().size(); i++)
             {
                 uint32_t EntryOffset = LocalOffset + 4 + 8 * i;
                 Writer.Seek(EntryOffset, BinaryVectorWriter::Position::Begin);
-                Writer.WriteInteger(GetHashKeyTableIndex(Node->GetChild(i)->GetKey()), 3);
-                Writer.WriteByte((char)Node->GetChild(i)->GetType());
-                this->WriteNode(Writer, DataOffset, EntryOffset + 4, Node->GetChild(i));
+                Writer.WriteInteger(GetHashKeyTableIndex(Node.GetChild(i)->GetKey()), 3);
+                Writer.WriteByte((char)Node.GetChild(i)->GetType());
+                this->WriteNode(Writer, DataOffset, EntryOffset + 4, *Node.GetChild(i));
                 while (Writer.GetPosition() % 4 != 0) //Aligning up after dict content by 4 bytes
                 {
                     Writer.WriteByte(0x00);
                 }
             }
-            if (this->NodeCaching)
-                this->m_CachedNodes.insert({ Hash, LocalOffset });
+            this->m_CachedNodes.insert({ Node, LocalOffset });
         }
         else
         {
-            Writer.WriteInteger(CloneOffset, sizeof(uint32_t));
+            Writer.WriteInteger(this->m_CachedNodes[Node], sizeof(uint32_t));
         }
         break;
     }
     default:
-        Logger::Error("BymlEncoder", "Unsupported node type: " + std::to_string((int)Node->GetType()));
+        Logger::Error("BymlEncoder", "Unsupported node type: " + std::to_string((int)Node.GetType()));
     }
 
     if (Writer.GetPosition() > this->m_WriterLastOffset)
@@ -556,6 +505,7 @@ std::vector<unsigned char> BymlFile::ToBinary(BymlFile::TableGeneration TableGen
 
     this->m_WriterLastOffset = 0;
     this->m_WriterReservedDataOffset = 0;
+    this->m_CachedValues.clear();
     this->m_CachedNodes.clear();
 
     BinaryVectorWriter Writer;
@@ -629,7 +579,7 @@ std::vector<unsigned char> BymlFile::ToBinary(BymlFile::TableGeneration TableGen
     {
         RootNode.AddChild(Node);
     }
-    this->WriteNode(Writer, DataOffset, 12, &RootNode);
+    this->WriteNode(Writer, DataOffset, 12, RootNode);
 
     Writer.Seek(0x08, BinaryVectorWriter::Position::Begin); //Jump to the string table offset
     Writer.WriteInteger(StringTableJumpback - 4, sizeof(uint32_t));

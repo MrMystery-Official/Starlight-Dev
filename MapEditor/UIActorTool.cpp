@@ -10,10 +10,12 @@
 #include "Editor.h"
 #include "Logger.h"
 #include "UIAINBEditor.h"
+#include <iostream>
 
 bool UIActorTool::Open = true;
 std::string UIActorTool::ActorPackFilter = "";
 UIActorTool::ActorPackStruct UIActorTool::ActorPack;
+std::vector<std::string> UIActorTool::ActorList;
 
 void DisplayBymlNode(BymlFile::Node* Node, int& Id)
 {
@@ -116,6 +118,30 @@ void ReplaceStringInBymlNodes(BymlFile::Node* Node, std::string Search, std::str
 	}
 }
 
+void UIActorTool::UpdateActorList()
+{
+	ActorList.clear();
+	for (const auto& DirEntry : std::filesystem::directory_iterator(Editor::GetRomFSFile("Pack/Actor", false)))
+	{
+		if (!DirEntry.is_regular_file()) continue;
+		if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
+
+		ActorList.push_back(DirEntry.path().filename().string());
+	}
+
+	if (Util::FileExists(Editor::GetWorkingDirFile("Save/Pack/Actor")))
+	{
+		for (const auto& DirEntry : std::filesystem::directory_iterator(Editor::GetWorkingDirFile("Save/Pack/Actor")))
+		{
+			if (!DirEntry.is_regular_file()) continue;
+			if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
+			if (std::find(ActorList.begin(), ActorList.end(), DirEntry.path().filename().string()) != ActorList.end()) continue;
+
+			ActorList.push_back(DirEntry.path().filename().string());
+		}
+	}
+}
+
 void UIActorTool::DrawActorToolWindow()
 {
 	if (!Open) return;
@@ -168,30 +194,6 @@ void UIActorTool::DrawActorToolWindow()
 		ImGui::PushItemWidth(ImGui::GetWindowWidth() - ImGui::GetStyle().FramePadding.x);
 		if (ImGui::BeginListBox("##ActorPackFiles"))
 		{
-			/*
-						auto DisplayActorFile = [](std::string Path) {
-				for (const auto& DirEntry : std::filesystem::directory_iterator(Path))
-				{
-					if (!DirEntry.is_regular_file()) continue;
-					if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
-
-					std::string Name = DirEntry.path().filename().string();
-
-					if (ActorPackFilter.length() > 0)
-					{
-						if (Name.find(ActorPackFilter) == std::string::npos)
-							continue;
-					}
-
-					Name = Name.substr(0, Name.length() - 8);
-					if (ImGui::Selectable(Name.c_str()))
-					{
-						ActorPackFilter = Name;
-					}
-				}
-			};
-			*/
-
 			auto DisplayActorFile = [](std::string Name) {
 				if (ActorPackFilter.length() > 0)
 				{
@@ -206,24 +208,9 @@ void UIActorTool::DrawActorToolWindow()
 				}
 			};
 
-			for (const auto& DirEntry : std::filesystem::directory_iterator(Editor::GetRomFSFile("Pack/Actor", false)))
+			for (std::string ActorName : ActorList)
 			{
-				if (!DirEntry.is_regular_file()) continue;
-				if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
-
-				DisplayActorFile(DirEntry.path().filename().string());
-			}
-
-			if (Util::FileExists(Editor::GetWorkingDirFile("Save/Pack/Actor")))
-			{
-				for (const auto& DirEntry : std::filesystem::directory_iterator(Editor::GetWorkingDirFile("Save/Pack/Actor")))
-				{
-					if (!DirEntry.is_regular_file()) continue;
-					if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
-					if (Util::FileExists(Editor::GetRomFSFile("Pack/Actor/" + DirEntry.path().filename().string(), false))) continue;
-
-					DisplayActorFile(DirEntry.path().filename().string());
-				}
+				DisplayActorFile(ActorName);
 			}
 
 			ImGui::EndListBox();
@@ -361,7 +348,7 @@ void UIActorTool::Save(std::string Path)
 					{
 						for (int i = 0; i < ActorPack.Bymls[Entry.Name].GetNodes().size(); i++)
 						{
-							if (BymlFile::GenerateNodeHash(&ActorPack.Bymls[Entry.Name].GetNodes()[i]) != BymlFile::GenerateNodeHash(&ActorPack.OriginalBymls[Entry.Name].GetNodes()[i]))
+							if (BymlFile::NodeHasher::GenerateNodeHash(ActorPack.Bymls[Entry.Name].GetNodes()[i]) != BymlFile::NodeHasher::GenerateNodeHash(ActorPack.OriginalBymls[Entry.Name].GetNodes()[i]))
 							{
 								NodesSame = false;
 								break;

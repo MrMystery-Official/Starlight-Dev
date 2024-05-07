@@ -15,6 +15,8 @@
 #include "PopupGeneralConfirm.h"
 #include "PopupGeneralInputString.h"
 #include "UIAINBEditor.h"
+#include "StarImGui.h"
+#include "HashMgr.h"
 
 bool UIProperties::Open = true;
 bool UIProperties::FirstFrame = true;
@@ -91,18 +93,65 @@ void UIProperties::DrawPropertiesWindow()
 			}
 
 			ImGui::Separator();
-			ImGui::Columns(3);
+			ImGui::Columns(2);
 			ImGui::AlignTextToFramePadding();
 			if (ImGui::Button("Duplicate", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
 			{
-				UIOutliner::SelectedActor = &ActorMgr::AddActor(*UIOutliner::SelectedActor);
+				//UIOutliner::SelectedActor = &ActorMgr::AddActor(*UIOutliner::SelectedActor);
+
+				if (UIOutliner::SelectedActor->MergedActorParent == nullptr)
+				{
+					UIOutliner::SelectedActor = &ActorMgr::AddActor(*UIOutliner::SelectedActor);
+				}
+				else
+				{
+					Actor ParentActor = *UIOutliner::SelectedActor->MergedActorParent;
+					if (ParentActor.Dynamic.DynamicString.empty()) goto DupEnd;
+
+					Actor NewActor = *UIOutliner::SelectedActor;
+					HashMgr::Hash Hash = HashMgr::GetHash(!NewActor.Phive.Placement.empty());
+					NewActor.Hash = Hash.Hash;
+					NewActor.SRTHash = Hash.SRTHash;
+					NewActor.ActorType = Actor::Type::Merged;
+					UIOutliner::SelectedActor->MergedActorParent->MergedActorContent.push_back(NewActor);
+
+					for (Actor& PossibleParent : ActorMgr::GetActors())
+					{
+						if (PossibleParent.Dynamic.DynamicString.empty()) continue;
+						if (PossibleParent.Dynamic.DynamicString.count("BancPath"))
+						{
+							if (PossibleParent.Dynamic.DynamicString["BancPath"] == ParentActor.Dynamic.DynamicString["BancPath"])
+							{
+								UIOutliner::SelectedActor = &PossibleParent.MergedActorContent.back();
+							}
+						}
+					}
+
+					ActorMgr::UpdateModelOrder();
+				}
+			DupEnd:
 				ImGui::End();
 				return;
 			}
 			ImGui::NextColumn();
+			if (StarImGui::ButtonDelete("Delete", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+			{
+				PopupGeneralConfirm::Open("Do you really want to delete the actor?", []()
+					{
+						ActorMgr::DeleteActor(UIOutliner::SelectedActor->Hash, UIOutliner::SelectedActor->SRTHash);
+						UIOutliner::SelectedActor = nullptr;
+					});
+			}
+			if (UIOutliner::SelectedActor == nullptr)
+			{
+				ImGui::End();
+				return;
+			}
 			if (UIOutliner::SelectedActor->MergedActorParent == nullptr)
 			{
-				if (ImGui::Button("Add to parent", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+				ImGui::Columns();
+				ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+				if (ImGui::Button("Add to parent", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().ScrollbarSize, 0)))
 				{
 					PopupGeneralInputString::Open("Add to parent", "Merged actor path (e.g. Banc/MainField/Merged/xyz.bcett.byml)", "Merge", [](std::string Path)
 						{
@@ -115,11 +164,14 @@ void UIProperties::DrawPropertiesWindow()
 									{
 										UIOutliner::SelectedActor->ActorType = Actor::Type::Merged;
 										Merged.MergedActorContent.push_back(*UIOutliner::SelectedActor);
+
+										Actor CompareActor = *UIOutliner::SelectedActor;
+
 										UIOutliner::SelectedActor = &Merged.MergedActorContent.back();
 
 										ActorMgr::GetActors().erase(
 											std::remove_if(ActorMgr::GetActors().begin(), ActorMgr::GetActors().end(), [&](Actor const& Actor) {
-												return Actor.Gyml == Merged.MergedActorContent.back().Gyml && Actor.Hash == Merged.MergedActorContent.back().Hash && Actor.SRTHash == Merged.MergedActorContent.back().SRTHash;
+												return Actor == CompareActor;
 												}),
 											ActorMgr::GetActors().end());
 										ActorMgr::UpdateModelOrder();
@@ -131,7 +183,8 @@ void UIProperties::DrawPropertiesWindow()
 			}
 			else
 			{
-				if (ImGui::Button("Remove from \nparent", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+				ImGui::NextColumn();
+				if (ImGui::Button("Remove from parent", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
 				{
 					UIOutliner::SelectedActor->ActorType = Actor::Type::Static;
 					ActorMgr::GetActors().push_back(*UIOutliner::SelectedActor);
@@ -144,24 +197,17 @@ void UIProperties::DrawPropertiesWindow()
 					ActorMgr::UpdateModelOrder();
 					UIOutliner::SelectedActor = &ActorMgr::GetActors().back();
 				}
+				ImGui::NextColumn();
+				if (ImGui::Button("Select parent", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+				{
+					UIOutliner::SelectedActor = UIOutliner::SelectedActor->MergedActorParent;
+					ImGui::Columns();
+					ImGui::End();
+					return;
+				}
+
+				ImGui::Columns();
 			}
-			ImGui::NextColumn();
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5, 0.14, 0.14, 1));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.91, 0.12, 0.15, 1));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1, 0, 0, 1));
-			if (ImGui::Button("Delete", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
-			{
-				PopupGeneralConfirm::Open("Do you really want to delete the actor?", []()
-					{
-						ActorMgr::DeleteActor(UIOutliner::SelectedActor->Hash, UIOutliner::SelectedActor->SRTHash);
-						UIOutliner::SelectedActor = nullptr;
-						ImGui::PopStyleColor(3);
-						ImGui::End();
-						return;
-					});
-			}
-			ImGui::PopStyleColor(3);
-			ImGui::Columns();
 			if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_::ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				Actor OldActor = *UIOutliner::SelectedActor;
@@ -194,7 +240,7 @@ void UIProperties::DrawPropertiesWindow()
 				ImGui::Text("Translate");
 				ImGui::NextColumn();
 				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
-				if (ImGui::InputFloat3("##Translate", UIOutliner::SelectedActor->Translate.GetRawData()))
+				if (StarImGui::InputFloat3Colored("##Translate", UIOutliner::SelectedActor->Translate.GetRawData(), ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f)))
 				{
 					ActorMgr::UpdateMergedActorContent(UIOutliner::SelectedActor, OldActor);
 				}
@@ -204,7 +250,7 @@ void UIProperties::DrawPropertiesWindow()
 				ImGui::Text("Rotate");
 				ImGui::NextColumn();
 				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
-				if (ImGui::InputFloat3("##Rotate", UIOutliner::SelectedActor->Rotate.GetRawData()))
+				if (StarImGui::InputFloat3Colored("##Rotate", UIOutliner::SelectedActor->Rotate.GetRawData(), ImVec4(0.22f, 0.02f, 0.03f, 1.0f), ImVec4(0.02f, 0.22f, 0.03f, 1.0f), ImVec4(0.02f, 0.03f, 0.22f, 1.0f)))
 				{
 					ActorMgr::UpdateMergedActorContent(UIOutliner::SelectedActor, OldActor);
 				}
@@ -214,7 +260,7 @@ void UIProperties::DrawPropertiesWindow()
 				ImGui::Text("Scale");
 				ImGui::NextColumn();
 				ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
-				if (ImGui::InputFloat3("##Scale", UIOutliner::SelectedActor->Scale.GetRawData()))
+				if (StarImGui::InputFloat3Colored("##Scale", UIOutliner::SelectedActor->Scale.GetRawData(), ImVec4(0.18f, 0.0f, 0.0f, 1.0f), ImVec4(0.0f, 0.18f, 0.0f, 1.0f), ImVec4(0.0f, 0.0f, 0.18f, 1.0f)))
 				{
 					ActorMgr::UpdateMergedActorContent(UIOutliner::SelectedActor, OldActor);
 				}
@@ -315,82 +361,81 @@ void UIProperties::DrawPropertiesWindow()
 				ImGui::Unindent();
 			}
 
-			/*
-				struct PhiveData
-		{
-			struct ConstraintLinkData
-			{
-				struct ReferData
-				{
-					uint64_t Owner;
-					std::string Type;
-				};
-
-				struct OwnerData
-				{
-					struct OwnerPoseData
-					{
-						Vector3F Rotate;
-						Vector3F Translate;
-					};
-
-					struct PivotDataStruct
-					{
-						int32_t Axis = 0;
-						Vector3F Pivot;
-					};
-
-					struct ReferPoseData
-					{
-						Vector3F Rotate;
-						Vector3F Translate;
-					};
-
-					std::map<std::string, std::string> BreakableData;
-					std::map<std::string, std::string> ClusterData;
-					OwnerPoseData OwnerPose;
-					std::map<std::string, std::string> ParamData;
-					PivotDataStruct PivotData;
-					uint64_t Refer;
-					ReferPoseData ReferPose;
-					std::string Type = "";
-					std::map<std::string, std::string> UserData;
-				};
-
-				uint64_t ID = 0;
-				std::vector<OwnerData> Owners;
-				std::vector<ReferData> Refers;
-			};
-
-			struct RopeLinkData
-			{
-				uint64_t ID = 0;
-				std::vector<uint64_t> Owners;
-				std::vector<uint64_t> Refers;
-			};
-
-			struct RailData
-			{
-				struct Node
-				{
-					std::string Key;
-					Vector3F Value;
-				};
-
-				bool IsClosed = false;
-				std::vector<Node> Nodes;
-				std::string Type = "";
-			};
-
-			ConstraintLinkData ConstraintLink;
-			RopeLinkData RopeHeadLink;
-			RopeLinkData RopeTailLink;
-			std::vector<RailData> Rails;
-		};
-			*/
-
 			if (ImGui::CollapsingHeader("Phive"))
 			{
+				/*
+					struct PhiveData
+	{
+		struct ConstraintLinkData
+		{
+			struct ReferData
+			{
+				uint64_t Owner;
+				std::string Type;
+			};
+
+			struct OwnerData
+			{
+				struct OwnerPoseData
+				{
+					Vector3F Rotate;
+					Vector3F Translate;
+				};
+
+				struct PivotDataStruct
+				{
+					int32_t Axis = 0;
+					Vector3F Pivot;
+				};
+
+				struct ReferPoseData
+				{
+					Vector3F Rotate;
+					Vector3F Translate;
+				};
+
+				std::map<std::string, std::string> BreakableData;
+				std::map<std::string, std::string> ClusterData;
+				OwnerPoseData OwnerPose;
+				std::map<std::string, std::string> ParamData;
+				PivotDataStruct PivotData;
+				uint64_t Refer;
+				ReferPoseData ReferPose;
+				std::string Type = "";
+				std::map<std::string, std::string> UserData;
+			};
+
+			uint64_t ID = 0;
+			std::vector<OwnerData> Owners;
+			std::vector<ReferData> Refers;
+		};
+
+		struct RopeLinkData
+		{
+			uint64_t ID = 0;
+			std::vector<uint64_t> Owners;
+			std::vector<uint64_t> Refers;
+		};
+
+		struct RailData
+		{
+			struct Node
+			{
+				std::string Key;
+				Vector3F Value;
+			};
+
+			bool IsClosed = false;
+			std::vector<Node> Nodes;
+			std::string Type = "";
+		};
+
+		ConstraintLinkData ConstraintLink;
+		RopeLinkData RopeHeadLink;
+		RopeLinkData RopeTailLink;
+	};
+				*/
+
 				ImGui::Text("Placement");
 				ImGui::Separator();
 
@@ -426,9 +471,28 @@ void UIProperties::DrawPropertiesWindow()
 					}
 				}
 				ImGui::Columns();
-
-
 				ImGui::Unindent();
+
+				ImGui::NewLine();
+				ImGui::Text("Rope");
+				ImGui::Separator();
+				ImGui::Indent();
+				ImGui::Text("Head");
+				ImGui::Separator();
+				ImGui::Columns(2);
+				ImGui::Text("ID");
+				ImGui::NextColumn();
+				ImGui::Text("Placeholder");
+				ImGui::Columns();
+				ImGui::Unindent();
+				ImGui::Text("Tail");
+				ImGui::Separator();
+				ImGui::Columns(2);
+				ImGui::Text("ID");
+				ImGui::NextColumn();
+				ImGui::Text("Placeholder");
+				ImGui::Columns();
+				ImGui::Unindent(2);
 			}
 
 			if (ImGui::CollapsingHeader("Links##Links"))
@@ -539,6 +603,139 @@ void UIProperties::DrawPropertiesWindow()
 
 				ImGui::Columns();
 				ImGui::Unindent();
+			}
+			if (UIOutliner::SelectedActor->Gyml.find("Far") == std::string::npos)
+			{
+				if (ImGui::CollapsingHeader("Far##FarHeader", ImGuiTreeNodeFlags_::ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					bool HasFarActor = false;
+					Actor* LinkedFarActor = nullptr;
+					Actor::Link* ActorLink = nullptr;
+					for (Actor::Link& Link : UIOutliner::SelectedActor->Links)
+					{
+						if (Link.Gyml != "Reference" || Link.Name != "Reference") continue;
+
+						for (Actor& PossibleFarActor : ActorMgr::GetActors())
+						{
+							if (PossibleFarActor.Hash == Link.Dest)
+							{
+								HasFarActor = PossibleFarActor.Gyml.find("Far") != std::string::npos;
+								if (HasFarActor)
+								{
+									ActorLink = &Link;
+									LinkedFarActor = &PossibleFarActor;
+								}
+								break;
+							}
+						}
+					}
+
+					bool FoundFarActor = Util::FileExists(Editor::GetRomFSFile("Pack/Actor/" + UIOutliner::SelectedActor->Gyml + "_Far.pack.zs"));
+					if (!FoundFarActor || HasFarActor)
+						ImGui::BeginDisabled();
+
+					ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+					if (ImGui::Button(FoundFarActor ? ("Add " + UIOutliner::SelectedActor->Gyml + "_Far").c_str() : "Not found##FarActor", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().ScrollbarSize, 0)))
+					{
+						Actor SelectedActorCopy = *UIOutliner::SelectedActor;
+
+						Actor& FarActor = ActorMgr::AddActor(UIOutliner::SelectedActor->Gyml + "_Far");
+						FarActor.Bakeable = true;
+						FarActor.Translate = UIOutliner::SelectedActor->Translate;
+						FarActor.Rotate = UIOutliner::SelectedActor->Rotate;
+						FarActor.Scale = UIOutliner::SelectedActor->Scale;
+						FarActor.ActorType = UIOutliner::SelectedActor->ActorType;
+						FarActor.Phive.Placement.insert({ "ID", std::to_string(UIOutliner::SelectedActor->Hash) });
+
+						/* Because the actor vector has been changed, the selected actor pointer has to be adjusted */
+						for (Actor& PossibleSelectedActor : ActorMgr::GetActors())
+						{
+							if (PossibleSelectedActor == SelectedActorCopy)
+							{
+								UIOutliner::SelectedActor = &PossibleSelectedActor;
+								break;
+							}
+						}
+
+						UIOutliner::SelectedActor->Links.push_back(Actor::Link{ UIOutliner::SelectedActor->Hash, FarActor.Hash, "Reference", "Reference" });
+					}
+					if (!FoundFarActor || HasFarActor)
+						ImGui::EndDisabled();
+
+					ImGui::Columns(2);
+					if (HasFarActor)
+						ImGui::BeginDisabled();
+					if (ImGui::Button("Add far actor", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+					{
+						PopupGeneralInputString::Open("Add far actor", "Far actor gyml", "Add", [](std::string FarActorGyml)
+							{
+								Actor SelectedActorCopy = *UIOutliner::SelectedActor;
+
+								Actor& FarActor = ActorMgr::AddActor(FarActorGyml);
+								FarActor.Bakeable = true;
+								FarActor.Translate = UIOutliner::SelectedActor->Translate;
+								FarActor.Rotate = UIOutliner::SelectedActor->Rotate;
+								FarActor.Scale = UIOutliner::SelectedActor->Scale;
+								FarActor.ActorType = UIOutliner::SelectedActor->ActorType;
+								FarActor.Phive.Placement.insert({ "ID", std::to_string(UIOutliner::SelectedActor->Hash) });
+
+								/* Because the actor vector has been changed, the selected actor pointer has to be adjusted */
+								for (Actor& PossibleSelectedActor : ActorMgr::GetActors())
+								{
+									if (PossibleSelectedActor == SelectedActorCopy)
+									{
+										UIOutliner::SelectedActor = &PossibleSelectedActor;
+										break;
+									}
+								}
+
+								UIOutliner::SelectedActor->Links.push_back(Actor::Link{ UIOutliner::SelectedActor->Hash, FarActor.Hash, "Reference", "Reference" });
+							});
+					}
+					ImGui::NextColumn();
+					if (HasFarActor)
+						ImGui::EndDisabled();
+					else
+						ImGui::BeginDisabled();
+					if (StarImGui::ButtonDelete("Delete far actor", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+					{
+						HasFarActor = false;
+						ActorMgr::DeleteActor(LinkedFarActor->Hash, LinkedFarActor->SRTHash);
+						LinkedFarActor = nullptr;
+
+						UIOutliner::SelectedActor->Links.erase(
+							std::remove_if(UIOutliner::SelectedActor->Links.begin(), UIOutliner::SelectedActor->Links.end(),
+								[ActorLink](const Actor::Link& Link) { return &Link == ActorLink; }),
+							UIOutliner::SelectedActor->Links.end());
+					}
+					if (!HasFarActor)
+						ImGui::EndDisabled();
+					ImGui::Columns();
+
+					ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+					if (!HasFarActor)
+						ImGui::BeginDisabled();
+					if (ImGui::Button("Select far actor", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().ScrollbarSize, 0)))
+					{
+						UIOutliner::SelectedActor = LinkedFarActor;
+						ImGui::End();
+						return;
+					}
+					if (!HasFarActor)
+						ImGui::EndDisabled();
+
+					ImGui::Columns(2);
+					ImGui::AlignTextToFramePadding();
+					ImGui::Text("Far actor linked");
+					ImGui::NextColumn();
+					if (HasFarActor)
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
+					else
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
+					ImGui::Text(HasFarActor ? "Yes" : "No");
+					ImGui::PopStyleColor();
+					ImGui::Columns();
+				}
 			}
 
 			FirstFrame = false;

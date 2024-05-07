@@ -5,6 +5,7 @@
 #include <string>
 #include <map>
 #include "AINB.h"
+#include <vector>
 
 namespace UIActorTool
 {
@@ -26,7 +27,9 @@ namespace UIActorTool
 	extern bool Open;
 	extern std::string ActorPackFilter;
 	extern ActorPackStruct ActorPack;
+	extern std::vector<std::string> ActorList;
 
 	void DrawActorToolWindow();
+	void UpdateActorList();
 	void Save(std::string Path);
 };

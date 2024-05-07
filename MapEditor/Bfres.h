@@ -10,6 +10,7 @@
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtx/vector_angle.hpp>
 #include <unordered_map>
+#include <map>
 
 #include "VAO.h"
 #include "VBO.h"
@@ -49,6 +50,20 @@ public:
 		std::vector<uint32_t> TransparentObjects;
 	};
 
+	struct SkeletonBone
+	{
+		uint16_t Index = 0;
+		int16_t ParentIndex = -1;
+		int16_t SmoothMatrixIndex = -1;
+		int16_t RigidMatrixIndex = -1;
+		int16_t BillboardIndex = -1;
+		uint16_t NumUserData = 0;
+		uint32_t Flags = 0;
+		float Scale[3] = { 1, 1, 1 };
+		float Rotation[4] = { 0, 0, 0, 1 };
+		float Position[3] = { 0, 0, 0 };
+	};
+
 	struct Model
 	{
 		std::vector<LOD> LODs;
@@ -67,7 +82,6 @@ public:
 	BfresFile(std::string Path);
 	BfresFile() {}
 private:
-
 	enum class VertexBufferFormat : uint16_t
 	{
 		Format_16_16_16_16_Single = 5381,
@@ -77,6 +91,7 @@ private:
 		Format_8_8_8_8_UNorm = 2817,
 		Format_8_8_UNorm = 2305,
 		Format_8_8_SNorm = 2306,
+		Format_8_UInt = 515,
 		Format_16_16_Single = 4613,
 		Format_16_16_UNorm = 4609,
 		Format_16_16_SNorm = 4610,
@@ -106,6 +121,8 @@ private:
 	};
 
 	std::vector<BfresFile::Model> m_Models;
+	std::vector<BfresFile::SkeletonBone> m_SkeletonBones;
+	std::vector<uint16_t> m_Rigids;
 	bool m_DefaultModel = false;
 	std::string m_Path = "";
 
@@ -129,7 +146,7 @@ namespace GLTextureLibrary
 
 namespace BfresLibrary
 {
-	extern std::unordered_map<std::string, BfresFile> Models;
+	extern std::map<std::string, BfresFile> Models;
 
 	void Initialize();
 

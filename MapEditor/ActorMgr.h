@@ -7,14 +7,25 @@
 #include "EBO.h"
 #include <unordered_map>
 #include <vector>
+#include <string>
 
 namespace ActorMgr
 {
+	struct ActorInformation
+	{
+		BfresFile* Model;
+		bool IsUMii = false;
+		UMii UMiiData;
+	};
+
 	extern std::vector<Actor> Actors;
+	extern std::vector<Actor*> UMiiActors;
 	extern std::unordered_map<BfresFile*, std::vector<Actor*>> OpaqueActors;
 	extern std::unordered_map<BfresFile*, std::vector<Actor*>> TransparentActors;
+	extern std::unordered_map<std::string, ActorInformation> ActorInfo; //Gyml -> ActorInfo
 
 	Actor* AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor = nullptr);
+	std::string GetDefaultModelKey(Actor& Actor);
 	BymlFile::Node ActorToByml(Actor& Actor);
 	Actor& AddActor(std::string Gyml, bool UpdateOrder = true, bool UseCachedData = true);
 	Actor CreateBasicActor(std::string Gyml);

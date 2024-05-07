@@ -27,7 +27,13 @@ void PopupAddAINBNode::Render()
 			ImGui::BeginListBox("##ListBox");
 			for (AINBNodeDefMgr::NodeDef& Def : AINBNodeDefMgr::NodeDefinitions)
 			{
-				if (std::find(Def.AllowedAINBCategories.begin(), Def.AllowedAINBCategories.end(), AINBCategory) == Def.AllowedAINBCategories.end() && !ShowUnallowedNodes) continue;
+				if (std::find(Def.AllowedAINBCategories.begin(), Def.AllowedAINBCategories.end(), AINBCategory) == Def.AllowedAINBCategories.end() && !ShowUnallowedNodes)
+				{
+					if (!Def.DisplayName.starts_with("Element_") || AINBCategory == AINBNodeDefMgr::NodeDef::CategoryEnum::Logic)
+					{
+						continue;
+					}
+				}
 				if (Name.length() > 0 && Util::StringToLowerCase(Def.DisplayName).find(Util::StringToLowerCase(Name)) == std::string::npos) continue;
 
 				if (ImGui::Selectable(Def.DisplayName.c_str()))
@@ -36,9 +42,8 @@ void PopupAddAINBNode::Render()
 				}
 			}
 			ImGui::EndListBox();
-			ImGui::BeginDisabled();
-			ImGui::Checkbox("Show all nodes", &ShowUnallowedNodes);
-			ImGui::EndDisabled();
+
+			ImGui::Checkbox("Show unallowed nodes (those nodes won't work)", &ShowUnallowedNodes);
 
 			if (ImGui::Button("Add"))
 			{

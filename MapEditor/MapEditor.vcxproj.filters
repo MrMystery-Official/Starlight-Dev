@@ -112,6 +112,12 @@
     <Filter Include="Source Files\file\text">
       <UniqueIdentifier>{522cd3db-62a3-4d35-8584-50591169240e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\file\phive">
+      <UniqueIdentifier>{aff34a7a-be60-429c-893f-f588aeeb4b24}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\phive">
+      <UniqueIdentifier>{9e46f963-451a-49a5-bdab-931b370a32a8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -356,6 +362,24 @@
     </ClCompile>
     <ClCompile Include="PopupCredits.cpp">
       <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveShape.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="Actor.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
+    <ClCompile Include="PreferencesConfig.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="StarImGui.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupSettings.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="UMii.cpp">
+      <Filter>Source Files\engine</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -610,6 +634,21 @@
     </ClInclude>
     <ClInclude Include="PopupCredits.h">
       <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveShape.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="PreferencesConfig.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="StarImGui.h">
+      <Filter>Header Files\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupSettings.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="UMii.h">
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

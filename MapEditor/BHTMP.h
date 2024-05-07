@@ -17,7 +17,7 @@ public:
 
 	BHTMPFile() {}
 	BHTMPFile(std::string Path);
-	BHTMPFile(std::vector<unsigned char> Bytes);
+	BHTMPFile(std::vector<unsigned char> Bytes, std::string Name);
 
 	void Draw(Shader* Shader);
 };

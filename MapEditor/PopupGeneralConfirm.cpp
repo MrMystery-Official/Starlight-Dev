@@ -20,11 +20,11 @@ void PopupGeneralConfirm::Render()
 			ImGui::Text(Text.c_str());
 			if (ImGui::Button("Yes"))
 			{
+				ImGui::EndPopup();
 				Func();
 				IsOpen = false;
 				Func = nullptr;
 				Text = "";
-				ImGui::EndPopup();
 				return;
 			}
 			ImGui::SameLine();
