@@ -29,6 +29,7 @@
 #include "UIActorTool.h"
 #include "UIMSBTEditor.h"
 #include "PreferencesConfig.h"
+#include "ProjectRebuilder.h"
 
 #include "PopupAddActor.h"
 #include "PopupGeneralInputPair.h"
@@ -268,6 +269,16 @@ void UI::Render()
 			}
 			if (Editor::Identifier.empty())
 				ImGui::EndDisabled();
+
+			ImGui::Separator();
+			if (ImGui::MenuItem("Rebuild project"))
+			{
+				PopupGeneralConfirm::Open("Do you really want to rebuild the project?\n(If unsure, don't do it)", []()
+					{
+						ProjectRebuilder::RebuildProject();
+					});
+			}
+
 			ImGui::EndMenu();
 		}
 		if (ImGui::MenuItem("Settings"))

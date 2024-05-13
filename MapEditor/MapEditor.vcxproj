@@ -221,6 +221,7 @@
     <ClCompile Include="PopupLoadScene.cpp" />
     <ClCompile Include="PopupSettings.cpp" />
     <ClCompile Include="PreferencesConfig.cpp" />
+    <ClCompile Include="ProjectRebuilder.cpp" />
     <ClCompile Include="RESTBL.cpp" />
     <ClCompile Include="SARC.cpp" />
     <ClCompile Include="SceneMgr.cpp" />
@@ -314,6 +315,7 @@
     <ClInclude Include="PopupLoadScene.h" />
     <ClInclude Include="PopupSettings.h" />
     <ClInclude Include="PreferencesConfig.h" />
+    <ClInclude Include="ProjectRebuilder.h" />
     <ClInclude Include="RESTBL.h" />
     <ClInclude Include="SARC.h" />
     <ClInclude Include="SceneMgr.h" />

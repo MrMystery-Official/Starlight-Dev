@@ -384,6 +384,9 @@
     <ClCompile Include="ActorCollisionCreator.cpp">
       <Filter>Source Files\engine</Filter>
     </ClCompile>
+    <ClCompile Include="ProjectRebuilder.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -654,6 +657,9 @@
       <Filter>Header Files\file\bfres</Filter>
     </ClInclude>
     <ClInclude Include="ActorCollisionCreator.h">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="ProjectRebuilder.h">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
   </ItemGroup>
