@@ -4,6 +4,7 @@
 #include "Bfres.h"
 #include "Byml.h"
 #include "UMii.h"
+#include <limits>
 
 struct Actor
 {
@@ -50,7 +51,11 @@ struct Actor
 				struct PivotDataStruct
 				{
 					int32_t Axis = 0;
-					Vector3F Pivot;
+					Vector3F Pivot = Vector3F(
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max()
+					);
 				};
 
 				struct ReferPoseData

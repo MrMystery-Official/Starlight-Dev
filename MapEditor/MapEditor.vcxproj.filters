@@ -204,9 +204,6 @@
     <ClCompile Include="VBO.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
-    <ClCompile Include="TextureFormatDecoder.cpp">
-      <Filter>Source Files\file\bfres</Filter>
-    </ClCompile>
     <ClCompile Include="TextureToGo.cpp">
       <Filter>Source Files\file\bfres</Filter>
     </ClCompile>
@@ -381,6 +378,12 @@
     <ClCompile Include="UMii.cpp">
       <Filter>Source Files\engine</Filter>
     </ClCompile>
+    <ClCompile Include="TextureFormatDecoder.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="ActorCollisionCreator.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -469,9 +472,6 @@
     </ClInclude>
     <ClInclude Include="VBO.h">
       <Filter>Header Files\ui</Filter>
-    </ClInclude>
-    <ClInclude Include="TextureFormatDecoder.h">
-      <Filter>Header Files\file\bfres</Filter>
     </ClInclude>
     <ClInclude Include="TextureToGo.h">
       <Filter>Header Files\file\bfres</Filter>
@@ -648,6 +648,12 @@
       <Filter>Header Files\ui\popup</Filter>
     </ClInclude>
     <ClInclude Include="UMii.h">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureFormatDecoder.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="ActorCollisionCreator.h">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
   </ItemGroup>

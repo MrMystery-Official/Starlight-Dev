@@ -790,7 +790,7 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 					}
 
 					BymlFile::Node PivotDataNode(BymlFile::Type::Dictionary, "PivotData");
-					if (Owner.PivotData.Pivot.GetX() != 0 || Owner.PivotData.Pivot.GetY() != 0 || Owner.PivotData.Pivot.GetZ() != 0)
+					if (Owner.PivotData.Pivot.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetZ() != std::numeric_limits<float>::max())
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "Axis");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.Axis);

@@ -17,6 +17,7 @@
 #include "UIAINBEditor.h"
 #include "StarImGui.h"
 #include "HashMgr.h"
+#include "ActorCollisionCreator.h"
 
 bool UIProperties::Open = true;
 bool UIProperties::FirstFrame = true;
@@ -208,6 +209,15 @@ void UIProperties::DrawPropertiesWindow()
 
 				ImGui::Columns();
 			}
+
+			/*
+			ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+			if (ImGui::Button("Add collision (EXPERIMENTAL)", ImVec2(ImGui::GetWindowSize().x - ImGui::GetStyle().ScrollbarSize, 0)))
+			{
+				ActorCollisionCreator::AddCollisionActor(*UIOutliner::SelectedActor);
+			}
+			*/
+
 			if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_::ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				Actor OldActor = *UIOutliner::SelectedActor;
