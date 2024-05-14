@@ -51,7 +51,22 @@ struct Actor
 				struct PivotDataStruct
 				{
 					int32_t Axis = 0;
+					int32_t AxisA = 0;
+					int32_t AxisB = 0;
+
 					Vector3F Pivot = Vector3F(
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max()
+					);
+
+					Vector3F PivotA = Vector3F(
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max()
+					);
+
+					Vector3F PivotB = Vector3F(
 						std::numeric_limits<float>::max(),
 						std::numeric_limits<float>::max(),
 						std::numeric_limits<float>::max()

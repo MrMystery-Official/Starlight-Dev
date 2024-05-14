@@ -275,6 +275,14 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 						{
 							Owner.PivotData.Axis = PivotDataNode->GetChild("Axis")->GetValue<int32_t>();
 						}
+						if (PivotDataNode->HasChild("AxisA"))
+						{
+							Owner.PivotData.AxisA = PivotDataNode->GetChild("AxisA")->GetValue<int32_t>();
+						}
+						if (PivotDataNode->HasChild("AxisB"))
+						{
+							Owner.PivotData.AxisB = PivotDataNode->GetChild("AxisB")->GetValue<int32_t>();
+						}
 						if (PivotDataNode->HasChild("Pivot"))
 						{
 							Vector3F Pivot;
@@ -282,6 +290,22 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 							Pivot.SetY(PivotDataNode->GetChild("Pivot")->GetChild(1)->GetValue<float>());
 							Pivot.SetZ(PivotDataNode->GetChild("Pivot")->GetChild(2)->GetValue<float>());
 							Owner.PivotData.Pivot = Pivot;
+						}
+						if (PivotDataNode->HasChild("PivotA"))
+						{
+							Vector3F Pivot;
+							Pivot.SetX(PivotDataNode->GetChild("PivotA")->GetChild(0)->GetValue<float>());
+							Pivot.SetY(PivotDataNode->GetChild("PivotA")->GetChild(1)->GetValue<float>());
+							Pivot.SetZ(PivotDataNode->GetChild("PivotA")->GetChild(2)->GetValue<float>());
+							Owner.PivotData.PivotA = Pivot;
+						}
+						if (PivotDataNode->HasChild("PivotB"))
+						{
+							Vector3F Pivot;
+							Pivot.SetX(PivotDataNode->GetChild("PivotB")->GetChild(0)->GetValue<float>());
+							Pivot.SetY(PivotDataNode->GetChild("PivotB")->GetChild(1)->GetValue<float>());
+							Pivot.SetZ(PivotDataNode->GetChild("PivotB")->GetChild(2)->GetValue<float>());
+							Owner.PivotData.PivotB = Pivot;
 						}
 					}
 					if (OwnersNode.HasChild("Refer"))
@@ -790,12 +814,37 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 					}
 
 					BymlFile::Node PivotDataNode(BymlFile::Type::Dictionary, "PivotData");
+					//Axis
 					if (Owner.PivotData.Pivot.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetZ() != std::numeric_limits<float>::max())
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "Axis");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.Axis);
 						PivotDataNode.AddChild(PivotDataAxisNode);
+					}
+					if (Owner.PivotData.PivotA.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetZ() != std::numeric_limits<float>::max())
+					{
+						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "AxisA");
+						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.AxisA);
+						PivotDataNode.AddChild(PivotDataAxisNode);
+					}
+					if (Owner.PivotData.PivotB.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetZ() != std::numeric_limits<float>::max())
+					{
+						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "AxisB");
+						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.AxisB);
+						PivotDataNode.AddChild(PivotDataAxisNode);
+					}
+					//Vectors
+					if (Owner.PivotData.Pivot.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetZ() != std::numeric_limits<float>::max())
+					{
 						WriteBymlVector(&PivotDataNode, "Pivot", Owner.PivotData.Pivot, Vector3F(0, 0, 0), true);
+					}
+					if (Owner.PivotData.PivotA.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetZ() != std::numeric_limits<float>::max())
+					{
+						WriteBymlVector(&PivotDataNode, "PivotA", Owner.PivotData.PivotA, Vector3F(0, 0, 0), true);
+					}
+					if (Owner.PivotData.PivotB.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetZ() != std::numeric_limits<float>::max())
+					{
+						WriteBymlVector(&PivotDataNode, "PivotB", Owner.PivotData.PivotB, Vector3F(0, 0, 0), true);
 					}
 					OwnerNode.AddChild(PivotDataNode);
 

@@ -9,8 +9,9 @@
 #include <iostream>
 #include <filesystem>
 
-BymlFile::Node* GetPivotDataNode(BymlFile::Node& ActorNode)
+std::vector<BymlFile::Node*> GetPivotDataNode(BymlFile::Node& ActorNode)
 {
+	std::vector<BymlFile::Node*> PivotDataNodes;
 	if (ActorNode.HasChild("Phive"))
 	{
 		BymlFile::Node* PhiveNode = ActorNode.GetChild("Phive");
@@ -25,14 +26,14 @@ BymlFile::Node* GetPivotDataNode(BymlFile::Node& ActorNode)
 				{
 					if (OwnerChild.HasChild("PivotData"))
 					{
-						return OwnerChild.GetChild("PivotData");
+						PivotDataNodes.push_back(OwnerChild.GetChild("PivotData"));
 					}
 				}
 			}
 		}
 	}
 
-	return nullptr;
+	return PivotDataNodes;
 }
 
 void ProjectRebuilder::RebuildProject()
@@ -51,38 +52,39 @@ void ProjectRebuilder::RebuildProject()
 			std::string LocalRomFSPath = DirEntry.path().string();
 			Util::ReplaceString(LocalRomFSPath, Editor::GetWorkingDirFile("Save/"), "");
 			BymlFile MapFile(ZStdFile::Decompress(DirEntry.path().string(), ZStdFile::Dictionary::BcettByaml).Data);
+			BymlFile VanillaMapFile(ZStdFile::Decompress(Editor::GetRomFSFile(LocalRomFSPath, false), ZStdFile::Dictionary::BcettByaml).Data);
 			if (MapFile.HasChild("Actors"))
 			{
 				for (BymlFile::Node& ActorNode : MapFile.GetNode("Actors")->GetChildren())
 				{
-					BymlFile::Node* PivotDataNode = GetPivotDataNode(ActorNode);
-					if (PivotDataNode != nullptr)
+					std::vector<BymlFile::Node*> PivotDataNodes = GetPivotDataNode(ActorNode);
+					if (!PivotDataNodes.empty())
 					{
-						//NEEDS FIXING
-						if (PivotDataNode->GetChildren().empty())
+						for (int i = 0; i < PivotDataNodes.size(); i++)
 						{
-							bool Fixed = false;
-							BymlFile VanillaMapFile(ZStdFile::Decompress(Editor::GetRomFSFile(LocalRomFSPath, false), ZStdFile::Dictionary::BcettByaml).Data);
-							for (BymlFile::Node& VanillaActorNode : VanillaMapFile.GetNode("Actors")->GetChildren())
+							//NEEDS FIXING
+							BymlFile::Node* PivotDataNode = PivotDataNodes[i];
+							if (PivotDataNode->GetChildren().empty())
 							{
-								if (VanillaActorNode.GetChild("Gyaml")->GetValue<std::string>() == ActorNode.GetChild("Gyaml")->GetValue<std::string>() &&
-									VanillaActorNode.GetChild("Hash")->GetValue<uint64_t>() == ActorNode.GetChild("Hash")->GetValue<uint64_t>())
+								bool Fixed = false;
+								for (BymlFile::Node& VanillaActorNode : VanillaMapFile.GetNode("Actors")->GetChildren())
 								{
-									BymlFile::Node* VanillaPivotDataNode = GetPivotDataNode(VanillaActorNode);
-									if (VanillaPivotDataNode != nullptr)
+									if (VanillaActorNode.GetChild("Gyaml")->GetValue<std::string>() == ActorNode.GetChild("Gyaml")->GetValue<std::string>() &&
+										VanillaActorNode.GetChild("Hash")->GetValue<uint64_t>() == ActorNode.GetChild("Hash")->GetValue<uint64_t>())
 									{
-										PivotDataNode->GetChildren() = VanillaPivotDataNode->GetChildren();
+										std::vector<BymlFile::Node*> VanillaPivotDataNodes = GetPivotDataNode(VanillaActorNode);
+										PivotDataNode->GetChildren() = VanillaPivotDataNodes[VanillaPivotDataNodes.size() > i ? i : 0]->GetChildren();
 										FixedEntries++;
 										Fixed = true;
+										break;
 									}
-									break;
 								}
-							}
 
-							if (!Fixed)
-							{
-								Logger::Error("ProjectRebuilder", "Could not fix PivotData in " + LocalRomFSPath);
-								NotFixable++;
+								if (!Fixed)
+								{
+									Logger::Error("ProjectRebuilder", "Could not fix PivotData in " + LocalRomFSPath);
+									NotFixable++;
+								}
 							}
 						}
 					}
