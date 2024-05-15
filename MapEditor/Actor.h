@@ -5,6 +5,7 @@
 #include "Byml.h"
 #include "UMii.h"
 #include <limits>
+#include <variant>
 
 struct Actor
 {
@@ -50,9 +51,9 @@ struct Actor
 
 				struct PivotDataStruct
 				{
-					int32_t Axis = 0;
-					int32_t AxisA = 0;
-					int32_t AxisB = 0;
+					int32_t Axis = std::numeric_limits<int32_t>::max();
+					int32_t AxisA = std::numeric_limits<int32_t>::max();
+					int32_t AxisB = std::numeric_limits<int32_t>::max();
 
 					Vector3F Pivot = Vector3F(
 						std::numeric_limits<float>::max(),
@@ -82,7 +83,7 @@ struct Actor
 				std::map<std::string, std::string> BreakableData;
 				std::map<std::string, std::string> ClusterData;
 				OwnerPoseData OwnerPose;
-				std::map<std::string, std::string> ParamData;
+				std::map<std::string, std::variant<uint32_t, int32_t, uint64_t, int64_t, float, bool, double, std::string, BymlFile::Node>> ParamData;
 				PivotDataStruct PivotData;
 				uint64_t Refer;
 				ReferPoseData ReferPose;

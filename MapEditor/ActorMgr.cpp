@@ -265,7 +265,41 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 					{
 						for (BymlFile::Node& ParamDataNode : OwnersNode.GetChild("ParamData")->GetChildren())
 						{
-							Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<std::string>() });
+							//				std::map<std::string, std::variant<uint32_t, int32_t, uint64_t, int64_t, float, bool, double, std::string, BymlFile::Node>> ParamData;
+
+							switch (ParamDataNode.GetType())
+							{
+							case BymlFile::Type::Bool:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<bool>() });
+								break;
+							case BymlFile::Type::UInt32:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<uint32_t>() });
+								break;
+							case BymlFile::Type::Int32:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<int32_t>() });
+								break;
+							case BymlFile::Type::UInt64:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<uint64_t>() });
+								break;
+							case BymlFile::Type::Int64:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<int64_t>() });
+								break;
+							case BymlFile::Type::Float:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<float>() });
+								break;
+							case BymlFile::Type::Double:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<double>() });
+								break;
+							case BymlFile::Type::StringIndex:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode.GetValue<std::string>() });
+								break;
+							case BymlFile::Type::Array:
+								Owner.ParamData.insert({ ParamDataNode.GetKey(), ParamDataNode });
+								break;
+							default:
+								Logger::Error("ActorMgr", "Unknown physics ParamData option: " + ParamDataNode.GetKey());
+								break;
+							}
 						}
 					}
 					if (OwnersNode.HasChild("PivotData"))
@@ -779,55 +813,82 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 					{
 						BymlFile::Node ParamDataNode(BymlFile::Type::Dictionary, "ParamData");
 
-						for (auto const& [Key, Value] : Owner.ParamData)
+						for (auto& [Key, Value] : Owner.ParamData)
 						{
-							BymlFile::Node ParamDataEntry(GetDynamicValueDataType(Value), Key);
-							if (ParamDataEntry.GetType() == BymlFile::Type::UInt32) ParamDataEntry.GetType() = BymlFile::Type::Int32;
-							switch (ParamDataEntry.GetType())
+							BymlFile::Node ParamDataEntry(BymlFile::Type::Null, Key);
+
+							if (std::holds_alternative<bool>(Value))
 							{
-							case BymlFile::Type::StringIndex:
-								ParamDataEntry.SetValue<std::string>(Value);
-								break;
-							case BymlFile::Type::Float:
-								ParamDataEntry.SetValue<float>(Util::StringToNumber<float>(Value));
-								break;
-							case BymlFile::Type::UInt32:
-								ParamDataEntry.SetValue<uint32_t>(Util::StringToNumber<uint32_t>(Value));
-								break;
-							case BymlFile::Type::UInt64:
-								ParamDataEntry.SetValue<uint64_t>(Util::StringToNumber<uint64_t>(Value));
-								break;
-							case BymlFile::Type::Int32:
-								ParamDataEntry.SetValue<int32_t>(Util::StringToNumber<int32_t>(Value));
-								break;
-							case BymlFile::Type::Int64:
-								ParamDataEntry.SetValue<int64_t>(Util::StringToNumber<int64_t>(Value));
-								break;
-							case BymlFile::Type::Bool:
-								ParamDataEntry.SetValue<bool>(Value == "true");
-								break;
+								ParamDataEntry.m_Type = BymlFile::Type::Bool;
+								ParamDataEntry.SetValue<bool>(*reinterpret_cast<bool*>(&Value));
 							}
+							else if (std::holds_alternative<uint32_t>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::UInt32;
+								ParamDataEntry.SetValue<uint32_t>(*reinterpret_cast<uint32_t*>(&Value));
+							}
+							else if (std::holds_alternative<int32_t>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::Int32;
+								ParamDataEntry.SetValue<int32_t>(*reinterpret_cast<int32_t*>(&Value));
+							}
+							else if (std::holds_alternative<uint64_t>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::UInt64;
+								ParamDataEntry.SetValue<uint64_t>(*reinterpret_cast<uint64_t*>(&Value));
+							}
+							else if (std::holds_alternative<int64_t>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::Int64;
+								ParamDataEntry.SetValue<int64_t>(*reinterpret_cast<int64_t*>(&Value));
+							}
+							else if (std::holds_alternative<float>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::Float;
+								ParamDataEntry.SetValue<float>(*reinterpret_cast<float*>(&Value));
+							}
+							else if (std::holds_alternative<double>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::Double;
+								ParamDataEntry.SetValue<double>(*reinterpret_cast<double*>(&Value));
+							}
+							else if (std::holds_alternative<std::string>(Value))
+							{
+								ParamDataEntry.m_Type = BymlFile::Type::StringIndex;
+								ParamDataEntry.SetValue<std::string>(*reinterpret_cast<std::string*>(&Value));
+							}
+							else if (std::holds_alternative<BymlFile::Node>(Value))
+							{
+								ParamDataEntry = *reinterpret_cast<BymlFile::Node*>(&Value);
+							}
+							else
+							{
+								Logger::Error("ActorMgr", "Unknown data type while writing ParamData " + Key);
+								goto AddParamDataNode;
+							}
+
 							ParamDataNode.AddChild(ParamDataEntry);
 						}
 
+					AddParamDataNode:
 						OwnerNode.AddChild(ParamDataNode);
 					}
 
 					BymlFile::Node PivotDataNode(BymlFile::Type::Dictionary, "PivotData");
 					//Axis
-					if (Owner.PivotData.Pivot.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetZ() != std::numeric_limits<float>::max())
+					if (Owner.PivotData.Axis != std::numeric_limits<int32_t>::max())
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "Axis");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.Axis);
 						PivotDataNode.AddChild(PivotDataAxisNode);
 					}
-					if (Owner.PivotData.PivotA.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetZ() != std::numeric_limits<float>::max())
+					if (Owner.PivotData.AxisA != std::numeric_limits<int32_t>::max())
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "AxisA");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.AxisA);
 						PivotDataNode.AddChild(PivotDataAxisNode);
 					}
-					if (Owner.PivotData.PivotB.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetZ() != std::numeric_limits<float>::max())
+					if (Owner.PivotData.AxisB != std::numeric_limits<int32_t>::max())
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "AxisB");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.AxisB);
