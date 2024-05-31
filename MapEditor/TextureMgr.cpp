@@ -1,14 +1,14 @@
 #include "TextureMgr.h"
 
-#include <stb/stb_image.h>
 #include "Logger.h"
+#include <stb/stb_image.h>
 
 std::unordered_map<std::string, TextureMgr::Texture> TextureMgr::Textures;
 
 TextureMgr::Texture* TextureMgr::GetTexture(std::string Name)
 {
-	if (Textures.count(Name))
-		return &Textures[Name];
+    if (Textures.count(Name))
+        return &Textures[Name];
 
     int image_width = 0;
     int image_height = 0;
@@ -46,10 +46,9 @@ TextureMgr::Texture* TextureMgr::GetTexture(std::string Name)
 
 void TextureMgr::Cleanup()
 {
-	for (auto& [Key, Tex] : Textures)
-	{
+    for (auto& [Key, Tex] : Textures) {
         Logger::Info("TextureMgr", "Deleted texture " + std::to_string(Tex.ID));
-		glDeleteTextures(1, &Tex.ID);
-	}
+        glDeleteTextures(1, &Tex.ID);
+    }
     Textures.clear();
 }

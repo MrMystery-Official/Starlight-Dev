@@ -1,17 +1,14 @@
 #pragma once
 
-#include <vector>
 #include <string>
+#include <vector>
 
-class HGHTFile
-{
+class HGHTFile {
 public:
-	struct Tile
-	{
+    struct Tile {
+    };
 
-	};
-
-	HGHTFile() {}
-	HGHTFile(std::string Path);
-	HGHTFile(std::vector<unsigned char> Bytes);
+    HGHTFile() { }
+    HGHTFile(std::string Path);
+    HGHTFile(std::vector<unsigned char> Bytes);
 };

@@ -1,18 +1,19 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
-namespace UIConsole
-{
-	enum class MessageType : uint8_t
-	{
-		Info = 0,
-		Warning = 1,
-		Error = 2
-	};
+namespace UIConsole {
 
-	extern bool Open;
-
-	void DrawConsoleWindow();
-	void AddMessage(std::string Message, UIConsole::MessageType Type);
+enum class MessageType : uint8_t {
+    Info = 0,
+    Warning = 1,
+    Error = 2
 };
+
+extern bool Open;
+
+void DrawConsoleWindow();
+void AddMessage(std::string Message, UIConsole::MessageType Type);
+
+}

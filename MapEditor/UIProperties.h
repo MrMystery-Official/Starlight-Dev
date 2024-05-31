@@ -1,9 +1,10 @@
 #pragma once
 
-namespace UIProperties
-{
-	extern bool Open;
-	extern bool FirstFrame;
+namespace UIProperties {
 
-	void DrawPropertiesWindow();
-};
+extern bool Open;
+extern bool FirstFrame;
+
+void DrawPropertiesWindow();
+
+}

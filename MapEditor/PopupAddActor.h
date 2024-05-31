@@ -2,12 +2,13 @@
 
 #include <string>
 
-namespace PopupAddActor
-{
-	extern bool IsOpen;
-	extern std::string Gyml;
-	extern void (*Func)(std::string);
+namespace PopupAddActor {
 
-	void Render();
-	void Open(void (*Callback)(std::string));
-};
+extern bool IsOpen;
+extern std::string Gyml;
+extern void (*Func)(std::string);
+
+void Render();
+void Open(void (*Callback)(std::string));
+
+}

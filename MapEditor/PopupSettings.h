@@ -2,11 +2,12 @@
 
 #include <string>
 
-namespace PopupSettings
-{
-	extern bool IsOpen;
-	extern std::string ColorActorName;
+namespace PopupSettings {
 
-	void Render();
-	void Open();
-};
+extern bool IsOpen;
+extern std::string ColorActorName;
+
+void Render();
+void Open();
+
+}

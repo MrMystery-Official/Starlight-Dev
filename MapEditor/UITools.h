@@ -1,8 +1,9 @@
 #pragma once
 
-namespace UITools
-{
-	extern bool Open;
+namespace UITools {
 
-	void DrawToolsWindow();
-};
+extern bool Open;
+
+void DrawToolsWindow();
+
+}

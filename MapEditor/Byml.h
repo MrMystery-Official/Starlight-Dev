@@ -1,17 +1,16 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include "BinaryVectorWriter.h"
 #include "BinaryVectorReader.h"
+#include "BinaryVectorWriter.h"
 #include "Vector3F.h"
+#include <cstring>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-class BymlFile
-{
+class BymlFile {
 public:
-    enum class Type : unsigned char
-    {
+    enum class Type : unsigned char {
         StringIndex = 0xa0,
         Array = 0xc0,
         Dictionary = 0xc1,
@@ -26,14 +25,12 @@ public:
         Null = 0xff
     };
 
-    enum class TableGeneration : unsigned char
-    {
+    enum class TableGeneration : unsigned char {
         Auto = 0,
         Manual = 1
     };
 
-    class Node
-    {
+    class Node {
     public:
         std::vector<unsigned char> m_Value;
         BymlFile::Type m_Type;
@@ -41,27 +38,27 @@ public:
         std::vector<BymlFile::Node> m_Children;
 
         Node(BymlFile::Type Type, std::string Key = "");
-        Node() {}
+        Node() { }
 
         BymlFile::Type& GetType();
         std::string& GetKey();
-        
-        template<class T> T GetValue() //For all numbers
+
+        template <class T>
+        T GetValue() // For all numbers
         {
             T Value;
             memcpy(&Value, this->m_Value.data(), sizeof(Value));
             return Value;
         }
 
-        template<> std::string GetValue<std::string>() //For strings
+        template <>
+        std::string GetValue<std::string>() // For strings
         {
             std::vector<unsigned char> Input = this->m_Value;
 
-            if (this->m_Type != BymlFile::Type::StringIndex)
-            {
+            if (this->m_Type != BymlFile::Type::StringIndex) {
                 std::string Number = "";
-                switch (this->m_Type)
-                {
+                switch (this->m_Type) {
                 case BymlFile::Type::UInt32:
                     Number = std::to_string(this->GetValue<uint32_t>());
                     break;
@@ -86,19 +83,20 @@ public:
             }
 
             std::string Result;
-            for (char Character : Input)
-            {
+            for (char Character : Input) {
                 Result += Character;
             }
             return Result;
         }
 
-        template<> bool GetValue<bool>() //For booleans
+        template <>
+        bool GetValue<bool>() // For booleans
         {
             return this->m_Value[0];
         }
 
-        template<> Vector3F GetValue<Vector3F>() //For Vec3f, like Translate, Rotate, Scale, etc.
+        template <>
+        Vector3F GetValue<Vector3F>() // For Vec3f, like Translate, Rotate, Scale, etc.
         {
             Vector3F Vec;
             Vec.SetX(this->GetChild(0)->GetValue<float>());
@@ -107,7 +105,8 @@ public:
             return Vec;
         }
 
-        template<class T> void SetValue(T Value);
+        template <class T>
+        void SetValue(T Value);
 
         bool HasChild(std::string Key);
         BymlFile::Node* GetChild(std::string Key);
@@ -119,7 +118,7 @@ public:
 
     BymlFile(std::string Path);
     BymlFile(std::vector<unsigned char> Bytes);
-    BymlFile() {}
+    BymlFile() { }
 
     std::vector<BymlFile::Node>& GetNodes();
     BymlFile::Type& GetType();
@@ -139,8 +138,7 @@ public:
         static std::string GenerateNodeHash(const BymlFile::Node& Node)
         {
             std::string Result = (char)Node.m_Type + Node.m_Key + std::string(Node.m_Value.begin(), Node.m_Value.end());
-            for (const BymlFile::Node& Child : Node.m_Children)
-            {
+            for (const BymlFile::Node& Child : Node.m_Children) {
                 Result += GenerateNodeHash(Child);
             }
             return Result;
@@ -156,9 +154,10 @@ public:
             return Hash;
         }
     };
+
 private:
     struct VectorHasher {
-        int operator()(const std::vector<unsigned char>& V) const 
+        int operator()(const std::vector<unsigned char>& V) const
         {
             int Hash = V.size();
             for (auto& i : V) {
@@ -168,8 +167,7 @@ private:
         }
     };
 
-    struct NodeEqual
-    {
+    struct NodeEqual {
         bool operator()(const BymlFile::Node& Node1, const BymlFile::Node& Node2) const
         {
             return Node1 == Node2;
@@ -182,8 +180,8 @@ private:
     BymlFile::Type m_Type = BymlFile::Type::Null;
     uint32_t m_WriterLastOffset = 0;
     uint32_t m_WriterReservedDataOffset = 0;
-    std::unordered_map<std::vector<unsigned char>, uint32_t, VectorHasher> m_CachedValues; //Value in bytes -> Offset
-    std::unordered_map<BymlFile::Node, uint32_t, NodeHasher, NodeEqual> m_CachedNodes; //Node -> Offset (only containers)
+    std::unordered_map<std::vector<unsigned char>, uint32_t, VectorHasher> m_CachedValues; // Value in bytes -> Offset
+    std::unordered_map<BymlFile::Node, uint32_t, NodeHasher, NodeEqual> m_CachedNodes; // Node -> Offset (only containers)
 
     void ParseTable(BinaryVectorReader& Reader, std::vector<std::string>* Dest, int TableOffset);
     int AlignUp(int Value, int Size);

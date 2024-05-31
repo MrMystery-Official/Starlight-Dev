@@ -1,10 +1,10 @@
 #include "StarImGui.h"
 
-#include "imgui_stdlib.h"
 #include "imgui_internal.h"
+#include "imgui_stdlib.h"
 
-//const char* label, ImGuiDataType data_type, void* p_data, int components, const void* p_step, const void* p_step_fast, const char* format, ImGuiInputTextFlags flags
-//label, ImGuiDataType_Float, v, 3, NULL, NULL, format, flags
+// const char* label, ImGuiDataType data_type, void* p_data, int components, const void* p_step, const void* p_step_fast, const char* format, ImGuiInputTextFlags flags
+// label, ImGuiDataType_Float, v, 3, NULL, NULL, format, flags
 bool StarImGui::InputFloat3Colored(const char* Label, float Values[3], ImVec4 ColorA, ImVec4 ColorB, ImVec4 ColorC)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
@@ -19,31 +19,25 @@ bool StarImGui::InputFloat3Colored(const char* Label, float Values[3], ImVec4 Co
     ImGui::PushID(Label);
     ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
     size_t type_size = sizeof(float);
-    for (int i = 0; i < 3; i++)
-    {
+    for (int i = 0; i < 3; i++) {
         ImGui::PushID(i);
         if (i > 0)
             ImGui::SameLine(0, g.Style.ItemInnerSpacing.x);
 
-        switch (i)
-        {
-        case 0:
-        {
+        switch (i) {
+        case 0: {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ColorA);
             break;
         }
-        case 1:
-        {
+        case 1: {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ColorB);
             break;
         }
-        case 2:
-        {
+        case 2: {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ColorC);
             break;
         }
-        default:
-        {
+        default: {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ColorA);
             break;
         }
@@ -58,8 +52,7 @@ bool StarImGui::InputFloat3Colored(const char* Label, float Values[3], ImVec4 Co
     ImGui::PopID();
 
     const char* label_end = ImGui::FindRenderedTextEnd(Label);
-    if (Label != label_end)
-    {
+    if (Label != label_end) {
         ImGui::SameLine(0.0f, g.Style.ItemInnerSpacing.x);
         ImGui::TextEx(Label, label_end);
     }

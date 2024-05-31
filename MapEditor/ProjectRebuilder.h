@@ -1,6 +1,7 @@
 #pragma once
 
-namespace ProjectRebuilder
-{
-	void RebuildProject();
+namespace ProjectRebuilder {
+
+void RebuildProject();
+
 }

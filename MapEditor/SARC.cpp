@@ -1,6 +1,7 @@
 #include "SARC.h"
 
 #include "Logger.h"
+#include <iterator>
 
 void SarcFile::Entry::WriteToFile(std::string Path)
 {
@@ -17,10 +18,8 @@ std::vector<SarcFile::Entry>& SarcFile::GetEntries()
 
 SarcFile::Entry& SarcFile::GetEntry(std::string Name)
 {
-    for (SarcFile::Entry& Entry : this->GetEntries())
-    {
-        if (Entry.Name == Name)
-        {
+    for (SarcFile::Entry& Entry : this->GetEntries()) {
+        if (Entry.Name == Name) {
             return Entry;
         }
     }
@@ -29,10 +28,8 @@ SarcFile::Entry& SarcFile::GetEntry(std::string Name)
 
 bool SarcFile::HasEntry(std::string Name)
 {
-    for (SarcFile::Entry& Entry : this->GetEntries())
-    {
-        if (Entry.Name == Name)
-        {
+    for (SarcFile::Entry& Entry : this->GetEntries()) {
+        if (Entry.Name == Name) {
             return true;
         }
     }
@@ -41,10 +38,8 @@ bool SarcFile::HasEntry(std::string Name)
 
 bool SarcFile::HasDirectory(std::string Path)
 {
-    for (SarcFile::Entry& Entry : this->GetEntries())
-    {
-        if (Entry.Name.rfind(Path, 0) == 0)
-        {
+    for (SarcFile::Entry& Entry : this->GetEntries()) {
+        if (Entry.Name.rfind(Path, 0) == 0) {
             return true;
         }
     }
@@ -54,31 +49,29 @@ bool SarcFile::HasDirectory(std::string Path)
 SarcFile::SarcFile(std::vector<unsigned char> Bytes)
 {
     BinaryVectorReader Reader(Bytes);
-    char Magic[4]; //Magic, should be SARC
+    char Magic[4]; // Magic, should be SARC
     Reader.Read(Magic, 4);
-    if (Magic[0] != 'S' || Magic[1] != 'A' || Magic[2] != 'R' || Magic[3] != 'C')
-    {
+    if (Magic[0] != 'S' || Magic[1] != 'A' || Magic[2] != 'R' || Magic[3] != 'C') {
         Logger::Error("SarcDecoder", "Wrong magic, expected SARC");
         return;
     }
 
-    Reader.Seek(4, BinaryVectorReader::Position::Current); //Doesn't matter
+    Reader.Seek(4, BinaryVectorReader::Position::Current); // Doesn't matter
 
     uint32_t FileSize = Reader.ReadUInt32();
     uint32_t DataOffset = Reader.ReadUInt32();
 
-    Reader.Seek(10, BinaryVectorReader::Position::Current); //Padding
+    Reader.Seek(10, BinaryVectorReader::Position::Current); // Padding
 
     uint16_t Count = Reader.ReadUInt16();
 
-    Reader.Seek(4, BinaryVectorReader::Position::Current); //Padding
+    Reader.Seek(4, BinaryVectorReader::Position::Current); // Padding
 
     std::vector<SarcFile::Node> Nodes(Count);
-    for (int i = 0; i < Count; i++)
-    {
+    for (int i = 0; i < Count; i++) {
         SarcFile::Node Node;
         Node.Hash = Reader.ReadUInt32();
-        
+
         int Attributes = Reader.ReadInt32();
 
         Node.DataStart = Reader.ReadUInt32();
@@ -88,51 +81,39 @@ SarcFile::SarcFile(std::vector<unsigned char> Bytes)
         Nodes[i] = Node;
     }
 
-    Reader.Seek(8, BinaryVectorReader::Position::Current); //Padding
+    Reader.Seek(8, BinaryVectorReader::Position::Current); // Padding
 
     this->m_Entries.resize(Count);
 
-    std::vector<char> StringTableBuffer(DataOffset - Reader.GetPosition()); //This vector will hold the names of the Files inside SARC
-    Reader.Read(reinterpret_cast<char*>(StringTableBuffer.data()), DataOffset - Reader.GetPosition()); //Reading String Data into StringTableBuffer
+    std::vector<char> StringTableBuffer(DataOffset - Reader.GetPosition()); // This vector will hold the names of the Files inside SARC
+    Reader.Read(reinterpret_cast<char*>(StringTableBuffer.data()), DataOffset - Reader.GetPosition()); // Reading String Data into StringTableBuffer
 
-    for (int i = 0; i < Count; i++)
-    {
+    for (int i = 0; i < Count; i++) {
         Reader.Seek(DataOffset + Nodes[i].DataStart, BinaryVectorReader::Position::Begin);
         std::string Name;
-        if (i == (Count - 1))
-        {
-            for (uint32_t j = Nodes[i].StringOffset; j < StringTableBuffer.size() - 1; j++)
-            {
-                if (std::isprint(StringTableBuffer[j]))
-                {
+        if (i == (Count - 1)) {
+            for (uint32_t j = Nodes[i].StringOffset; j < StringTableBuffer.size() - 1; j++) {
+                if (std::isprint(StringTableBuffer[j])) {
                     Name += StringTableBuffer[j];
-                }
-                else
-                {
+                } else {
                     break;
                 }
             }
-            
+
             SarcFile::Entry Entry;
             Entry.Bytes.resize(Nodes[i].DataEnd - Nodes[i].DataStart);
             Reader.Read(reinterpret_cast<char*>(Entry.Bytes.data()), Nodes[i].DataEnd - Nodes[i].DataStart);
             Entry.Name = Name;
             this->m_Entries[i] = Entry;
-        }
-        else
-        {
-            for (uint32_t j = Nodes[i].StringOffset; j < Nodes[i + 1].StringOffset; j++)
-            {
-                if (std::isprint(StringTableBuffer[j]))
-                {
+        } else {
+            for (uint32_t j = Nodes[i].StringOffset; j < Nodes[i + 1].StringOffset; j++) {
+                if (std::isprint(StringTableBuffer[j])) {
                     Name += StringTableBuffer[j];
-                }
-                else
-                {
+                } else {
                     break;
                 }
             }
-            
+
             SarcFile::Entry Entry;
             Entry.Bytes.resize(Nodes[i].DataEnd - Nodes[i].DataStart);
             Reader.Read(reinterpret_cast<char*>(Entry.Bytes.data()), Nodes[i].DataEnd - Nodes[i].DataStart);
@@ -146,8 +127,7 @@ SarcFile::SarcFile(std::vector<unsigned char> Bytes)
 
 int SarcFile::GCD(int a, int b)
 {
-    while (a != 0 && b != 0)
-    {
+    while (a != 0 && b != 0) {
         if (a > b)
             a %= b;
         else
@@ -163,17 +143,15 @@ int SarcFile::LCM(int a, int b)
 
 int SarcFile::GetBinaryFileAlignment(std::vector<unsigned char> Data)
 {
-    if (Data.size() <= 0x20)
-    {
+    if (Data.size() <= 0x20) {
         return 1;
     }
 
-    if (Data[0] == 'A' && Data[1] == 'I' && Data[2] == 'B') //AINB has alignment 8
+    if (Data[0] == 'A' && Data[1] == 'I' && Data[2] == 'B') // AINB has alignment 8
         return 8;
 
     int32_t FileSize = *reinterpret_cast<const int32_t*>(&Data[0x1C]);
-    if (FileSize != static_cast<int32_t>(Data.size()))
-    {
+    if (FileSize != static_cast<int32_t>(Data.size())) {
         return 1;
     }
 
@@ -188,8 +166,7 @@ int SarcFile::AlignUp(int Value, int Size)
 bool AlignWriter(BinaryVectorWriter* Writer, int Alignment)
 {
     bool Aligned = false;
-    while (Writer->GetPosition() % Alignment != 0)
-    {
+    while (Writer->GetPosition() % Alignment != 0) {
         Writer->Seek(1, BinaryVectorWriter::Position::Current);
         Aligned = true;
     }
@@ -210,13 +187,11 @@ std::vector<unsigned char> SarcFile::ToBinary()
     Writer.WriteInteger(0x65, sizeof(uint32_t));
 
     std::vector<SarcFile::HashValue> Keys(Count);
-    for (int i = 0; i < Count; i++)
-    {
+    for (int i = 0; i < Count; i++) {
         SarcFile::HashValue HashValue;
         HashValue.Node = &this->m_Entries[i];
         int j = 0;
-        while (true)
-        {
+        while (true) {
             char c = this->m_Entries[i].Name[j++];
             if (!c)
                 break;
@@ -231,8 +206,7 @@ std::vector<unsigned char> SarcFile::ToBinary()
     uint32_t FileAignment = 1;
     std::vector<uint32_t> Alignments(Count);
 
-    for (int i = 0; i < Count; i++)
-    {
+    for (int i = 0; i < Count; i++) {
         std::string FileName = Keys[i].Node->Name;
         std::vector<unsigned char> Buffer(Keys[i].Node->Bytes.begin(), Keys[i].Node->Bytes.end());
 
@@ -243,9 +217,9 @@ std::vector<unsigned char> SarcFile::ToBinary()
         Alignments[i] = Alignment;
 
         Writer.WriteInteger(Keys[i].Hash, sizeof(uint32_t));
-        Writer.WriteInteger((0x01000000 | (RelStringOffset / 4)), sizeof(int32_t)); //Placeholder
-        Writer.WriteInteger(DataStart, sizeof(uint32_t)); //Placeholder
-        Writer.WriteInteger(DataEnd, sizeof(uint32_t)); //Placeholder
+        Writer.WriteInteger((0x01000000 | (RelStringOffset / 4)), sizeof(int32_t)); // Placeholder
+        Writer.WriteInteger(DataStart, sizeof(uint32_t)); // Placeholder
+        Writer.WriteInteger(DataEnd, sizeof(uint32_t)); // Placeholder
 
         RelDataOffset = DataEnd;
         RelStringOffset += (FileName.length() + 4) & -4;
@@ -256,12 +230,10 @@ std::vector<unsigned char> SarcFile::ToBinary()
     Writer.WriteInteger(0x08, sizeof(uint16_t));
     Writer.WriteInteger(0x00, sizeof(uint16_t));
 
-    for (int i = 0; i < Count; i++)
-    {
+    for (int i = 0; i < Count; i++) {
         std::string FileName = Keys[i].Node->Name;
         Writer.WriteBytes(FileName.c_str());
-        if (!AlignWriter(&Writer, 4))
-        {
+        if (!AlignWriter(&Writer, 4)) {
             Writer.Seek(4, BinaryVectorWriter::Position::Current);
         }
     }
@@ -269,12 +241,10 @@ std::vector<unsigned char> SarcFile::ToBinary()
     AlignWriter(&Writer, 8);
 
     uint32_t DataOffset = Writer.GetPosition();
-    for (int i = 0; i < Count; i++)
-    {
+    for (int i = 0; i < Count; i++) {
         AlignWriter(&Writer, Alignments[i]);
-        
-        for (unsigned char Byte : Keys[i].Node->Bytes)
-        {
+
+        for (unsigned char Byte : Keys[i].Node->Bytes) {
             Writer.WriteByte(Byte);
         }
     }
@@ -309,8 +279,7 @@ SarcFile::SarcFile(std::string Path)
 {
     std::ifstream File(Path, std::ios::binary);
 
-    if (!File.eof() && !File.fail())
-    {
+    if (!File.eof() && !File.fail()) {
         File.seekg(0, std::ios_base::end);
         std::streampos FileSize = File.tellg();
 
@@ -319,12 +288,10 @@ SarcFile::SarcFile(std::string Path)
         File.seekg(0, std::ios_base::beg);
         File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
 
-        this->SarcFile::SarcFile(Bytes);
+        new (this) SarcFile(Bytes);
 
         File.close();
-    }
-    else
-    {
+    } else {
         Logger::Error("SarcDecoder", "Could not open file\"" + Path + "\"");
     }
 }
