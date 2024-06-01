@@ -44,7 +44,7 @@ std::string Editor::GetBaseDirectory()
 {
     #if defined(__APPLE__)
         if(std::filesystem::current_path().string().ends_with("/"))
-            return std::filesystem::current_path().string() + "/WorkingDir";
+            return std::filesystem::current_path().string().substr(0, std::filesystem::current_path().string().length() - 1);
         
         BaseDir.resize(512);
         uint32_t BufferSize = 0;
@@ -58,8 +58,7 @@ std::string Editor::GetBaseDirectory()
         Logger::Error("Editor", "Could not get base directory");
         return "";
     #else
-        BaseDir = std::filesystem::current_path().string();
-        return std::filesystem::current_path().string() + "/WorkingDir";
+        return std::filesystem::current_path().string();
     #endif
 }
 
@@ -99,8 +98,6 @@ std::string Editor::GetInternalGameVersion()
 {
     return Editor::InternalGameVersion;
 }
-
-#include <iostream>
 
 void Editor::InitializeWithEdtc()
 {
