@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 MapEditor/WorkingDir/
 *.pack
+
+Build/
+compile_commands.json

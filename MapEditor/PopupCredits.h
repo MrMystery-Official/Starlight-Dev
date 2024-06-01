@@ -2,10 +2,11 @@
 
 #include <string>
 
-namespace PopupCredits
-{
-	extern bool IsOpen;
+namespace PopupCredits {
 
-	void Render();
-	void Open();
-};
+extern bool IsOpen;
+
+void Render();
+void Open();
+
+}

@@ -1,14 +1,14 @@
 #include "TextureToGo.h"
 
-#include "TegraSwizzle.h"
-#include <stb/stb_image_write.h>
-#include <stb/stb_image.h>
-#include <zstd.h>
-#include <fstream>
 #include "BinaryVectorReader.h"
 #include "Editor.h"
 #include "Logger.h"
+#include "TegraSwizzle.h"
 #include "Util.h"
+#include <fstream>
+#include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
+#include <zstd.h>
 
 std::vector<unsigned char>& TextureToGo::GetPixels()
 {
@@ -55,13 +55,12 @@ TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
     this->m_Fail = false;
     BinaryVectorReader Reader(Bytes);
 
-    uint16_t HeaderSize = Reader.ReadUInt16(); //Always 80
-    uint64_t Version = Reader.ReadUInt16(); //Always 17
+    uint16_t HeaderSize = Reader.ReadUInt16(); // Always 80
+    uint64_t Version = Reader.ReadUInt16(); // Always 17
 
     char Magic[4];
     Reader.Read(Magic, 4);
-    if (Magic[0] != '6' || Magic[1] != 'P' || Magic[2] != 'K' || Magic[3] != '0')
-    {
+    if (Magic[0] != '6' || Magic[1] != 'P' || Magic[2] != 'K' || Magic[3] != '0') {
         Logger::Error("TexToGoDecoder", "Magic mismatch, expected 6PK0");
         return;
     }
@@ -81,17 +80,15 @@ TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
     Reader.Seek(HeaderSize, BinaryVectorReader::Position::Begin);
 
     std::vector<TextureToGo::SurfaceInfo> Surfaces(this->m_MipMapCount * this->m_Depth);
-    for (int i = 0; i < this->m_MipMapCount * this->m_Depth; i++)
-    {
+    for (int i = 0; i < this->m_MipMapCount * this->m_Depth; i++) {
         Surfaces[i].ArrayLevel = Reader.ReadUInt16();
         Surfaces[i].MipMapLevel = Reader.ReadUInt8();
-        Reader.Seek(1, BinaryVectorReader::Position::Current); //Always 1 - SurfaceCount
+        Reader.Seek(1, BinaryVectorReader::Position::Current); // Always 1 - SurfaceCount
     }
 
-    for (int i = 0; i < this->m_MipMapCount * this->m_Depth; i++)
-    {
+    for (int i = 0; i < this->m_MipMapCount * this->m_Depth; i++) {
         Surfaces[i].Size = Reader.ReadUInt32();
-        Reader.Seek(4, BinaryVectorReader::Position::Current); //Always 6
+        Reader.Seek(4, BinaryVectorReader::Position::Current); // Always 6
     }
 
     for (int j = 0; j < this->m_Depth; j++) {
@@ -99,8 +96,7 @@ TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
         std::vector<unsigned char> RawImageData(Surfaces[j].Size);
         std::vector<unsigned char> Result;
 
-        for (int i = 0; i < Surfaces[j].Size; i++)
-        {
+        for (int i = 0; i < Surfaces[j].Size; i++) {
             RawImageData[i] = Reader.ReadUInt8();
         }
 
@@ -116,8 +112,7 @@ TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
 
     std::vector<unsigned char> Input = this->m_Pixels;
 
-    if (this->DecompressFunction != nullptr && Input.size() > 0)
-    {
+    if (this->DecompressFunction != nullptr && Input.size() > 0) {
         this->m_Pixels.clear();
         DecompressFunction(this->m_Width, this->m_Height, Input, this->m_Pixels, this);
 
@@ -134,14 +129,11 @@ TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
 
         free(PNG);
 
-        //stbi_write_png(Config::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + (this->m_Transparent ? "_Trans" : "") + ".png").c_str(), this->m_Width, this->m_Height, 4, this->m_Pixels.data(), this->m_Width * 4);
-    }
-    else
-    {
+        // stbi_write_png(Config::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + (this->m_Transparent ? "_Trans" : "") + ".png").c_str(), this->m_Width, this->m_Height, 4, this->m_Pixels.data(), this->m_Width * 4);
+    } else {
         this->m_Pixels.resize(this->m_Width * this->m_Height * 4);
-        for (int i = 0; i < this->m_Width * this->m_Height / 2; i++)
-        {
-            //Red-black texture indicating that the texture format is unsupported
+        for (int i = 0; i < this->m_Width * this->m_Height / 2; i++) {
+            // Red-black texture indicating that the texture format is unsupported
             this->m_Pixels[i * 8] = 255;
             this->m_Pixels[i * 8 + 1] = 0;
             this->m_Pixels[i * 8 + 2] = 0;
@@ -157,8 +149,7 @@ TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
 
 TextureToGo::TextureToGo(std::string Path)
 {
-    if (Util::FileExists(Editor::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + ".epng")))
-    {
+    if (Util::FileExists(Editor::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + ".epng"))) {
         std::ifstream File(Editor::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + ".epng"), std::ios::binary);
         File.seekg(0, std::ios_base::end);
 
@@ -173,7 +164,7 @@ TextureToGo::TextureToGo(std::string Path)
 
         int Width, Height, Components;
         unsigned char* Image = (unsigned char*)stbi_load_from_memory(Bytes.data() + 1, Bytes.size() - 1, &Width, &Height, &Components, STBI_rgb_alpha);
-        
+
         this->m_Pixels.assign(Image, Image + Width * Height * 4);
 
         this->m_Width = Width;
@@ -185,8 +176,7 @@ TextureToGo::TextureToGo(std::string Path)
 
     std::ifstream File(Path, std::ios::binary);
 
-    if (!File.eof() && !File.fail())
-    {
+    if (!File.eof() && !File.fail()) {
         File.seekg(0, std::ios_base::end);
         std::streampos FileSize = File.tellg();
 
@@ -197,10 +187,8 @@ TextureToGo::TextureToGo(std::string Path)
 
         File.close();
 
-        this->TextureToGo::TextureToGo(Path, Bytes);
-    }
-    else
-    {
+        new (this) TextureToGo(Path, Bytes);
+    } else {
         Logger::Error("TexToGoDecoder", "Could not open file \"" + Path + "\"");
     }
 }
@@ -214,7 +202,7 @@ bool TextureToGoLibrary::IsTextureLoaded(std::string Name)
 TextureToGo* TextureToGoLibrary::GetTexture(std::string Name)
 {
     if (!TextureToGoLibrary::IsTextureLoaded(Name))
-        TextureToGoLibrary::Textures.insert({ Name, Editor::GetRomFSFile("TexToGo/" + Name)});
+        TextureToGoLibrary::Textures.insert({ Name, Editor::GetRomFSFile("TexToGo/" + Name) });
     return &TextureToGoLibrary::Textures[Name];
 }
 

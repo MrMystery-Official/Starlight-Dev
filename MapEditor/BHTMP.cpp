@@ -1,71 +1,70 @@
 #include "BHTMP.h"
 
-#include "Logger.h"
-#include <fstream>
-#include "BinaryVectorReader.h"
-#include <stb/stb_image_write.h>
-#include <stb/stb_image.h>
-#include "Editor.h"
-#include "ZStdFile.h"
 #include "ActorMgr.h"
+#include "BinaryVectorReader.h"
+#include "Editor.h"
+#include "Logger.h"
+#include "ZStdFile.h"
+#include <fstream>
+#include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
 
 /*
-#include <vector>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class BHTMPFile
 {
 public:
 
-	std::vector<float> Tiles;
+        std::vector<float> Tiles;
 
-	BHTMPFile() {}
-	BHTMPFile(std::string Path);
-	BHTMPFile(std::vector<unsigned char> Bytes);
+        BHTMPFile() {}
+        BHTMPFile(std::string Path);
+        BHTMPFile(std::vector<unsigned char> Bytes);
 };
 */
 
 BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes, std::string Name)
 {
-	BinaryVectorReader Reader(Bytes);
+    BinaryVectorReader Reader(Bytes);
 
-	this->Height = Reader.ReadUInt32();
-	this->Width = Reader.ReadUInt32();
-	Logger::Info("BHTMPDecoder", "Width: " + std::to_string(Width) + ", Height: " + std::to_string(Height) + ", Memory:" + std::to_string(Width * Height * sizeof(float)) + " Bytes");
+    this->Height = Reader.ReadUInt32();
+    this->Width = Reader.ReadUInt32();
+    Logger::Info("BHTMPDecoder", "Width: " + std::to_string(Width) + ", Height: " + std::to_string(Height) + ", Memory:" + std::to_string(Width * Height * sizeof(float)) + " Bytes");
 
-	this->Tiles.resize(Width * Height);
+    this->Tiles.resize(Width * Height);
 
-	Reader.Seek(0x10, BinaryVectorReader::Position::Begin); //0x10 = Data begin
+    Reader.Seek(0x10, BinaryVectorReader::Position::Begin); // 0x10 = Data begin
 
-	float BiggestTile = 0;
+    float BiggestTile = 0;
 
-	for (int i = 0; i < Width * Height; i++) //Go through every tile
-	{
-		this->Tiles[i] = Reader.ReadFloat();
-		Reader.Seek(4, BinaryVectorReader::Position::Current); //Has Data? Unused in editor
+    for (int i = 0; i < Width * Height; i++) // Go through every tile
+    {
+        this->Tiles[i] = Reader.ReadFloat();
+        Reader.Seek(4, BinaryVectorReader::Position::Current); // Has Data? Unused in editor
 
-		BiggestTile = std::fmax(BiggestTile, this->Tiles[i]);
-	}
-	
-	std::vector<uint8_t> PixelData(this->Tiles.size() * 4);
+        BiggestTile = std::fmax(BiggestTile, this->Tiles[i]);
+    }
 
-	for (int i = 0; i < this->Tiles.size(); i++)
-	{
-		PixelData[i * 4] = std::max(0, (int)((this->Tiles[i] / BiggestTile) * 255));
-		PixelData[i * 4 + 1] = PixelData[i * 4];
-		PixelData[i * 4 + 2] = PixelData[i * 4];
-		PixelData[i * 4 + 3] = PixelData[i * 4];
-	}
+    std::vector<uint8_t> PixelData(this->Tiles.size() * 4);
 
-	int Length = 0;
-	unsigned char* PNG = stbi_write_png_to_mem_forward(PixelData.data(), Width * 4, Width, Height, 4, &Length);
+    for (int i = 0; i < this->Tiles.size(); i++) {
+        PixelData[i * 4] = std::max(0, (int)((this->Tiles[i] / BiggestTile) * 255));
+        PixelData[i * 4 + 1] = PixelData[i * 4];
+        PixelData[i * 4 + 2] = PixelData[i * 4];
+        PixelData[i * 4 + 3] = PixelData[i * 4];
+    }
 
-	std::ofstream OutputFile("MapEditorV4/TerrainExport/" + Name + ".png", std::ios::binary);
-	OutputFile.write((char*)PNG, Length);
-	OutputFile.close();
+    int Length = 0;
+    unsigned char* PNG = stbi_write_png_to_mem_forward(PixelData.data(), Width * 4, Width, Height, 4, &Length);
 
-	free(PNG);
+    std::ofstream OutputFile("MapEditorV4/TerrainExport/" + Name + ".png", std::ios::binary);
+    OutputFile.write((char*)PNG, Length);
+    OutputFile.close();
+
+    free(PNG);
 
     /*
 
@@ -164,26 +163,23 @@ BHTMPFile::BHTMPFile(std::vector<unsigned char> Bytes, std::string Name)
 
 BHTMPFile::BHTMPFile(std::string Path)
 {
-	std::ifstream File(Path, std::ios::binary);
+    std::ifstream File(Path, std::ios::binary);
 
-	if (!File.eof() && !File.fail())
-	{
-		File.seekg(0, std::ios_base::end);
-		std::streampos FileSize = File.tellg();
+    if (!File.eof() && !File.fail()) {
+        File.seekg(0, std::ios_base::end);
+        std::streampos FileSize = File.tellg();
 
-		std::vector<unsigned char> Bytes(FileSize);
+        std::vector<unsigned char> Bytes(FileSize);
 
-		File.seekg(0, std::ios_base::beg);
-		File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
+        File.seekg(0, std::ios_base::beg);
+        File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
 
-		this->BHTMPFile::BHTMPFile(Bytes, "");
+        new (this) BHTMPFile(Bytes, "");
 
-		File.close();
-	}
-	else
-	{
-		Logger::Error("BHTMPDecoder", "Could not open file \"" + Path + "\"");
-	}
+        File.close();
+    } else {
+        Logger::Error("BHTMPDecoder", "Could not open file \"" + Path + "\"");
+    }
 }
 
 void BHTMPFile::Draw(Shader* Shader)
