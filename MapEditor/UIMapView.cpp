@@ -9,7 +9,6 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include <glm/gtc/matrix_transform.hpp>
-#include <iostream>
 
 bool UIMapView::Open = true;
 bool UIMapView::Focused = false;

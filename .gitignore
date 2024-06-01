@@ -363,6 +363,8 @@ MigrationBackup/
 FodyWeavers.xsd
 
 MapEditor/WorkingDir/
+MapEditor/.vscode
+.DS_Store
 *.pack
 
 Build/
