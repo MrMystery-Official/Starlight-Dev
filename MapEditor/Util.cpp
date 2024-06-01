@@ -108,7 +108,7 @@ bool Util::ReplaceString(std::string& str, const std::string& from, const std::s
 
 #if defined(_MSC_VER)
 #include <intrin.h>
-#incldue < windows.h>
+#include <windows.h>
 #endif
 
 std::string Util::WideCharToString(wchar_t WChar)

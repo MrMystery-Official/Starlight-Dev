@@ -1,5 +1,3 @@
-# Use Visual Studio solution if compiling for Windows.
-
 cmake_minimum_required(VERSION 3.10)
 
 project(MapEditor)
@@ -37,11 +35,19 @@ file(GLOB SOURCES_IMGUI_STDLIB ${PROJECT_SOURCE_DIR}/MapEditor/imgui/misc/cpp/*.
 file(GLOB SOURCES_IMGUI_GIZMO ${PROJECT_SOURCE_DIR}/MapEditor/imgui_gizmo/*.cpp)
 file(GLOB SOURCES_IMGUI_NODE_EDITOR ${PROJECT_SOURCE_DIR}/MapEditor/imgui_node_editor/*.cpp)
 
+if (WIN32)
+    link_directories(MapEditor/Libraries/lib)
+    set(PLATFORM_SPECIFIC_LIBRARIES zstd_static glfw3)
+else()
+    set(PLATFORM_SPECIFIC_LIBRARIES zstd glfw)
+endif()
+
 add_executable(MapEditor
     ${SOURCES_C} ${SOURCES_CXX} ${SOURCES_IMGUI} ${SOURCES_IMGUI_STDLIB} ${SOURCES_IMGUI_GIZMO} ${SOURCES_IMGUI_NODE_EDITOR}
     ${PROJECT_SOURCE_DIR}/MapEditor/imgui/backends/imgui_impl_opengl3.cpp
     ${PROJECT_SOURCE_DIR}/MapEditor/imgui/backends/imgui_impl_glfw.cpp
     )
-target_link_libraries(MapEditor PUBLIC glfw zstd ${OPENGL_LIBRARIES})
+
+target_link_libraries(MapEditor PUBLIC ${PLATFORM_SPECIFIC_LIBRARIES} ${OPENGL_LIBRARIES})
 
 file(COPY MapEditor/Assets DESTINATION .)
