@@ -1,6 +1,7 @@
 #include "TextureMgr.h"
 
 #include "Logger.h"
+#include "Editor.h"
 #include <stb/stb_image.h>
 
 std::unordered_map<std::string, TextureMgr::Texture> TextureMgr::Textures;
@@ -12,7 +13,7 @@ TextureMgr::Texture* TextureMgr::GetTexture(std::string Name)
 
     int image_width = 0;
     int image_height = 0;
-    unsigned char* image_data = stbi_load(std::string("Assets/Textures/" + Name + ".png").c_str(), &image_width, &image_height, NULL, 4);
+    unsigned char* image_data = stbi_load(Editor::GetAssetFile("Textures/" + Name + ".png").c_str(), &image_width, &image_height, NULL, 4);
     if (image_data == NULL)
         return nullptr;
 

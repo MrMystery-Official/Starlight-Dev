@@ -12,6 +12,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(OpenGL REQUIRED)
+if(APPLE)
+    find_package(zstd REQUIRED)
+    find_package(GLFW3 REQUIRED)
+endif()
 
 add_compile_definitions(
     GLM_ENABLE_EXPERIMENTAL
@@ -38,6 +42,8 @@ file(GLOB SOURCES_IMGUI_NODE_EDITOR ${PROJECT_SOURCE_DIR}/MapEditor/imgui_node_e
 if (WIN32)
     link_directories(MapEditor/Libraries/lib)
     set(PLATFORM_SPECIFIC_LIBRARIES zstd_static glfw3)
+elseif(APPLE)
+    set(PLATFORM_SPECIFIC_LIBRARIES zstd::libzstd_static glfw)
 else()
     set(PLATFORM_SPECIFIC_LIBRARIES zstd glfw)
 endif()

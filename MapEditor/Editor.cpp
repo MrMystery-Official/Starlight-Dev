@@ -6,8 +6,11 @@
 #include "Util.h"
 #include "ZStdFile.h"
 #include <filesystem>
+#if defined(__APPLE__)
+    #include <mach-o/dyld.h>
+#endif
 
-std::string Editor::WorkingDir = std::filesystem::current_path().string() + "/WorkingDir";
+std::string Editor::BaseDir = GetBaseDirectory();
 std::string Editor::RomFSDir = "";
 std::string Editor::BfresDir = "";
 std::string Editor::ExportDir = "";
@@ -37,6 +40,29 @@ void Editor::DetectInternalGameVersion()
     }
 }
 
+std::string Editor::GetBaseDirectory()
+{
+    #if defined(__APPLE__)
+        if(std::filesystem::current_path().string().ends_with("/"))
+            return std::filesystem::current_path().string() + "/WorkingDir";
+        
+        BaseDir.resize(512);
+        uint32_t BufferSize = 0;
+        if(_NSGetExecutablePath(BaseDir.data(), &BufferSize)) {
+            BaseDir.resize(BufferSize);
+            _NSGetExecutablePath(BaseDir.data(), &BufferSize);
+            size_t Pos = BaseDir.find_last_of('/');
+            BaseDir = BaseDir.substr(0, Pos);
+            return BaseDir;
+        }
+        Logger::Error("Editor", "Could not get base directory");
+        return "";
+    #else
+        BaseDir = std::filesystem::current_path().string();
+        return std::filesystem::current_path().string() + "/WorkingDir";
+    #endif
+}
+
 std::string Editor::GetRomFSFile(std::string LocalPath, bool Replaceable)
 {
     if (Util::FileExists(Editor::GetWorkingDirFile("Save/" + LocalPath)) && Replaceable) {
@@ -53,7 +79,7 @@ bool Editor::RomFSFileExists(std::string LocalPath)
 
 std::string Editor::GetWorkingDirFile(std::string File)
 {
-    return WorkingDir + "/" + File;
+    return BaseDir + "/WorkingDir/" + File;
 }
 
 std::string Editor::GetBfresFile(std::string Name)
@@ -64,17 +90,24 @@ std::string Editor::GetBfresFile(std::string Name)
     return Editor::BfresDir + "/" + Name;
 }
 
+std::string Editor::GetAssetFile(std::string File)
+{
+    return BaseDir + "/Assets/" + File;
+}
+
 std::string Editor::GetInternalGameVersion()
 {
     return Editor::InternalGameVersion;
 }
+
+#include <iostream>
 
 void Editor::InitializeWithEdtc()
 {
     EditorConfig::Load();
 
     if (Editor::RomFSDir.empty()) {
-        Logger::Error("Editor", "RomFS path invalud");
+        Logger::Error("Editor", "RomFS path invalid");
         return;
     }
 

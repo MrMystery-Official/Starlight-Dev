@@ -72,6 +72,10 @@ void SearchForBytes()
 
 int main()
 {
+    std::cout << "HAH" << std::endl;
+    std::cout << std::filesystem::current_path().string() << std::endl;
+
+
     Util::CreateDir(Editor::GetWorkingDirFile("Save"));
     Util::CreateDir(Editor::GetWorkingDirFile("Cache"));
     Util::CreateDir(Editor::GetWorkingDirFile("EditorModels"));

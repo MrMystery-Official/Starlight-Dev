@@ -60,14 +60,23 @@ void UI::Initialize()
     if (!glfwInit())
         return;
 
+    #if defined(__APPLE__)
+        const char* GLSLVersion = "#version 150";
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+    #else
+        const char* GLSLVersion = "#version 130";
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    #endif
+
     Window = glfwCreateWindow(1280, 720, "Starlight - The Legend of Zelda: Tears of the Kingdom", nullptr, nullptr);
     if (Window == nullptr)
         return;
 
     glfwMakeContextCurrent(Window);
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     gladLoadGL();
 
@@ -186,7 +195,7 @@ Style.Colors[ImGuiCol_Button] = ImVec4(0.24f, 0.25f, 0.29f, 1.0f);*/
     glfwSetKeyCallback(Window, UIMapView::GLFWKeyCallback);
 
     ImGui_ImplGlfw_InitForOpenGL(Window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+    ImGui_ImplOpenGL3_Init(GLSLVersion);
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
