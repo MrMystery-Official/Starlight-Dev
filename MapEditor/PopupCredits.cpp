@@ -1,14 +1,4 @@
 #include "PopupCredits.h"
-/*
-namespace PopupCredits
-{
-        extern bool IsOpen;
-        extern std::string Message;
-
-        void Render();
-        void Open(std::string Msg);
-};
-*/
 
 #include "UIMapView.h"
 #include "imgui.h"

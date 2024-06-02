@@ -10,7 +10,6 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "tinyfiledialogs.h"
 #include <algorithm>
@@ -369,7 +368,7 @@ void UIAINBEditor::DrawPinIcon(uint32_t Id, bool IsOutput)
 
         int fontSize = ImGui::GetFontSize();
 
-        ImVec2 trueDrawPos = cursorPos + ImVec2(0, (10 > fontSize) ? 0 : (fontSize - 10) / 2);
+        ImVec2 trueDrawPos = ImVec2(cursorPos.x, cursorPos.y + (10 > fontSize) ? 0 : (fontSize - 10) / 2);
 
         ImVec2 p2 = ImVec2(trueDrawPos.x + 10, trueDrawPos.y + (10 / 2));
         ImVec2 p3 = ImVec2(trueDrawPos.x, trueDrawPos.y + 10);
@@ -432,7 +431,7 @@ void UIAINBEditor::DrawNode(AINBFile::Node& Node)
 
     ImGui::Text(Node.GetName().c_str());
 
-    NodeShapeInfo[Node.EditorId].HeaderMin = ImGui::GetItemRectMin() - ImVec2(18 + ImGui::GetStyle().ItemSpacing.x, 8);
+    NodeShapeInfo[Node.EditorId].HeaderMin = ImVec2(ImGui::GetItemRectMin().x - 18 - ImGui::GetStyle().ItemSpacing.x, ImGui::GetItemRectMin().y - 8);
     NodeShapeInfo[Node.EditorId].HeaderMax = ImVec2(NodeShapeInfo[Node.EditorId].HeaderMin.x + NodeShapeInfo[Node.EditorId].FrameWidth, ImGui::GetItemRectMax().y + 8);
 
     bool AddedHeader = false;

@@ -1,5 +1,7 @@
 #include "UIActorTool.h"
 
+#include "UIAINBEditor.h"
+
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
@@ -7,7 +9,6 @@
 
 #include "Editor.h"
 #include "Logger.h"
-#include "UIAINBEditor.h"
 #include "Util.h"
 #include "ZStdFile.h"
 #include <iostream>

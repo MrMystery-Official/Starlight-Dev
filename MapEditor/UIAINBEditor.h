@@ -1,8 +1,6 @@
 #pragma once
 
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include "AINB.h"
-#include "imgui.h"
 #include "imgui_node_editor.h"
 #include <string>
 #include <vector>

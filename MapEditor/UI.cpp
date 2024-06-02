@@ -1,5 +1,7 @@
 #include "UI.h"
 
+#include "UIAINBEditor.h"
+
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -22,7 +24,6 @@
 #include "SceneMgr.h"
 #include "ShaderMgr.h"
 #include "TextureMgr.h"
-#include "UIAINBEditor.h"
 #include "UIActorTool.h"
 #include "UIConsole.h"
 #include "UIMSBTEditor.h"
