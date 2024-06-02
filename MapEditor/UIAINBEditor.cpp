@@ -368,7 +368,7 @@ void UIAINBEditor::DrawPinIcon(uint32_t Id, bool IsOutput)
 
         int fontSize = ImGui::GetFontSize();
 
-        ImVec2 trueDrawPos = ImVec2(cursorPos.x, cursorPos.y + (10 > fontSize) ? 0 : (fontSize - 10) / 2);
+        ImVec2 trueDrawPos = ImVec2(cursorPos.x, cursorPos.y + ((10 > fontSize) ? 0 : (fontSize - 10) / 2));
 
         ImVec2 p2 = ImVec2(trueDrawPos.x + 10, trueDrawPos.y + (10 / 2));
         ImVec2 p3 = ImVec2(trueDrawPos.x, trueDrawPos.y + 10);
