@@ -1,6 +1,6 @@
 # Starlight
 
-![New versions available on Patreon](https://img.shields.io/badge/-New%20versions%20available%20on%20Patreon-%23FFFFFF?style=flat&logo=patreon&labelColor=%23000000&color=%23FFFFFF&link=https%3A%2F%2Fwww.patreon.com%2FMrMystery846)
+<img alt="New versions available on Patreon" src="https://img.shields.io/badge/-New%20versions%20available%20on%20Patreon-%23FFFFFF?style=flat&logo=patreon&labelColor=%23000000&color=%23FFFFFF&link=https%3A%2F%2Fwww.patreon.com%2FMrMystery846">
 
 **Starlight** is a toolkit for modding The Legend of Zelda: Tears of the Kingdom. It includes:
 
