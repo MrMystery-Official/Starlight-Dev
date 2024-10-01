@@ -217,7 +217,7 @@ template<typename T>
 void PhiveShape::hkRelArrayViewVertexBuffer<T>::Read(BinaryVectorReader& Reader)
 {
 	this->Offset = Reader.ReadInt32();
-	this->Size = (Reader.ReadInt32() - 2) / 6;
+	this->Size = Reader.ReadInt32() / 6;
 	uint32_t Jumback = Reader.GetPosition();
 	if (this->Offset > 0)
 	{
@@ -254,7 +254,7 @@ void PhiveShape::hkRelArrayViewVertexBuffer<T>::Write(BinaryVectorWriter& Writer
 	if (this->BaseOffset > 0) Writer.Seek(this->BaseOffset, BinaryVectorWriter::Position::Begin);
 
 	Writer.WriteInteger(Offset - Writer.GetPosition(), sizeof(uint32_t));
-	Writer.WriteInteger(this->Elements.size() * 6 + 2, sizeof(uint32_t));
+	Writer.WriteInteger(this->Elements.size() * 6, sizeof(uint32_t));
 
 	uint32_t Jumpback = Writer.GetPosition();
 
@@ -765,13 +765,101 @@ void PhiveShape::hknpMeshShape::Write(BinaryVectorWriter& Writer, int32_t Offset
 	Writer.Seek(this->TopLevelTree.Nodes.LastElementOffset, BinaryVectorWriter::Position::Begin);
 	AlignWriter(Writer, 16);
 
+	/*
+
 	this->GeometrySectionsOffset = Writer.GetPosition();
 	this->GeometrySections.Write(Writer, Writer.GetPosition());
 	Writer.Seek(this->GeometrySections.Elements.back().InteriorPrimitiveBitField.LastElementOffset, BinaryVectorWriter::Position::Begin);
 	AlignWriter(Writer, 16);
 
-	this->PrimitiveMapping.Write(Writer, Writer.GetPosition());
-	Writer.Seek(this->PrimitiveMapping.LastElementOffset, BinaryVectorWriter::Position::Begin);
+	*/
+
+	std::vector<uint32_t> GeometrySectionBaseOffsets;
+
+	for (hknpMeshShapeGeometrySection& Section : GeometrySections.Elements)
+	{
+		GeometrySectionBaseOffsets.push_back(Writer.GetPosition());
+		Writer.Seek(32, BinaryVectorWriter::Position::Current);
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(&Section.SectionOffset[0]), 3 * 4);
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(&Section.BitScale8Inv[0]), 3 * 4);
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(&Section.BitOffset[0]), 3 * 2);
+		Writer.WriteInteger(Section.Reserve0, sizeof(uint16_t));
+	}
+
+	for (int i = 0; i < GeometrySections.Elements.size(); i++)
+	{
+		uint32_t SectionOffset = Writer.GetPosition();
+		for (hknpAabb8TreeNode& Node : GeometrySections.Elements[i].SectionBvh.Elements)
+		{
+			Node.Write(Writer);
+		}
+		AlignWriter(Writer, 16);
+		uint32_t Jumpback = Writer.GetPosition();
+		Writer.Seek(GeometrySectionBaseOffsets[i], BinaryVectorWriter::Position::Begin);
+		Writer.WriteInteger(SectionOffset - Writer.GetPosition(), sizeof(uint32_t));
+		Writer.WriteInteger(GeometrySections.Elements[i].SectionBvh.Elements.size(), sizeof(uint32_t));
+		Writer.Seek(Jumpback, BinaryVectorWriter::Position::Begin);
+	}
+
+	for (int i = 0; i < GeometrySections.Elements.size(); i++)
+	{
+		uint32_t SectionOffset = Writer.GetPosition();
+
+		for (hknpMeshShapeGeometrySectionPrimitive& Primitive : GeometrySections.Elements[i].Primitives.Elements)
+		{
+			Primitive.Write(Writer);
+		}
+
+		AlignWriter(Writer, 16);
+		uint32_t Jumpback = Writer.GetPosition();
+		Writer.Seek(GeometrySectionBaseOffsets[i] + 8, BinaryVectorWriter::Position::Begin);
+		Writer.WriteInteger(SectionOffset - Writer.GetPosition(), sizeof(uint32_t));
+		Writer.WriteInteger(GeometrySections.Elements[i].Primitives.Elements.size(), sizeof(uint32_t));
+		Writer.Seek(Jumpback, BinaryVectorWriter::Position::Begin);
+	}
+
+	for (int i = 0; i < GeometrySections.Elements.size(); i++)
+	{
+		uint32_t SectionOffset = Writer.GetPosition();
+
+		for (hknpMeshShapeGeometrySectionVertex16_3& Vertex : GeometrySections.Elements[i].VertexBuffer.Elements)
+		{
+			Vertex.Write(Writer);
+		}
+
+		AlignWriter(Writer, 16);
+		uint32_t Jumpback = Writer.GetPosition();
+		Writer.Seek(GeometrySectionBaseOffsets[i] + 16, BinaryVectorWriter::Position::Begin);
+		Writer.WriteInteger(SectionOffset - Writer.GetPosition(), sizeof(uint32_t));
+		Writer.WriteInteger(GeometrySections.Elements[i].VertexBuffer.Elements.size() * 6, sizeof(uint32_t));
+		Writer.Seek(Jumpback, BinaryVectorWriter::Position::Begin);
+	}
+
+	for (int i = 0; i < GeometrySections.Elements.size(); i++)
+	{
+		uint32_t SectionOffset = Writer.GetPosition();
+
+		for (uint8_t BitField : GeometrySections.Elements[i].InteriorPrimitiveBitField.Elements)
+		{
+			Writer.WriteInteger(BitField, sizeof(uint8_t));
+		}
+
+		AlignWriter(Writer, 16);
+		uint32_t Jumpback = Writer.GetPosition();
+		Writer.Seek(GeometrySectionBaseOffsets[i] + 24, BinaryVectorWriter::Position::Begin);
+		Writer.WriteInteger(SectionOffset - Writer.GetPosition(), sizeof(uint32_t));
+		Writer.WriteInteger(GeometrySections.Elements[i].InteriorPrimitiveBitField.Elements.size(), sizeof(uint32_t));
+		Writer.Seek(Jumpback, BinaryVectorWriter::Position::Begin);
+	}
+
+	uint32_t Jumpback = Writer.GetPosition();
+	Writer.Seek(0xE0, BinaryVectorWriter::Position::Begin);
+	Writer.WriteInteger(GeometrySectionBaseOffsets[0] - Writer.GetPosition(), sizeof(uint32_t));
+	Writer.WriteInteger(GeometrySections.Elements.size(), sizeof(uint32_t));
+	Writer.Seek(Jumpback, BinaryVectorWriter::Position::Begin);
+
+	//this->PrimitiveMapping.Write(Writer, Writer.GetPosition());
+	//Writer.Seek(this->PrimitiveMapping.LastElementOffset, BinaryVectorWriter::Position::Begin);
 }
 
 void PhiveShape::WriteTNASection(BinaryVectorWriter& Writer)
@@ -808,7 +896,7 @@ void PhiveShape::WriteTNASection(BinaryVectorWriter& Writer)
 	Writer.Seek(End, BinaryVectorWriter::Position::Begin);
 }
 
-void PhiveShape::ReadTNASection(BinaryVectorReader Reader)
+void PhiveShape::ReadTNASection(BinaryVectorReader Reader, bool Splatoon)
 {
 	uint32_t Size = BitFieldToSize(Reader.ReadUInt32(true));
 	uint32_t TargetAddress = Reader.GetPosition() + Size - 4; //-4 = Size(3) + Flags(1)
@@ -825,16 +913,19 @@ void PhiveShape::ReadTNASection(BinaryVectorReader Reader)
 		m_TNAItems[i].TemplateCount = ReadPackedInt(Reader);
 		m_TNAItems[i].Tag = m_TagStringTable[m_TNAItems[i].Index];
 
-		m_TNAItems[i].Parameters.resize(m_TNAItems[i].TemplateCount);
-		for (int j = 0; j < m_TNAItems[i].TemplateCount; j++)
+		if (!Splatoon)
 		{
-			m_TNAItems[i].Parameters[j].Index = ReadPackedInt(Reader);
-			m_TNAItems[i].Parameters[j].Value = ReadPackedInt(Reader);
-			m_TNAItems[i].Parameters[j].Parameter = m_TagStringTable[m_TNAItems[i].Parameters[j].Index];
-
-			if (m_TNAItems[i].Parameters[j].Parameter.at(0) == 't')
+			m_TNAItems[i].Parameters.resize(m_TNAItems[i].TemplateCount);
+			for (int j = 0; j < m_TNAItems[i].TemplateCount; j++)
 			{
-				m_TNAItems[i].Parameters[j].ValueString = m_TagStringTable[m_TNAItems[i].Parameters[j].Value - 1];
+				m_TNAItems[i].Parameters[j].Index = ReadPackedInt(Reader);
+				m_TNAItems[i].Parameters[j].Value = ReadPackedInt(Reader);
+				m_TNAItems[i].Parameters[j].Parameter = m_TagStringTable[m_TNAItems[i].Parameters[j].Index];
+
+				if (m_TNAItems[i].Parameters[j].Parameter.at(0) == 't')
+				{
+					m_TNAItems[i].Parameters[j].ValueString = m_TagStringTable[m_TNAItems[i].Parameters[j].Value - 1];
+				}
 			}
 		}
 	}
@@ -885,85 +976,92 @@ PhiveShape::hknpMeshShape& PhiveShape::GetMeshShape()
 
 uint32_t PhiveShape::WriteItemSection(BinaryVectorWriter& Writer)
 {
-	uint32_t JumpbackIndx = Writer.GetPosition();
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x7C);
-	Writer.WriteBytes("INDX");
+	if (PhiveItemSection.empty())
+	{
+		uint32_t JumpbackIndx = Writer.GetPosition();
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x7C);
+		Writer.WriteBytes("INDX");
 
-	uint32_t JumbackItem = Writer.GetPosition();
-	Writer.WriteByte(0x40);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x74);
-	Writer.WriteBytes("ITEM");
+		uint32_t JumbackItem = Writer.GetPosition();
+		Writer.WriteByte(0x40);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x74);
+		Writer.WriteBytes("ITEM");
 
-	Writer.Seek(12, BinaryVectorWriter::Position::Current); //Default section
+		Writer.Seek(12, BinaryVectorWriter::Position::Current); //Default section
 
-	//hknpMeshShape
-	Writer.WriteByte(0x01);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x10);
-	Writer.WriteInteger(0, sizeof(uint32_t));
-	Writer.WriteInteger(1, sizeof(uint32_t));
+		//hknpMeshShape
+		Writer.WriteByte(0x01);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x10);
+		Writer.WriteInteger(0, sizeof(uint32_t));
+		Writer.WriteInteger(1, sizeof(uint32_t));
 
-	//ShapeTagTable
-	Writer.WriteByte(0x05);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.ShapeTagTableOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.ShapeTagTable.Elements.size(), sizeof(uint32_t));
+		//ShapeTagTable
+		Writer.WriteByte(0x05);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.ShapeTagTableOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.ShapeTagTable.Elements.size(), sizeof(uint32_t));
 
-	//NodeTree
-	Writer.WriteByte(0x10);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.TopLevelTreeOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.TopLevelTree.Nodes.Elements.size(), sizeof(uint32_t));
+		//NodeTree
+		Writer.WriteByte(0x10);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.TopLevelTreeOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.TopLevelTree.Nodes.Elements.size(), sizeof(uint32_t));
 
-	//GeometrySection
-	Writer.WriteByte(0x09);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.GeometrySectionsOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.size(), sizeof(uint32_t));
+		//GeometrySection
+		Writer.WriteByte(0x09);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.GeometrySectionsOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.size(), sizeof(uint32_t));
 
-	//Aabb8TreeNode
-	Writer.WriteByte(0x2D);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().SectionBvhOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().SectionBvh.Elements.size(), sizeof(uint32_t));
+		//Aabb8TreeNode
+		Writer.WriteByte(0x2D);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().SectionBvhOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().SectionBvh.Elements.size(), sizeof(uint32_t));
 
-	//Primitives
-	Writer.WriteByte(0x2F);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().PrimitivesOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().Primitives.Elements.size(), sizeof(uint32_t));
+		//Primitives
+		Writer.WriteByte(0x2F);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().PrimitivesOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().Primitives.Elements.size(), sizeof(uint32_t));
 
-	//VertexBuffer (hkUint8)
-	Writer.WriteByte(0x16);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().VertexBufferOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().VertexBuffer.Elements.size() * 6 + 2, sizeof(uint32_t));
+		//VertexBuffer (hkUint8)
+		Writer.WriteByte(0x16);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().VertexBufferOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().VertexBuffer.Elements.size() * 6 + 2, sizeof(uint32_t));
 
-	//Aabb8TreeNode
-	Writer.WriteByte(0x16);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x00);
-	Writer.WriteByte(0x20);
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().InteriorPrimitiveBitFieldOffset - 0x50, sizeof(uint32_t));
-	Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().InteriorPrimitiveBitField.Elements.size(), sizeof(uint32_t));
+		//Aabb8TreeNode
+		Writer.WriteByte(0x16);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x00);
+		Writer.WriteByte(0x20);
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().InteriorPrimitiveBitFieldOffset - 0x50, sizeof(uint32_t));
+		Writer.WriteInteger(MeshShape.GeometrySections.Elements.back().InteriorPrimitiveBitField.Elements.size(), sizeof(uint32_t));
+	}
+	else
+	{
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(PhiveItemSection.data()), PhiveItemSection.size());
+	}
 
 	uint32_t End = Writer.GetPosition();
 
@@ -997,11 +1095,11 @@ void PhiveShape::ReadItemSection(BinaryVectorReader Reader)
 
 void PhiveShape::ReadPhiveTables(BinaryVectorReader& Reader)
 {
-	this->m_PhiveTable1.resize(0x20);
-	Reader.ReadStruct(this->m_PhiveTable1.data(), 0x20);
+	this->m_PhiveTable1.resize(this->m_Header.TableSize0);
+	Reader.ReadStruct(this->m_PhiveTable1.data(), this->m_Header.TableSize0);
 
-	this->m_PhiveTable2.resize(0x10);
-	Reader.ReadStruct(this->m_PhiveTable2.data(), 0x10);
+	this->m_PhiveTable2.resize(this->m_Header.TableSize1);
+	Reader.ReadStruct(this->m_PhiveTable2.data(), this->m_Header.TableSize1);
 }
 
 void PhiveShape::ReadTBDYSection(BinaryVectorReader Reader)
@@ -1010,8 +1108,8 @@ void PhiveShape::ReadTBDYSection(BinaryVectorReader Reader)
 	uint32_t Size = BitFieldToSize(Reader.ReadUInt32(true));
 
 	Reader.Seek(Jumpback, BinaryVectorReader::Position::Begin);
-	this->m_TagBody.resize(Size);
-	Reader.ReadStruct(this->m_TagBody.data(), Size);
+	this->TagBody.resize(Size);
+	Reader.ReadStruct(this->TagBody.data(), Size);
 }
 
 void PhiveShape::ReadTHSHSection(BinaryVectorReader Reader)
@@ -1020,8 +1118,8 @@ void PhiveShape::ReadTHSHSection(BinaryVectorReader Reader)
 	uint32_t Size = BitFieldToSize(Reader.ReadUInt32(true));
 
 	Reader.Seek(Jumpback, BinaryVectorReader::Position::Begin);
-	this->m_TagHashes.resize(Size);
-	Reader.ReadStruct(this->m_TagHashes.data(), Size);
+	this->TagHashes.resize(Size);
+	Reader.ReadStruct(this->TagHashes.data(), Size);
 }
 
 std::vector<float> PhiveShape::ToVertices()
@@ -1080,9 +1178,6 @@ std::vector<unsigned int> PhiveShape::ToIndices()
 			Result.push_back(Primitive.IdD + Base);
 		}
 		Base += Section.VertexBuffer.Elements.size();
-
-
-
 	}
 
 	/*
@@ -1131,7 +1226,7 @@ void PhiveShape::WriteStringTable(BinaryVectorWriter& Writer, std::string Magic,
 	Writer.Seek(End, BinaryVectorWriter::Position::Begin);
 }
 
-std::vector<unsigned char> PhiveShape::ToBinary(std::vector<float> Vertices, std::vector<unsigned int> Indices)
+std::vector<unsigned char> PhiveShape::ToBinary()
 {
 	BinaryVectorWriter Writer;
 
@@ -1146,6 +1241,7 @@ std::vector<unsigned char> PhiveShape::ToBinary(std::vector<float> Vertices, std
 
 	Writer.Seek(0x50, BinaryVectorWriter::Position::Begin);
 
+	/*
 	Vector3F SmallestVertex(100, 100, 100);
 	Vector3F BiggestVertex(-100, -100, -100);
 	for (int i = 0; i < Vertices.size() / 3; i++) //Import new vertices
@@ -1459,15 +1555,15 @@ std::vector<unsigned char> PhiveShape::ToBinary(std::vector<float> Vertices, std
 	MeshShape.TopLevelTree.Nodes.Elements[2].FourAabb.MinZ[0] = SmallestVertex.GetZ();
 	MeshShape.TopLevelTree.Nodes.Elements[2].FourAabb.MaxZ[0] = BiggestVertex.GetZ();
 
-	/*
 	std::vector<hknpAabb8TreeNode> NodeTree;
 	NodeTree.push_back(MeshShape.GeometrySections.Elements.back().SectionBvh.Elements[2]);
 	NodeTree.push_back(MeshShape.GeometrySections.Elements.back().SectionBvh.Elements[0]);
 	NodeTree.push_back(MeshShape.GeometrySections.Elements.back().SectionBvh.Elements[1]);
 	MeshShape.GeometrySections.Elements.back().SectionBvh.Elements = NodeTree;
-	*/
 
 	MeshShape.GeometrySections.Elements.back().SectionBvh.Elements.pop_back();
+
+	*/
 
 	//Collision mesh
 	MeshShape.Write(Writer);
@@ -1493,8 +1589,8 @@ std::vector<unsigned char> PhiveShape::ToBinary(std::vector<float> Vertices, std
 
 	WriteStringTable(Writer, "FST1", &m_FieldStringTable);
 
-	Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(this->m_TagBody.data()), this->m_TagBody.size());
-	Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(this->m_TagHashes.data()), this->m_TagHashes.size());
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(this->TagBody.data()), this->TagBody.size());
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<char*>(this->TagHashes.data()), this->TagHashes.size());
 
 	//8 byte padding
 	Writer.WriteByte(0x40);
@@ -1545,16 +1641,16 @@ std::vector<unsigned char> PhiveShape::ToBinary(std::vector<float> Vertices, std
 	return Data;
 }
 
-void PhiveShape::WriteToFile(std::string Path, std::vector<float> Vertices, std::vector<unsigned int> Indices)
+void PhiveShape::WriteToFile(std::string Path)
 {
 	std::ofstream File(Path, std::ios::binary);
-	std::vector<unsigned char> Binary = ToBinary(Vertices, Indices);
+	std::vector<unsigned char> Binary = ToBinary();
 	std::copy(Binary.cbegin(), Binary.cend(),
 		std::ostream_iterator<unsigned char>(File));
 	File.close();
 }
 
-PhiveShape::PhiveShape(std::vector<unsigned char> Bytes)
+PhiveShape::PhiveShape(std::vector<unsigned char> Bytes, bool Splatoon)
 {
 	BinaryVectorReader Reader(Bytes, true);
 
@@ -1568,7 +1664,7 @@ PhiveShape::PhiveShape(std::vector<unsigned char> Bytes)
 	ReadStringTable(Reader, &m_FieldStringTable);
 
 	Reader.Seek(FindSection(Reader, "TNA1") - 8, BinaryVectorReader::Position::Begin); //-8 = Magic(4) + Size(3) + Flags(1)
-	ReadTNASection(Reader);
+	ReadTNASection(Reader, Splatoon);
 
 	Reader.Seek(FindSection(Reader, "ITEM") - 8, BinaryVectorReader::Position::Begin); //-8 = Magic(4) + Size(3) + Flags(1)
 	ReadItemSection(Reader);
@@ -1584,10 +1680,6 @@ PhiveShape::PhiveShape(std::vector<unsigned char> Bytes)
 			Reader.Seek(DataSectionBaseOffset + DataItem.DataOffset, BinaryVectorReader::Position::Begin);
 			std::cout << "Decoding hknpMeshShape" << std::endl;
 			MeshShape.Read(Reader);
-			std::cout << MeshShape.GeometrySections.Elements[0].VertexBuffer.Elements[1].X << std::endl;
-			std::cout << MeshShape.GeometrySections.Elements[0].VertexBuffer.Elements[1].Y << std::endl;
-			std::cout << MeshShape.GeometrySections.Elements[0].VertexBuffer.Elements[1].Z << std::endl;
-
 		}
 	}
 

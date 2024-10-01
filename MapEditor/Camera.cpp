@@ -29,6 +29,7 @@ void Camera::UpdateMatrix(float FOVdeg, float nearPlane, float farPlane)
 
 void Camera::Matrix(Shader* shader, const char* uniform)
 {
+	//shader->Activate();
 	glUniformMatrix4fv(glGetUniformLocation(shader->ID, uniform), 1, GL_FALSE, glm::value_ptr(CameraMatrix));
 }
 
@@ -40,14 +41,64 @@ glm::mat4& Camera::GetProjectionMatrix() {
 	return this->Projection;
 }
 
+void Camera::MouseWheelCallback(GLFWwindow* window, double xOffset, double yOffset)
+{
+	if (!WindowHovered)
+		return;
+
+	float NewSpeed = (glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) > 0 ? yOffset * BoostMultiplier : yOffset);
+	Position += (float)NewSpeed * Orientation;
+}
+
 void Camera::Inputs(float FramesPerSecond, ImVec2 WindowPos)
 {
-	if (WindowHovered) {
+	if (glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE && !FirstClick)
+	{
+		glfwSetCursorPos(pWindow, MousePosStart.x, MousePosStart.y);
+		glfwSetInputMode(pWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		FirstClick = true;
+	}
+
+	if (glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS && glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS && !ImGui::GetIO().WantTextInput)
+	{
+		float NewSpeed = (glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) > 0 ? Speed * BoostMultiplier : Speed) * (60 / FramesPerSecond);
+
+		// Handles key inputs
+		if (glfwGetKey(pWindow, GLFW_KEY_W) == GLFW_PRESS)
+		{
+			Position += NewSpeed * Orientation;
+		}
+		if (glfwGetKey(pWindow, GLFW_KEY_A) == GLFW_PRESS)
+		{
+			Position += NewSpeed * -glm::normalize(glm::cross(Orientation, Up));
+		}
+		if (glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS)
+		{
+			Position += NewSpeed * -Orientation;
+		}
+		if (glfwGetKey(pWindow, GLFW_KEY_D) == GLFW_PRESS)
+		{
+			Position += NewSpeed * glm::normalize(glm::cross(Orientation, Up));
+		}
+		if (glfwGetKey(pWindow, GLFW_KEY_E) == GLFW_PRESS)
+		{
+			Position += NewSpeed * Up;
+		}
+		if (glfwGetKey(pWindow, GLFW_KEY_Q) == GLFW_PRESS)
+		{
+			Position += NewSpeed * -Up;
+		}
+
+		FirstClick = true;
+		return;
+	}
+	if(WindowHovered)
+	{
 		if (glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS)
 		{
 			ImGui::SetWindowFocus(0);
 
-			float NewSpeed = Speed * (60 / FramesPerSecond);
+			float NewSpeed = (glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) > 0 ? Speed * BoostMultiplier : Speed) * (60 / FramesPerSecond);
 
 			// Handles key inputs
 			if (glfwGetKey(pWindow, GLFW_KEY_W) == GLFW_PRESS)
@@ -65,22 +116,6 @@ void Camera::Inputs(float FramesPerSecond, ImVec2 WindowPos)
 			if (glfwGetKey(pWindow, GLFW_KEY_D) == GLFW_PRESS)
 			{
 				Position += NewSpeed * glm::normalize(glm::cross(Orientation, Up));
-			}
-			if (glfwGetKey(pWindow, GLFW_KEY_SPACE) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_E) == GLFW_PRESS)
-			{
-				Position += NewSpeed * Up;
-			}
-			if (glfwGetKey(pWindow, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_Q) == GLFW_PRESS)
-			{
-				Position += NewSpeed * -Up;
-			}
-			if (glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-			{
-				Speed = 10.2f; //1.2f
-			}
-			else if (glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) == GLFW_RELEASE)
-			{
-				Speed = 0.5f; //.1f
 			}
 
 			// Handles mouse inputs
@@ -126,16 +161,6 @@ void Camera::Inputs(float FramesPerSecond, ImVec2 WindowPos)
 
 			// Sets mouse cursor to the middle of the screen so that it doesn't end up roaming around
 			glfwSetCursorPos(pWindow, WindowPos.x + (Width / 2), WindowPos.y + (Height / 2));
-		}
-		else if (glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE)
-		{
-			if (!FirstClick) {
-				glfwSetCursorPos(pWindow, MousePosStart.x, MousePosStart.y);
-				// Unhides cursor since camera is not looking around anymore
-				glfwSetInputMode(pWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-				// Makes sure the next time the camera looks around it doesn't jump
-				FirstClick = true;
-			}
 		}
 	}
 }

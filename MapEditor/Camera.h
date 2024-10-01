@@ -26,7 +26,8 @@ public:
 	bool WindowHovered = false;
 
 	// Adjust the speed of the camera and it's sensitivity when looking around
-	float Speed = 0.6f;
+	float Speed = 0.5f;
+	float BoostMultiplier = 10.0f;
 	float Sensitivity = 100.0f;
 
 	GLFWwindow* pWindow = nullptr;
@@ -41,6 +42,7 @@ public:
 	// Handles camera inputs
 	void Inputs(float FramesPerSecond, ImVec2 WindowPos);
 	bool IsInCameraMovement();
+	void MouseWheelCallback(GLFWwindow* window, double xOffset, double yOffset);
 
 	glm::mat4& GetViewMatrix();
 	glm::mat4& GetProjectionMatrix();

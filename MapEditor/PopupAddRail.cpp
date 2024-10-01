@@ -10,12 +10,23 @@ std::string PopupAddRail::Gyml = "";
 std::string PopupAddRail::Name = "";
 void (*PopupAddRail::Func)(uint64_t, std::string, std::string) = nullptr;
 
+float PopupAddRail::SizeX = 334.0f;
+float PopupAddRail::SizeY = 113.0f;
+const float PopupAddRail::OriginalSizeX = 334.0f;
+const float PopupAddRail::OriginalSizeY = 113.0f;
+
+void PopupAddRail::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupAddRail::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(334, 113));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Add rail");
 		if (ImGui::BeginPopupModal("Add rail", NULL, ImGuiWindowFlags_NoResize))
 		{

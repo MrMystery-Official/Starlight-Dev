@@ -2,6 +2,12 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
+#include "Bfres.h"
+#include "PhiveNavMesh.h"
+#include "PhiveStaticCompound.h"
+#include <optional>
+#include <glm/glm.hpp>
 
 namespace SceneMgr
 {
@@ -17,7 +23,11 @@ namespace SceneMgr
 	};
 
 	extern SceneMgr::Type SceneType;
+	extern Mesh NavigationMeshModel;
+	extern std::vector<PhiveStaticCompound> mStaticCompounds;
 
 	void LoadScene(SceneMgr::Type Type, std::string Identifier);
+	PhiveStaticCompound* GetStaticCompoundForPos(glm::vec3 Pos);
+	Mesh LoadNavMeshBfres(PhiveNavMesh& NavMesh);
 	void Reload();
 };

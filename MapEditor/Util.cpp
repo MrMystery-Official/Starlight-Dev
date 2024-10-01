@@ -3,17 +3,18 @@
 #include <sstream>
 #include <filesystem>
 #include <windows.h>
-
-#define PI 3.14159265358979323846
+#include <fstream>
+#include "Logger.h"
+#include <glm/glm.hpp>
 
 float Util::RadiansToDegrees(float Radians)
 {
-	return Radians * (180 / PI);
+	return glm::degrees(Radians);
 }
 
 float Util::DegreesToRadians(float Degrees)
 {
-	return Degrees * (PI / 180);
+	return glm::radians(Degrees);
 }
 
 bool Util::FileExists(std::string File)
@@ -22,9 +23,19 @@ bool Util::FileExists(std::string File)
 	return (stat(File.c_str(), &buffer) == 0);
 }
 
+void Util::RemoveFile(const std::string& Path)
+{
+	std::filesystem::remove(Path);
+}
+
 void Util::CreateDir(std::string Path)
 {
 	std::filesystem::create_directories(Path);
+}
+
+void Util::CopyFileToDest(const std::string& Source, const std::string& Dest)
+{
+	std::filesystem::copy_file(Source, Dest);
 }
 
 long Util::GetFileSize(std::string Path)
@@ -107,4 +118,47 @@ std::string Util::WideCharToString(wchar_t WChar)
 	std::string Result(2, 0);
 	WideCharToMultiByte(CP_UTF8, 0, &WChar, 1, &Result[0], 2, NULL, NULL);
 	return Result;
+}
+
+std::vector<unsigned char> Util::ReadFile(std::string Path)
+{
+	std::ifstream File(Path, std::ios::binary);
+
+	if (!File.eof() && !File.fail())
+	{
+		File.seekg(0, std::ios_base::end);
+		std::streampos FileSize = File.tellg();
+
+		std::vector<unsigned char> Bytes(FileSize);
+
+		File.seekg(0, std::ios_base::beg);
+		File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
+
+		File.close();
+
+		return Bytes;
+	}
+	else
+	{
+		Logger::Error("Util", "Could not open file " + Path);
+	}
+}
+
+void Util::WriteFile(std::string Path, std::vector<unsigned char> Data)
+{
+	std::ofstream File(Path, std::ios::binary);
+	std::copy(Data.cbegin(), Data.cend(),
+		std::ostream_iterator<unsigned char>(File));
+	File.close();
+}
+
+bool Util::CompareFloatsWithTolerance(float a, float b, float Tolerance)
+{
+	return std::fabs(a - b) <= Tolerance;
+}
+
+bool Util::IsNumber(std::string Number)
+{
+	return !Number.empty() && std::find_if(Number.begin(),
+		Number.end(), [](unsigned char c) { return !std::isdigit(c); }) == Number.end();
 }

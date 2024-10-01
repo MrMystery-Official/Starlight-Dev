@@ -1,15 +1,22 @@
 #pragma once
 
 #include <string>
+#include <functional>
 
 namespace PopupGeneralInputPair
 {
 	extern bool IsOpen;
 	extern std::string Key;
 	extern std::string Value;
-	extern void (*Func)(std::string, std::string);
+	extern std::function<void(std::string, std::string)> Func;
 	extern std::string PopupTitle;
+	extern float SizeX;
+	extern float SizeY;
+	extern const float OriginalSizeX;
+	extern const float OriginalSizeY;
+
+	void UpdateSize(float Scale);
 
 	void Render();
-	void Open(std::string Title, void (*Callback)(std::string, std::string));
+	void Open(std::string Title, std::function<void(std::string, std::string)> Callback);
 };

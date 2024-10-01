@@ -16,9 +16,8 @@ public:
 	std::string Sampler;
 	GLenum Slot;
 	Texture(const char* image, GLenum texType, GLenum slot, GLenum format, GLenum pixelType);
-	Texture(std::vector<unsigned char> Pixels, int Width, int Height, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType, std::string TexSampler);
-	Texture(std::vector<TextureToGo*>& Textures, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType);
-	Texture(TextureToGo* TxtToGo, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType, std::string TexSampler);
+	Texture(std::vector<unsigned char> Pixels, int Width, int Height, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType, std::string TexSampler, bool GenMipMaps = true);
+	Texture(TextureToGo::Surface* Surface, GLenum Slot, bool GenMipMaps = true, GLenum TextureFilter = GL_LINEAR);
 	Texture() {};
 
 	// Assigns a texture unit to a texture

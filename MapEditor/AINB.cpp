@@ -1,6 +1,7 @@
 #include "AINB.h"
 
 #include "Logger.h"
+#include "StarlightData.h"
 #include <iostream>
 
 std::ostream& operator<<(std::ostream& os, Vector3F& vec) {
@@ -282,8 +283,8 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 			bool ValidIndex = (bool)(BitField >> 31);
 			if (ValidIndex) {
 				GEntry.Index = (BitField >> 24) & 0b1111111;
-				if (GEntry.Index > MaxGlobalIndex) {
-					this->MaxGlobalIndex = GEntry.Index;
+				if (GEntry.Index >= MaxGlobalIndex) {
+					this->MaxGlobalIndex = GEntry.Index + 1;
 				}
 			}
 			GEntry.Name = ReadStringFromStringPool(&Reader, BitField & 0x3FFFFF);
@@ -319,8 +320,8 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 			Entry.GlobalValueType = i;
 		}
 	}
-	this->GlobalReferences.resize(this->MaxGlobalIndex + 1);
-	for (int i = 0; i < this->MaxGlobalIndex + 1; i++) {
+	this->GlobalReferences.resize(this->MaxGlobalIndex);
+	for (int i = 0; i < this->MaxGlobalIndex; i++) {
 		GlobalFileRef FileRef;
 		FileRef.FileName = ReadStringFromStringPool(&Reader, Reader.ReadUInt32());
 		FileRef.NameHash = Reader.ReadUInt32();
@@ -436,7 +437,7 @@ AINBFile::AINBFile(std::vector<unsigned char> Bytes, bool SkipErrors) {
 					}
 					if ((Flags & 0xc200) == 0xc200) {
 						Logger::Warning("AINBDecoder", "Found ImmediateParameter using EXB function, which is currently unsupported. Saving will break this file, please send the following message to mrmystery0778 on Discord");
-						Logger::Warning("AINBDecoder", "Line 437, Flag 0xc200 found. GlobalParamIndex skipped. Name: " + this->Header.FileName + ", Category: " + this->Header.FileCategory);
+						Logger::Warning("AINBDecoder", "Line 439, Flag 0xc200 found. GlobalParamIndex skipped. Name: " + this->Header.FileName + ", Category: " + this->Header.FileCategory);
 					}
 					else if (Flags & 0x8000)
 					{
@@ -1266,6 +1267,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 			AttachmentIndices.push_back(Index);
 		}
 
+		/*
 		for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 		{
 			for (AINBFile::InputEntry Param : Node.InputParameters[i])
@@ -1274,18 +1276,6 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				{
 					for (AINBFile::MultiEntry Entry : Param.Sources)
 					{
-						/*
-						bool Found = false;
-						for (AINBFile::MultiEntry MultiEntry : Multis)
-						{
-							if (MultiEntry.NodeIndex == Entry.NodeIndex && MultiEntry.ParameterIndex == Entry.ParameterIndex)
-							{
-								Found = true;
-								break;
-							}
-						}
-						if (!Found) Multis.push_back(Entry);
-						*/
 						Multis.push_back(Entry);
 
 						bool FoundPreconditionFlagDest = false;
@@ -1324,18 +1314,92 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				}
 			}
 		}
-
-		/*
-		for (int i = 0; i < Node.PreconditionNodes.size(); i++)
-		{
-			PreconditionNodes.insert({ Node.BasePreconditionNode + i, Node.PreconditionNodes[i]});
-		}
 		*/
+
+		for (int i = 0; i < AINBFile::ValueTypeCount; i++)
+		{
+			for (AINBFile::InputEntry Param : Node.InputParameters[i])
+			{
+				if (!Param.Sources.empty())
+				{
+					for (AINBFile::MultiEntry Entry : Param.Sources)
+					{
+						Multis.push_back(Entry);
+					}
+				}
+			}
+		}
+
+		if (this->Header.FileCategory == "Logic")
+		{
+			if (std::find(Node.Flags.begin(), Node.Flags.end(), AINBFile::FlagsStruct::IsPreconditionNode) == Node.Flags.end())
+				Node.Flags.push_back(AINBFile::FlagsStruct::IsPreconditionNode);
+		}
+		else
+		{
+			for (int i = 0; i < AINBFile::ValueTypeCount; i++)
+			{
+				for (AINBFile::InputEntry& Param : Node.InputParameters[i])
+				{
+					if (!Param.Sources.empty())
+					{
+						for (AINBFile::MultiEntry& Entry : Param.Sources)
+						{
+							if (std::find(this->Nodes[Entry.NodeIndex].Flags.begin(), this->Nodes[Entry.NodeIndex].Flags.end(), AINBFile::FlagsStruct::IsPreconditionNode) == this->Nodes[Entry.NodeIndex].Flags.end())
+							{
+								//Checking if node is a linked node through standard links
+								bool NeedsPreconditionFlag = true;
+								for (AINBFile::LinkedNodeInfo& Info : this->Nodes[Entry.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink])
+								{
+									if (Info.NodeIndex == Node.NodeIndex)
+									{
+										NeedsPreconditionFlag = false;
+										break;
+									}
+								}
+
+								if(NeedsPreconditionFlag)
+									this->Nodes[Entry.NodeIndex].Flags.push_back(AINBFile::FlagsStruct::IsPreconditionNode);
+							}
+						}
+					}
+					if (Param.NodeIndex >= 0) //Input param is linked to other node
+					{
+						if (std::find(this->Nodes[Param.NodeIndex].Flags.begin(), this->Nodes[Param.NodeIndex].Flags.end(), AINBFile::FlagsStruct::IsPreconditionNode) == this->Nodes[Param.NodeIndex].Flags.end())
+						{
+							//Checking if node is a linked node through standard links
+							bool NeedsPreconditionFlag = true;
+							for (AINBFile::LinkedNodeInfo& Info : this->Nodes[Param.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink])
+							{
+								if (Info.NodeIndex == Node.NodeIndex)
+								{
+									NeedsPreconditionFlag = false;
+									break;
+								}
+							}
+							if(NeedsPreconditionFlag)
+								this->Nodes[Param.NodeIndex].Flags.push_back(AINBFile::FlagsStruct::IsPreconditionNode);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	for (AINBFile::Node& Node : this->Nodes)
 	{
 		Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink].clear();
+
+		for (int Type = 0; Type < AINBFile::ValueTypeCount; Type++)
+		{
+			for (AINBFile::InputEntry& Entry : Node.InputParameters[Type])
+			{
+				if (Entry.NodeIndex == -1)
+				{
+					Entry.ParameterIndex = 0;
+				}
+			}
+		}
 	}
 
 	for (AINBFile::Node& Node : this->Nodes)
@@ -1346,7 +1410,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 			{
 				if (Entry.NodeIndex >= 0)
 				{
-					if (Entry.ValueType == (int)AINBFile::ValueType::Bool || Entry.ValueType == (int)AINBFile::ValueType::Float)
+					if (Type == (int)AINBFile::ValueType::Bool || Type == (int)AINBFile::ValueType::Float)
 					{
 						AINBFile::LinkedNodeInfo Info;
 						Info.NodeIndex = Entry.NodeIndex;
@@ -1357,18 +1421,31 @@ std::vector<unsigned char> AINBFile::ToBinary()
 					{
 						AINBFile::LinkedNodeInfo Info;
 						Info.NodeIndex = Node.NodeIndex;
-						Info.Parameter = this->Nodes[Entry.NodeIndex].OutputParameters[Entry.ValueType][Entry.ParameterIndex].Name;
+						Info.Parameter = this->Nodes[Entry.NodeIndex].OutputParameters[Type][Entry.ParameterIndex].Name;
 						this->Nodes[Entry.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink].push_back(Info);
 					}
 					continue;
 				}
-				for (AINBFile::MultiEntry Multi : Entry.Sources)
+				for (AINBFile::MultiEntry& Multi : Entry.Sources)
 				{
-					if (Entry.ValueType == (int)AINBFile::ValueType::Bool || Entry.ValueType == (int)AINBFile::ValueType::Float)
+					if (Type == (int)AINBFile::ValueType::Bool || Type == (int)AINBFile::ValueType::Float)
 					{
 						AINBFile::LinkedNodeInfo Info;
 						Info.NodeIndex = Multi.NodeIndex;
-						Info.Parameter = Entry.Name;
+						Info.Parameter = this->Nodes[Multi.NodeIndex].OutputParameters[Type][Multi.ParameterIndex].Name;
+						/*
+						bool Found = false;
+						for (AINBFile::LinkedNodeInfo& ChildInfo : this->Nodes[Multi.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink])
+						{
+							if (ChildInfo.Parameter == Info.Parameter)
+							{
+								Found = true;
+								break;
+							}
+						}
+						if(!Found)
+							this->Nodes[Multi.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink].push_back(Info);
+							*/
 						Node.LinkedNodes[(int)AINBFile::LinkedNodeMapping::OutputBoolInputFloatInputLink].push_back(Info);
 					}
 					else
@@ -1406,12 +1483,44 @@ std::vector<unsigned char> AINBFile::ToBinary()
 			{
 				if (Entry.NodeIndex >= 0)
 				{
+					if (std::find(Node.PreconditionNodes.begin(), Node.PreconditionNodes.end(), NodeIndexToPreconditionNodeIndex[Entry.NodeIndex]) != Node.PreconditionNodes.end())
+						continue;
+
+					bool NeedsPreconditionNode = true;
+					for (AINBFile::LinkedNodeInfo& Info : this->Nodes[Entry.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink])
+					{
+						if (Info.NodeIndex == Node.NodeIndex)
+						{
+							NeedsPreconditionNode = false;
+							break;
+						}
+					}
+
+					if (!NeedsPreconditionNode)
+						continue;
+
 					Node.PreconditionNodes.push_back(NodeIndexToPreconditionNodeIndex[Entry.NodeIndex]);
 					Node.PreconditionCount++;
 					PreconditionNodes.push_back(NodeIndexToPreconditionNodeIndex[Entry.NodeIndex]);
 				}
 				for (AINBFile::MultiEntry& Multi : Entry.Sources)
 				{
+					if (std::find(Node.PreconditionNodes.begin(), Node.PreconditionNodes.end(), NodeIndexToPreconditionNodeIndex[Multi.NodeIndex]) != Node.PreconditionNodes.end())
+						continue;
+
+					bool NeedsPreconditionNode = true;
+					for (AINBFile::LinkedNodeInfo& Info : this->Nodes[Multi.NodeIndex].LinkedNodes[(int)AINBFile::LinkedNodeMapping::StandardLink])
+					{
+						if (Info.NodeIndex == Node.NodeIndex)
+						{
+							NeedsPreconditionNode = false;
+							break;
+						}
+					}
+
+					if (!NeedsPreconditionNode)
+						continue;
+
 					Node.PreconditionNodes.push_back(NodeIndexToPreconditionNodeIndex[Multi.NodeIndex]);
 					Node.PreconditionCount++;
 					PreconditionNodes.push_back(NodeIndexToPreconditionNodeIndex[Multi.NodeIndex]);
@@ -1652,20 +1761,23 @@ std::vector<unsigned char> AINBFile::ToBinary()
 				}
 				for (AINBFile::MultiEntry Parameter : Entry.Sources)
 				{
-					EXBCount++;
-					uint32_t Size = 0;
-					for (EXB::InstructionStruct Instruction : Parameter.Function.Instructions)
+					if (Parameter.Function.InstructionCount > 0 && Parameter.Function.Instructions.size() > 0)
 					{
-						uint32_t TypeSize = Instruction.DataType == EXB::Type::Vec3f ? 12 : 4;
-						if (Instruction.LHSSource != EXB::Source::Unknown || Instruction.RHSSource != EXB::Source::Unknown)
+						EXBCount++;
+						uint32_t Size = 0;
+						for (EXB::InstructionStruct Instruction : Parameter.Function.Instructions)
 						{
-							if (Instruction.LHSSource == EXB::Source::Output)
-								Size = std::max(Size, Instruction.LHSIndexValue + TypeSize);
-							if (Instruction.RHSSource == EXB::Source::Input)
-								Size = std::max(Size, Instruction.RHSIndexValue + TypeSize);
+							uint32_t TypeSize = Instruction.DataType == EXB::Type::Vec3f ? 12 : 4;
+							if (Instruction.LHSSource != EXB::Source::Unknown || Instruction.RHSSource != EXB::Source::Unknown)
+							{
+								if (Instruction.LHSSource == EXB::Source::Output)
+									Size = std::max(Size, Instruction.LHSIndexValue + TypeSize);
+								if (Instruction.RHSSource == EXB::Source::Input)
+									Size = std::max(Size, Instruction.RHSIndexValue + TypeSize);
+							}
 						}
+						EXBSize += Size;
 					}
-					EXBSize += Size;
 				}
 			}
 		}
@@ -2685,7 +2797,7 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	Writer.WriteInteger(0, sizeof(uint32_t)); //Entry Strings size
 
 	uint32_t HashStart = Writer.GetPosition();
-	Writer.WriteInteger(0x53746172, sizeof(uint64_t)); //Setting two placeholder hashes, they are unused in game
+	Writer.WriteInteger(StarlightData::GetU64Signature(), sizeof(uint64_t)); //Setting two placeholder hashes, they are unused in game
 
 	uint32_t ChildReplaceStart = Writer.GetPosition();
 	Writer.WriteInteger(0, sizeof(uint16_t)); //Set at rutime
@@ -2758,6 +2870,8 @@ std::vector<unsigned char> AINBFile::ToBinary()
 	Writer.WriteInteger(0, sizeof(uint32_t));
 	uint32_t StringsStart = Writer.GetPosition();
 
+	StringTable.push_back(StarlightData::GetStringTableSignature());
+
 	for (std::string String : StringTable)
 	{
 		Writer.WriteBytes(String.c_str());
@@ -2800,7 +2914,7 @@ std::string AINBFile::Node::GetName()
 	return AINBFile::NodeTypeToString((AINBFile::NodeTypes)this->Type);
 }
 
-//I hate this file format just like BFRES, 2749 lines of code, just for reading and writing a 800 byte file...
+//I hate this file format just like BFRES, thousands of lines of code, just for reading and writing a 800 byte file...
 
 void AINBFile::Write(std::string Path)
 {

@@ -4,7 +4,8 @@
 layout (location = 0) in vec3 aPos;
 // Texture Coordinates
 layout (location = 1) in vec2 aTex;
-
+// Positions/Coordinates
+layout (location = 2) in vec3 aNormal;
 
 // Outputs the texture coordinates to the fragment shader
 out vec2 texCoord;

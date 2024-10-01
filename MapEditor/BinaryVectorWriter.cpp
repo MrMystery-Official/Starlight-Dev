@@ -1,5 +1,7 @@
 #include "BinaryVectorWriter.h"
 
+#include <iostream>
+
 int BinaryVectorWriter::GetPosition()
 {
 	return this->m_Offset;
@@ -63,7 +65,7 @@ void BinaryVectorWriter::WriteRawUnsafe(const char* Bytes, int Size)
 	this->m_Offset += Size;
 }
 
-void BinaryVectorWriter::WriteRawUnsafeFixed(const char* Bytes, int Size)
+void BinaryVectorWriter::WriteRawUnsafeFixed(const char* Bytes, int Size, bool BigEndian)
 {
 	if (this->m_Offset + Size > this->m_Data.size())
 	{
@@ -71,27 +73,28 @@ void BinaryVectorWriter::WriteRawUnsafeFixed(const char* Bytes, int Size)
 	}
 	for (int i = 0; i < Size; i++)
 	{
-		this->m_Data[this->m_Offset + i] = Bytes[i];
+		this->m_Data[this->m_Offset + i] = Bytes[BigEndian ? (Size - 1 - i) : i];
 	}
 	this->m_Offset += Size;
 }
 
-void BinaryVectorWriter::WriteInteger(int64_t Data, int Size)
+void BinaryVectorWriter::WriteInteger(int64_t Data, int Size, bool BigEndian)
 {
 	if (this->m_Offset + Size > this->m_Data.size())
 	{
 		this->m_Data.resize(this->m_Data.size() + Size);
 	}
 
-	char* Bytes = new char[sizeof(int64_t)];
+	char Bytes[8] = { 0 };
+
+	if(BigEndian)
+		Data = _byteswap_uint64(Data);
 
 	std::memcpy(Bytes, &Data, sizeof(Bytes));
 
 	for (int i = 0; i < Size; i++) {
-		this->m_Data[this->m_Offset + i] = Bytes[i];
+		this->m_Data[this->m_Offset + i] = Bytes[BigEndian ? (8 - Size + i) : i];
 	}
-
-	delete[] Bytes;
 
 	this->m_Offset += Size;
 }
@@ -99,4 +102,10 @@ void BinaryVectorWriter::WriteInteger(int64_t Data, int Size)
 std::vector<unsigned char>& BinaryVectorWriter::GetData()
 {
 	return this->m_Data;
+}
+
+void BinaryVectorWriter::Align(uint32_t Alignment, uint8_t Aligner)
+{
+	while (GetPosition() % Alignment != 0)
+		WriteByte(Aligner);
 }

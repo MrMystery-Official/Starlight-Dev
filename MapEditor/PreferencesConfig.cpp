@@ -14,6 +14,7 @@
 #include "UIMapView.h"
 #include "UIConsole.h"
 #include "UIActorTool.h"
+#include "UICollisionCreator.h"
 
 unsigned int PreferencesConfig::FrameCount = 0;
 PreferencesConfig::WindowInformationStruct PreferencesConfig::WindowInformation;
@@ -39,8 +40,8 @@ void PreferencesConfig::Load()
 	}
 
 	uint8_t Version = Reader.ReadUInt8();
-	if (Version != 0x01) {
-		Logger::Error("EditorPreferenceLoader", "Wrong version, expected 1, but got " + std::to_string((int)Version));
+	if (Version != 0x02) {
+		Logger::Error("EditorPreferenceLoader", "Wrong version, expected 2, but got " + std::to_string((int)Version));
 		return;
 	}
 
@@ -52,32 +53,15 @@ void PreferencesConfig::Load()
 	UIMapView::Open = (bool)Reader.ReadUInt8();
 	UIConsole::Open = (bool)Reader.ReadUInt8();
 	UIActorTool::Open = (bool)Reader.ReadUInt8();
+	UICollisionCreator::Open = (bool)Reader.ReadUInt8();
+
+	Reader.Seek(16, BinaryVectorReader::Position::Current);
+
+	UIMapView::CameraView.Speed = Reader.ReadFloat();
+	UIMapView::CameraView.BoostMultiplier = Reader.ReadFloat();
+	UIMapView::CameraView.Sensitivity = Reader.ReadFloat();
 
 	UpdateWindowInformation();
-
-	BfresLibrary::Models.clear();
-	TextureToGoLibrary::Textures.clear();
-	GLTextureLibrary::Textures.clear();
-
-	uint16_t ColorSize = Reader.ReadUInt16();
-	for (int i = 0; i < ColorSize; i++)
-	{
-		std::string Name;
-		Name.resize(Reader.ReadUInt8());
-		Reader.Read(Name.data(), Name.length());
-		Logger::Info("Name", Name);
-		uint8_t R = Reader.ReadUInt8();
-		uint8_t G = Reader.ReadUInt8();
-		uint8_t B = Reader.ReadUInt8();
-		uint8_t A = Reader.ReadUInt8();
-
-		BfresLibrary::Models.insert({ Name, BfresFile::CreateDefaultModel(Name, R, G, B, A) });
-	}
-
-	if (!BfresLibrary::Models.count("Default"))
-	{
-		BfresLibrary::Models.insert({ "Default", BfresFile::CreateDefaultModel("Default", 0, 0, 255, 255)});
-	}
 }
 
 void PreferencesConfig::Save()
@@ -85,7 +69,7 @@ void PreferencesConfig::Save()
 	BinaryVectorWriter Writer;
 
 	Writer.WriteBytes("EPRF");
-	Writer.WriteByte(0x01); //Version
+	Writer.WriteByte(0x02); //Version
 
 	Writer.WriteByte((uint8_t)UIAINBEditor::Open);
 	Writer.WriteByte((uint8_t)UITools::Open);
@@ -95,26 +79,15 @@ void PreferencesConfig::Save()
 	Writer.WriteByte((uint8_t)UIMapView::Open);
 	Writer.WriteByte((uint8_t)UIConsole::Open);
 	Writer.WriteByte((uint8_t)UIActorTool::Open);
+	Writer.WriteByte((uint8_t)UICollisionCreator::Open);
 
-	uint32_t Jumpback = Writer.GetPosition();
-	uint16_t ColorSize = 0;
-	Writer.Seek(2, BinaryVectorWriter::Position::Current);
-	for (auto& [Key, Val] : BfresLibrary::Models)
-	{
-		if (!Val.IsDefaultModel()) continue;
-		if (!TextureToGoLibrary::Textures.count(Key)) continue;
+	//Reserve
+	Writer.WriteInteger(0, sizeof(uint64_t));
+	Writer.WriteInteger(0, sizeof(uint64_t));
 
-		Writer.WriteByte(Key.length());
-		Writer.WriteBytes(Key.c_str());
-		Writer.WriteInteger((uint8_t)TextureToGoLibrary::Textures[Key].GetPixels()[0], sizeof(uint8_t));
-		Writer.WriteInteger((uint8_t)TextureToGoLibrary::Textures[Key].GetPixels()[1], sizeof(uint8_t));
-		Writer.WriteInteger((uint8_t)TextureToGoLibrary::Textures[Key].GetPixels()[2], sizeof(uint8_t));
-		Writer.WriteInteger((uint8_t)TextureToGoLibrary::Textures[Key].GetPixels()[3], sizeof(uint8_t));
-		ColorSize++;
-	}
-
-	Writer.Seek(Jumpback, BinaryVectorWriter::Position::Begin);
-	Writer.WriteInteger(ColorSize, sizeof(ColorSize));
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&UIMapView::CameraView.Speed), sizeof(float));
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&UIMapView::CameraView.BoostMultiplier), sizeof(float));
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&UIMapView::CameraView.Sensitivity), sizeof(float));
 
 	std::ofstream File(Editor::GetWorkingDirFile("Preferences.eprf"), std::ios::binary);
 	std::copy(Writer.GetData().cbegin(), Writer.GetData().cend(),

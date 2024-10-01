@@ -17,7 +17,6 @@ namespace UIActorTool
 		std::map<std::string, BymlFile> Bymls;
 		std::map<std::string, BymlFile> OriginalBymls;
 		std::map<std::string, std::vector<unsigned char>> AINBs;
-		std::map<std::string, std::vector<unsigned char>> ChangedAINBs;
 		std::vector<std::string> DeletedFiles;
 
 		bool Replace = false;
@@ -25,9 +24,11 @@ namespace UIActorTool
 	};
 
 	extern bool Open;
+	extern bool Focused;
 	extern std::string ActorPackFilter;
 	extern ActorPackStruct ActorPack;
 	extern std::vector<std::string> ActorList;
+	extern std::vector<std::string> ActorListLowerCase;
 
 	void DrawActorToolWindow();
 	void UpdateActorList();

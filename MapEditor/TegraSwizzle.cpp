@@ -2,44 +2,52 @@
 
 #include "Logger.h"
 
-const TegraSwizzle::TegraSwizzleFormats Formats =
+int32_t TegraSwizzle::CalculateBlockHeightLog(uint32_t BlockHeightLog2, uint32_t Width, uint32_t BLLWidth)
 {
-	.BC1_UNORM = {8, 4, 4, TextureFormatDecoder::DecodeBC1},
-	.BC3_UNORM_SRGB = {16, 4, 4, TextureFormatDecoder::DecodeBC3SRG},
-	.BC4_UNORM = {8, 4, 4, TextureFormatDecoder::DecodeBC4},
-	.ASTC_8x8_UNORM = {16, 8, 8, TextureFormatDecoder::DecodeASTC8x8UNorm}, //0x101
-	.ASTC_4x4_UNORM = {16, 4, 4, TextureFormatDecoder::DecodeASTC4x4UNorm}, //0x102, currently not fully implemented
-	.UNSUPPORTED = {0, 0, 0, nullptr}
-};
+	int32_t LinesPerBlockHeight = (1 << (int)BlockHeightLog2) * 8;
 
-TegraSwizzle::FormatInfo TegraSwizzle::GetFormatInfo(uint16_t FormatId)
-{
-	switch (FormatId)
-	{
-	case 0x202:
-	case 0x302:
-		return Formats.BC1_UNORM;
-	case 0x505:
-		return Formats.BC3_UNORM_SRGB;
-	case 0x606:
-	case 0x602:
-		return Formats.BC4_UNORM;
-	case 0x101:
-		return Formats.ASTC_8x8_UNORM;
-	default:
-		Logger::Warning("TegraSwizzler", "Unknown texture format " + std::to_string(FormatId));
-		return Formats.UNSUPPORTED;
-	}
+	int32_t BlockHeightShift = 0;
+	if (Pow2RoundUp(DIV_ROUND_UP(Width, BLLWidth)) < LinesPerBlockHeight)
+		BlockHeightShift += 1;
+
+	return (int32_t)std::max(0, (int32_t)BlockHeightLog2 - BlockHeightShift);
 }
 
-uint32_t TegraSwizzle::Max(uint32_t a, uint32_t b)
+uint32_t TegraSwizzle::GetBlockHeight(uint32_t Height)
 {
-	return a < b ? b : a;
+	uint32_t HeightAndHalf = Height + (Height / 2);
+	if (HeightAndHalf >= 128)
+		return 16;
+	else if (HeightAndHalf >= 64)
+		return 8;
+	else if (HeightAndHalf >= 32)
+		return 4;
+	else if (HeightAndHalf >= 16)
+		return 2;
+	else
+		return 1;
+}
+
+uint32_t TegraSwizzle::GetBlockHeight(uint32_t MipHeight, uint32_t BlockHeightMip0)
+{
+	uint32_t BlockHeight = BlockHeightMip0;
+
+	while (MipHeight <= (BlockHeight / 2) * 8 && BlockHeight > 1)
+	{
+		BlockHeight /= 2;
+	}
+
+	return BlockHeight;
 }
 
 uint32_t TegraSwizzle::DIV_ROUND_UP(uint32_t n, uint32_t d)
 {
 	return (n + d - 1) / d;
+}
+
+uint32_t TegraSwizzle::RoundUp(uint32_t x, uint32_t y)
+{
+	return ((x - 1) | (y - 1)) + 1;
 }
 
 uint32_t TegraSwizzle::Pow2RoundUp(uint32_t x)
@@ -53,148 +61,107 @@ uint32_t TegraSwizzle::Pow2RoundUp(uint32_t x)
 	return x + 1;
 }
 
-uint32_t TegraSwizzle::RoundUp(uint32_t x, uint32_t y)
+std::vector<unsigned char> TegraSwizzle::_Swizzle(uint32_t Width, uint32_t Height, uint32_t Depth, uint32_t BlkWidth, uint32_t BlkHeight, uint32_t BlkDepth, int32_t RoundPitch, uint32_t BPP, uint32_t TileMode, int32_t BlockHeightLog2, std::vector<unsigned char> Data, bool ToSwizzle)
 {
-	return ((x - 1) | (y - 1)) + 1;
-}
+	/*
+	int32_t BlockHeightShift = 0;
+	Width = std::max((uint32_t)1, Width);
+	Height = std::max((uint32_t)1, Height);
+	Depth = std::max((uint32_t)1, Depth);
 
-uint32_t TegraSwizzle::GetBlockHeight(uint32_t Height)
-{
-	uint32_t BlockHeight = Pow2RoundUp(Height / 8);
-	if (BlockHeight > 16)
-		BlockHeight = 16;
+	int32_t LinesPerBlockHeight = (1 << (int32_t)BlockHeightLog2) * 8;
 
-	return BlockHeight;
-}
+	if (Pow2RoundUp(DIV_ROUND_UP(Height, BlkWidth)) < LinesPerBlockHeight)
+		BlockHeightShift++;
 
-uint32_t TegraSwizzle::GetAddrBlockLinear(uint32_t x, uint32_t y, uint32_t Width, uint32_t BytesPerPixel, uint32_t BaseAddress, uint32_t BlockHeight)
-{
-	uint32_t ImageWidthInGobs = DIV_ROUND_UP(Width * BytesPerPixel, 64);
-	uint32_t GOBAddress = (BaseAddress
-		+ (y / (8 * BlockHeight)) * 512 * BlockHeight * ImageWidthInGobs
-		+ (x * BytesPerPixel / 64) * 512 * BlockHeight
-		+ (y % (8 * BlockHeight) / 8) * 512);
+	BlockHeightLog2 = std::max(0, BlockHeightLog2 - BlockHeightShift);
+	*/
 
-	x *= BytesPerPixel;
+	uint32_t Size = DIV_ROUND_UP(Width, BlkWidth) * DIV_ROUND_UP(Height, BlkHeight) * BPP;
 
-	/* What the fuck is this...? */
-	uint32_t Address = (GOBAddress + ((x % 64) / 32) * 256 + ((y % 8) / 2) * 64
-		+ ((x % 32) / 16) * 32 + (y % 2) * 16 + (x % 16));
+	uint32_t BlockHeight = (uint32_t)(1 << BlockHeightLog2);
 
-	return Address;
-}
+	Width = DIV_ROUND_UP(Width, BlkWidth);
+	Height = DIV_ROUND_UP(Height, BlkHeight);
+	Depth = DIV_ROUND_UP(Depth, BlkDepth);
 
-std::vector<unsigned char> TegraSwizzle::Deswizzle(uint32_t Width, uint32_t Height, uint32_t Depth, uint32_t BlockWidth, uint32_t FormatBlockHeight, uint32_t BlockDepth, int32_t RoundPitch, uint32_t BytesPerPixel, uint32_t TileMode, int32_t SizeRange, std::vector<unsigned char>& ImageData)
-{
-	uint32_t BlockHeight = (uint32_t)(1 << SizeRange);
-	Width = DIV_ROUND_UP(Width, BlockWidth);
-	Height = DIV_ROUND_UP(Height, FormatBlockHeight);
-	Depth = DIV_ROUND_UP(Depth, BlockDepth);
-
-	uint32_t Pitch = 0;
-	uint32_t SurfaceSize = 0;
+	uint32_t Pitch;
+	uint32_t SurfSize;
 	if (TileMode == 1)
 	{
-		Pitch = Width * BytesPerPixel;
+		Pitch = Width * BPP;
+
 		if (RoundPitch == 1)
 			Pitch = RoundUp(Pitch, 32);
 
-		SurfaceSize = Pitch * Height;
+		SurfSize = Pitch * Height;
 	}
 	else
 	{
-		Pitch = RoundUp(Width * BytesPerPixel, 64);
-		SurfaceSize = Pitch * RoundUp(Height, BlockHeight * 8);
+		Pitch = RoundUp(Width * BPP, 64);
+		SurfSize = Pitch * RoundUp(Height, BlockHeight * 8);
 	}
 
-	std::vector<unsigned char> Result(SurfaceSize);
+	std::vector<unsigned char> Result(SurfSize);
 
 	for (uint32_t y = 0; y < Height; y++)
 	{
 		for (uint32_t x = 0; x < Width; x++)
 		{
-			uint32_t pos;
-			uint32_t pos_;
+			uint32_t Pos;
+			uint32_t Pos_;
 
 			if (TileMode == 1)
-			{
-				pos = y * Pitch + x * BytesPerPixel;
-			}
+				Pos = y * Pitch + x * BPP;
 			else
-			{
-				pos = GetAddrBlockLinear(x, y, Width, BytesPerPixel, 0, BlockHeight);
-			}
+				Pos = GetAddrBlockLinear(x, y, Width, BPP, 0, BlockHeight);
 
-			pos_ = (y * Width + x) * BytesPerPixel;
+			Pos_ = (y * Width + x) * BPP;
 
-			if (pos + BytesPerPixel <= SurfaceSize)
+			if (Pos + BPP <= Result.size())
 			{
-				if (ImageData.size() >= pos + BytesPerPixel)
-				{
-					std::copy(ImageData.begin() + pos, ImageData.begin() + pos + BytesPerPixel, Result.begin() + pos_);
-				}
+				if (ToSwizzle == false)
+					//std::copy(Data.begin() + Pos, Data.begin() + Pos + BPP, Result.begin() + Pos_);
+					memcpy(Result.data() + Pos_, Data.data() + Pos, BPP);
+				else
+					memcpy(Result.data() + Pos, Data.data() + Pos_, BPP);
+				//std::copy(Data.begin() + Pos_, Data.begin() + Pos_ + BPP, Result.begin() + Pos);
 			}
 		}
 	}
 
+	Result.resize(Size);
+
 	return Result;
 }
 
-std::vector<unsigned char> TegraSwizzle::GetDirectImageData(TextureToGo* Texture, std::vector<unsigned char> Pixels, uint16_t Format, uint16_t Width, uint16_t Height, uint16_t Depth, int32_t Target, bool LinearTileMode)
+std::vector<unsigned char> TegraSwizzle::Deswizzle(uint32_t Width, uint32_t Height, uint32_t Depth, uint32_t BlkWidth, uint32_t BlkHeight, uint32_t BlkDepth, int32_t RoundPitch, uint32_t BPP, uint32_t TileMode, int32_t SizeRange, std::vector<unsigned char> Data)
 {
-	uint32_t BlockHeight = GetBlockHeight(DIV_ROUND_UP(Height, 4));
-
-	if (BlockHeight == 0) BlockHeight = 4;
-
-	return GetDirectImageData(Texture, Pixels, Format, Width, Height, Depth, std::log10(BlockHeight) / std::log10(2), Target, LinearTileMode);
+	return _Swizzle(Width, Height, Depth, BlkWidth, BlkHeight, BlkDepth, RoundPitch, BPP, TileMode, SizeRange, Data, false);
 }
 
-std::vector<unsigned char> TegraSwizzle::GetDirectImageData(TextureToGo* Texture, int32_t Target, bool LinearTileMode)
+std::vector<unsigned char> TegraSwizzle::Swizzle(uint32_t Width, uint32_t Height, uint32_t Depth, uint32_t BlkWidth, uint32_t BlkHeight, uint32_t BlkDepth, int32_t RoundPitch, uint32_t BPP, uint32_t TileMode, int32_t SizeRange, std::vector<unsigned char> Data)
 {
-	uint32_t BlockHeight = GetBlockHeight(DIV_ROUND_UP(Texture->GetHeight(), 4));
-
-	if (BlockHeight == 0) BlockHeight = 4;
-
-	return GetDirectImageData(Texture, Texture->GetPixels(), Texture->GetFormat(), Texture->GetWidth(), Texture->GetHeight(), Texture->GetDepth(), std::log10(BlockHeight) / std::log10(2), Target, LinearTileMode);
+	return _Swizzle(Width, Height, Depth, BlkWidth, BlkHeight, BlkDepth, RoundPitch, BPP, TileMode, SizeRange, Data, true);
 }
 
-std::vector<unsigned char> TegraSwizzle::GetDirectImageData(TextureToGo* TexToGo, std::vector<unsigned char> Pixels, uint16_t TextureFormat, uint16_t TextureWidth, uint16_t TextureHeight, uint16_t TextureDepth, uint32_t BlockHeightLog2, int32_t Target, bool LinearTileMode)
+uint32_t TegraSwizzle::GetAddrBlockLinear(uint32_t x, uint32_t y, uint32_t Width, uint32_t BytesPerPixel, uint32_t BaseAddress, uint32_t BlockHeight)
 {
+	/*
+  From Tega X1 TRM
+				   */
+	uint32_t image_width_in_gobs = DIV_ROUND_UP(Width * BytesPerPixel, 64);
 
-	TegraSwizzle::FormatInfo Format = GetFormatInfo(TextureFormat);
-	if (Format.DecompressFunction == nullptr)
-	{
-		return std::vector<unsigned char>(0);
-	}
-	TexToGo->DecompressFunction = Format.DecompressFunction;
 
-	uint32_t BytesPerPixel = Format.BytesPerPixel;
-	uint32_t BlockWidth = Format.BlockWidth;
-	uint32_t FormatBlockHeight = Format.BlockHeight;
-	uint32_t BlockDepth = 1;
+	uint32_t GOB_address = (BaseAddress
+		+ (y / (8 * BlockHeight)) * 512 * BlockHeight * image_width_in_gobs
+		+ (x * BytesPerPixel / 64) * 512 * BlockHeight
+		+ (y % (8 * BlockHeight) / 8) * 512);
 
-	uint32_t BlockHeight = GetBlockHeight(DIV_ROUND_UP(TextureHeight, FormatBlockHeight)); //4=BlockHeight of BC1
+	x *= BytesPerPixel;
 
-	uint32_t DataAlignment = 512;
-	uint32_t TileMode = LinearTileMode ? 1 : 0;
+	uint32_t Address = (GOB_address + ((x % 64) / 32) * 256 + ((y % 8) / 2) * 64
+		+ ((x % 32) / 16) * 32 + (y % 2) * 16 + (x % 16));
 
-	int32_t LinesPerBlockHeight = (1 << (int32_t)BlockHeightLog2) * 8;
-
-	uint32_t ArrayOffset = 0;
-
-	int32_t BlockHeightShift = 0;
-	uint32_t Width = Max(1, TextureWidth);
-	uint32_t Height = Max(1, TextureHeight);
-	uint32_t Depth = Max(1, TextureDepth);
-
-	uint32_t Size = DIV_ROUND_UP(Width, BlockWidth) * DIV_ROUND_UP(Height, FormatBlockHeight) * BytesPerPixel;
-	if (Pow2RoundUp(DIV_ROUND_UP(Height, BlockWidth)) < LinesPerBlockHeight)
-		BlockHeightShift++;
-
-	uint32_t Width__ = DIV_ROUND_UP(Width, BlockWidth);
-	uint32_t Height__ = DIV_ROUND_UP(Height, FormatBlockHeight);
-
-	std::vector<unsigned char> AlignedData = Deswizzle(Width, Height, Depth, BlockWidth, FormatBlockHeight, BlockDepth, Target, BytesPerPixel, TileMode, Max(0, BlockHeightLog2 - BlockHeightShift), Pixels);
-	AlignedData.resize(Size);
-	return AlignedData;
+	return Address;
 }

@@ -2437,7 +2437,6 @@ ZSTDLIB_STATIC_API size_t ZSTD_DCtx_getParameter(ZSTD_DCtx* dctx, ZSTD_dParamete
  *  This instruction is mandatory to decode data without a fully-formed header,
  *  such ZSTD_f_zstd1_magicless for example.
  * @return : 0, or an error code (which can be tested using ZSTD_isError()). */
-ZSTD_DEPRECATED("use ZSTD_DCtx_setParameter() instead")
 ZSTDLIB_STATIC_API
 size_t ZSTD_DCtx_setFormat(ZSTD_DCtx* dctx, ZSTD_format_e format);
 

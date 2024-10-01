@@ -1,16 +1,18 @@
+#define ZSTD_STATIC_LINKING_ONLY
+
 #include "Bfres.h"
 
 #include "Editor.h"
 #include "Logger.h"
-#include <iostream>
+#include "Util.h"
+#include <zstd.h>
+#include <glm/gtx/quaternion.hpp>
 
 /* BfresModelLibrary - Start */
 std::map<std::string, BfresFile> BfresLibrary::Models;
 
 void BfresLibrary::Initialize()
 {
-    BfresLibrary::Models.insert({ "Area", BfresFile::CreateDefaultModel("Area", 0, 255, 0, 50) });
-    BfresLibrary::Models.insert({ "Default", BfresFile::CreateDefaultModel("Default", 0, 0, 255, 255) });
     //BfresLibrary::Models.insert({ "MapEditor_Collision_", BfresFile::CreateDefaultModel("MapEditor_Collision_", 255, 255, 0, 50) });
 }
 
@@ -21,811 +23,906 @@ bool BfresLibrary::IsModelLoaded(std::string ModelName)
 BfresFile* BfresLibrary::GetModel(std::string ModelName)
 {
     if (!BfresLibrary::IsModelLoaded(ModelName))
-        BfresLibrary::Models.insert({ ModelName, BfresFile(Editor::GetBfresFile(ModelName + ".bfres")) });
+        BfresLibrary::Models.insert({ ModelName, BfresFile(Editor::GetBfresFile(ModelName)) });
     return &BfresLibrary::Models[ModelName];
 }
 void BfresLibrary::Cleanup()
 {
-    for (auto& [Gyml, Model] : BfresLibrary::Models)
-    {
-        Model.Delete();
-    }
     Logger::Info("BfresLibrary", "Deleted models");
 }
 /* BfresModelLibrary - End */
 
-/* GLTextureLibrary - Start */
-std::unordered_map<TextureToGo*, Texture> GLTextureLibrary::Textures;
 
-bool GLTextureLibrary::IsTextureLoaded(TextureToGo* TexToGo)
+std::unordered_map<uint64_t, std::string> BfresFile::ExternalBinaryStrings;
+
+void BfresFile::Initialize()
 {
-    return GLTextureLibrary::Textures.count(TexToGo);
-}
-Texture* GLTextureLibrary::GetTexture(TextureToGo* TexToGo, std::string Sampler, GLenum Slot)
-{
-    if (!GLTextureLibrary::IsTextureLoaded(TexToGo))
-        GLTextureLibrary::Textures.insert({ TexToGo, Texture(TexToGo, GL_RGBA, GL_TEXTURE_2D, Slot, GL_RGBA, GL_UNSIGNED_BYTE, Sampler) });
-    return &GLTextureLibrary::Textures[TexToGo];
-}
-Texture* GLTextureLibrary::AddTexture(TextureToGo& Tex, std::string Sampler, GLenum Slot)
-{
-    GLTextureLibrary::Textures.insert({ &Tex, Texture(&Tex, GL_RGBA, GL_TEXTURE_2D, Slot, GL_RGBA, GL_UNSIGNED_BYTE, Sampler) });
-    return &GLTextureLibrary::Textures[&Tex];
-}
-std::unordered_map<TextureToGo*, Texture>& GLTextureLibrary::GetTextures()
-{
-    return GLTextureLibrary::Textures;
-}
-void GLTextureLibrary::Cleanup()
-{
-    for (auto& [TexToGo, Tex] : GLTextureLibrary::Textures)
+    std::ifstream File(Editor::GetRomFSFile("Shader/ExternalBinaryString.bfres.mc"), std::ios::binary);
+
+    if (!File.eof() && !File.fail())
     {
-        Tex.Delete();
-    }
-    Logger::Info("GLTextureLibrary", "Deleted textures");
-}
-/* GLTextureLibrary - End */
+        File.seekg(0, std::ios_base::end);
+        std::streampos FileSize = File.tellg();
 
-float MaxBfres(float a, float b) {   return a > b ? a : b;
-}
+        std::vector<unsigned char> Bytes(FileSize);
 
-void BfresFile::GenerateBoundingBox() {
-    for (int SubModelIndex = 0; SubModelIndex < this->m_Models[0].Vertices.size(); SubModelIndex++)
-    {
-        for (int VertexIndex = 0; VertexIndex < this->m_Models[0].Vertices[SubModelIndex].size() / 3; VertexIndex++)
+        File.seekg(0, std::ios_base::beg);
+        File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
+
+        File.close();
+
+        BfresBinaryVectorReader Reader(Bytes);
+        Reader.ReadUInt32(); //Magic
+        Reader.ReadUInt32(); //Version
+        int32_t Flags = Reader.ReadInt32();
+        uint32_t DecompressedSize = (Flags >> 5) << (Flags & 0xF);
+        Reader.Seek(0xC, BfresBinaryVectorReader::Position::Begin);
+        std::vector<unsigned char> Source(Reader.GetSize() - 0xC);
+        Reader.ReadStruct(Source.data(), Reader.GetSize() - 0xC);
+
+        std::vector<unsigned char> Decompressed(DecompressedSize);
+
+        ZSTD_DCtx* const DCtx = ZSTD_createDCtx();
+        ZSTD_DCtx_setFormat(DCtx, ZSTD_format_e::ZSTD_f_zstd1_magicless);
+        const size_t DecompSize = ZSTD_decompressDCtx(DCtx, (void*)Decompressed.data(), Decompressed.size(), Source.data(), Source.size());
+        ZSTD_freeDCtx(DCtx);
+
+        BfresBinaryVectorReader DecompressedReader(Decompressed);
+        DecompressedReader.Seek(0xC0, BfresBinaryVectorReader::Position::Begin);
+        uint64_t StringTableOffset = DecompressedReader.ReadUInt64();
+        BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> StringTable = DecompressedReader.ReadDictionary<BfresBinaryVectorReader::ResString>(StringTableOffset);
+        DecompressedReader.Seek(0xF0, BfresBinaryVectorReader::Position::Begin); //Hash table?
+
+        ExternalBinaryStrings.clear();
+
+        for (int i = 0; i < StringTable.Nodes.size(); i++)
         {
-            this->m_Models[0].BoundingBoxSphereRadius = std::fmax(this->m_Models[0].BoundingBoxSphereRadius, std::sqrt( std::pow(this->m_Models[0].Vertices[SubModelIndex][VertexIndex * 3], 2) + std::pow(this->m_Models[0].Vertices[SubModelIndex][VertexIndex * 3 + 1], 2) + std::pow(this->m_Models[0].Vertices[SubModelIndex][VertexIndex * 3 + 2], 2))); //sqrt(PointA^2 + PointB^2 + PointC^2) = distance to middle
+            std::string Key = StringTable.GetKey(i);
+            uint64_t Offset = DecompressedReader.ReadUInt64();
+            ExternalBinaryStrings.insert({ Offset, Key });
         }
-    }
-}
 
-void BfresFile::CreateOpenGLObjects()
-{
-    /* Creating OpenGL Objects */
-    for (BfresFile::Model& Model : this->m_Models)
-    {
-        for (BfresFile::LOD& LODModel : Model.LODs)
-        {
-            LODModel.TransparentObjects.clear();
-            LODModel.OpaqueObjects.clear();
-            LODModel.GL_Meshes.clear();
-            LODModel.GL_Meshes.resize(LODModel.Faces.size());
-            int FaceOffset = 0;
-            for (int SubModelIndex = 0; SubModelIndex < LODModel.Faces.size(); SubModelIndex++)
-            {
-                if (Model.Materials[SubModelIndex].Textures.empty())
-                {
-                    LODModel.Faces.erase(LODModel.Faces.begin() + SubModelIndex);
-                    FaceOffset++;
-                    continue;
-                }
-                std::vector<float>* TexCoords = &Model.Materials[SubModelIndex].Textures[0].TexCoordinates;
-                if (TexCoords->empty())
-                {
-                    LODModel.Faces.erase(LODModel.Faces.begin() + SubModelIndex);
-                    FaceOffset++;
-                    continue;
-                }
-
-                std::vector<float> Vertices(Model.Vertices[SubModelIndex].size() / 3 * 5);
-
-                for (int VertexIndex = 0; VertexIndex < Vertices.size() / 5; VertexIndex++)
-                {
-                    Vertices[VertexIndex * 5] = Model.Vertices[SubModelIndex][VertexIndex * 3];
-                    Vertices[VertexIndex * 5 + 1] = Model.Vertices[SubModelIndex][VertexIndex * 3 + 1];
-                    Vertices[VertexIndex * 5 + 2] = Model.Vertices[SubModelIndex][VertexIndex * 3 + 2];
-
-                    Vertices[VertexIndex * 5 + 3] = TexCoords->at(VertexIndex * 2);
-                    Vertices[VertexIndex * 5 + 4] = TexCoords->at(VertexIndex * 2 + 1);
-                }
-
-                LODModel.GL_Meshes[SubModelIndex] = Mesh(Vertices, LODModel.Faces[SubModelIndex - FaceOffset], { GLTextureLibrary::GetTexture(Model.Materials[SubModelIndex].Textures[0].Texture) });
-
-                if (Model.Materials[SubModelIndex].IsTransparent) LODModel.TransparentObjects.push_back(SubModelIndex);
-                else LODModel.OpaqueObjects.push_back(SubModelIndex);
-            }
-        }
-    }
-
-    this->GenerateBoundingBox();
-}
-
-BfresFile BfresFile::CreateDefaultModel(std::string DefaultName, uint8_t Red, uint8_t Green, uint8_t Blue, uint8_t Alpha)
-{
-    BfresFile DefaultModel;
-    DefaultModel.IsDefaultModel() = true;
-
-    const float Size = 0.5f;
-
-    float Vertices[] =
-    {
-        -Size, -Size, -Size,
-         Size, -Size, -Size,
-         Size, -Size,  Size,
-        -Size, -Size,  Size,
-
-        // Top face
-        -Size,  Size, -Size,
-         Size,  Size, -Size,
-         Size,  Size,  Size,
-        -Size,  Size,  Size,
-    };
-
-    unsigned int Indices[] =
-    {
-        // Bottom face
-        0, 1, 2,
-        0, 2, 3,
-
-        // Top face
-        4, 5, 6,
-        4, 6, 7,
-
-        // Front face
-        0, 4, 5,
-        0, 5, 1,
-
-        // Back face
-        3, 7, 6,
-        3, 6, 2,
-
-        // Left face
-        0, 3, 7,
-        0, 7, 4,
-
-        1, 5, 6,
-        1, 6, 2,
-    };
-
-    float TexCoords[] =
-    {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f,
-        0.0f, 1.0f,
-
-        // Top face
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f,
-        0.0f, 1.0f
-    };
-
-    BfresFile::Model Model;
-    BfresFile::LOD LODModel;
-    LODModel.Faces.push_back(std::vector<unsigned int>(std::begin(Indices), std::end(Indices)));
-    Model.Vertices.push_back(std::vector<float>(std::begin(Vertices), std::end(Vertices)));
-
-    BfresFile::Material Material;
-    Material.Name = "Mt_DefaultModel";
-
-    BfresFile::BfresTexture Texture;
-    Texture.TexCoordinates = std::vector<float>(std::begin(TexCoords), std::end(TexCoords));
-
-    TextureToGo TexToGo;
-    TexToGo.IsFail() = false;
-    TexToGo.GetPixels() = { Red, Green, Blue, Alpha };
-    TexToGo.GetWidth() = 1;
-    TexToGo.GetHeight() = 1;
-    if (Alpha < 255)
-    {
-        TexToGo.IsTransparent() = true;
-        Material.IsTransparent = true;
-    }
-    if(!TextureToGoLibrary::IsTextureLoaded(DefaultName))
-        TextureToGoLibrary::Textures.insert({ DefaultName, TexToGo });
-
-    Texture.Texture = TextureToGoLibrary::GetTexture(DefaultName);
-
-    Material.Textures.push_back(Texture);
-    Model.Materials.push_back(Material);
-    Model.LODs.push_back(LODModel);
-    DefaultModel.GetModels().push_back(Model);
-
-    DefaultModel.CreateOpenGLObjects();
-
-    return DefaultModel;
-}
-
-float BfresFile::ShortToFloat(uint8_t Byte1, uint8_t Byte2)
-{
-    uint16_t CombinedValue = (static_cast<uint16_t>(Byte2) << 8) | static_cast<uint16_t>(Byte1);
-    if (CombinedValue == 0)
-    {
-        return 0;
-    }
-    int32_t BiasedExponent = (CombinedValue >> 10) & 0x1F;
-    int32_t Mantissa = CombinedValue & 0x3FF;
-
-    // Reconstruct the half-float value with proper exponent bias
-    int32_t RealExponent = BiasedExponent - 15 + 127;
-    uint32_t HalfFloatBits = ((CombinedValue & 0x8000) << 16) | (RealExponent << 23) | (Mantissa << 13);
-    float Result;
-    std::memcpy(&Result, &HalfFloatBits, sizeof(float));
-    return Result;
-}
-
-float BfresFile::UInt32ToFloat(unsigned char Byte1, unsigned char Byte2, unsigned char Byte3, unsigned char Byte4)
-{
-    // Combine the four bytes into a uint32_t
-    uint32_t combinedValue = (static_cast<uint32_t>(Byte4) << 24) |
-        (static_cast<uint32_t>(Byte3) << 16) |
-        (static_cast<uint32_t>(Byte2) << 8) |
-        static_cast<uint32_t>(Byte1);
-
-    if (combinedValue == 0)
-    {
-        return 0;
-    }
-
-    float ret;
-    std::memcpy(&ret, &combinedValue, sizeof(float));
-    return ret;
-}
-
-uint16_t BfresFile::CombineToUInt16(uint8_t Byte1, uint8_t Byte2)
-{
-    return (static_cast<uint16_t>(Byte2) << 8) | Byte1;
-}
-
-std::string BfresFile::ReadString(BinaryVectorReader& Reader, uint64_t Offset)
-{
-    Reader.Seek(Offset, BinaryVectorReader::Position::Begin);
-    std::string Result;
-    char CurrentCharacter = Reader.ReadInt8();
-    Result += CurrentCharacter;
-    while (CurrentCharacter != 0x00) {
-        CurrentCharacter = Reader.ReadInt8();
-        Result += CurrentCharacter;
-    }
-    Result.pop_back();
-    return Result;
-}
-
-std::vector<BfresFile::Model>& BfresFile::GetModels()
-{
-    return this->m_Models;
-}
-
-bool& BfresFile::IsDefaultModel()
-{
-    return this->m_DefaultModel;
-}
-
-BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes)
-{
-    BinaryVectorReader Reader(Bytes);
-
-    char Magic[4];
-    Reader.Read(Magic, 4);
-    if (Magic[0] != 'F' && Magic[1] != 'R' && Magic[2] != 'E' && Magic[3] != 'S')
-    {
-        Logger::Error("Bfres", "Wrong magic, expected FRES");
-        return;
-    }
-
-    /* Check if BFRES is for switch, expecting 0x20202020 padding (4 bytes) */
-    uint32_t SwitchPadding = Reader.ReadUInt32();
-    if (SwitchPadding != 0x20202020)
-    {
-        Logger::Error("Bfres", "File is not a switch model");
-        return;
-    }
-
-    /* Cheking Version, should be 0.10.0.0 */
-    uint8_t VersionNumberD = Reader.ReadUInt8();
-    uint8_t VersionNumberC = Reader.ReadUInt8();
-    uint8_t VersionNumberB = Reader.ReadUInt8();
-    uint8_t VersionNumberA = Reader.ReadUInt8();
-    if (VersionNumberA != 0x00 || VersionNumberB != 0x0A || VersionNumberC != 0x00 || VersionNumberD != 0x00)
-    {
-        Logger::Error("Bfres", "Wrong version, expected v10, got v" + std::to_string((int)VersionNumberA) + "." + std::to_string((int)VersionNumberB) + "." + std::to_string((int)VersionNumberC) + "." + std::to_string((int)VersionNumberD));
-        return;
-    }
-
-    /* Checking Endian, 0xFEFF indicates that it is Little Endian, what this parser supports */
-    uint16_t Endian = Reader.ReadUInt16();
-    if (Endian != 0xFEFF)
-    {
-        Logger::Error("Bfres", "Only little endian supported, got " + std::to_string(Endian));
-        return;
-    }
-
-    Reader.Seek(6, BinaryVectorReader::Position::Current); //Padding
-
-    uint32_t FileAlignment = Reader.ReadUInt32();
-    uint32_t RelocationTableOffset = Reader.ReadUInt32();
-    uint32_t GlobalBufferOffset = Reader.ReadUInt32();
-
-    Reader.Seek(8, BinaryVectorReader::Position::Current);
-
-    uint64_t FMDLOffset = Reader.ReadUInt64();
-    uint64_t FMDLDict = Reader.ReadUInt64();
-
-    Reader.Seek(0xDC, BinaryVectorReader::Position::Begin); //Skipping unnecessary information
-    uint16_t FMDLCount = Reader.ReadUInt16();
-
-    this->m_Models.resize(FMDLCount);
-
-    uint32_t DataStart = 0;
-    if (GlobalBufferOffset == Bytes.size())
-    {
-        Reader.Seek(RelocationTableOffset, BinaryVectorReader::Position::Begin);
-        Reader.Seek(0x30, BinaryVectorReader::Position::Current);
-        DataStart = Reader.ReadUInt32();
     }
     else
     {
-        DataStart = GlobalBufferOffset + 288;
+        Logger::Error("Bfres", "Could not open external strings file");
     }
+}
 
-    Reader.Seek(FMDLOffset, BinaryVectorReader::Position::Begin);
-    for (uint16_t FMDLIndex = 0; FMDLIndex < FMDLCount; FMDLIndex++)
+void BfresFile::VertexBuffer::VertexAttribute::Read(BfresBinaryVectorReader& Reader)
+{
+    Name = Reader.ReadStringOffset(Reader.ReadUInt64());
+    Format = (BfresAttribFormat)Reader.ReadUInt16(true);
+    Reader.ReadUInt16(); //Padding?
+    Offset = Reader.ReadUInt16();
+    BufferIndex = Reader.ReadUInt16();
+}
+
+std::vector<glm::vec4> BfresFile::VertexBuffer::VertexAttribute::GetData(BfresFile::VertexBuffer Buffer)
+{
+    std::vector<glm::vec4> Data(Buffer.VertexCount);
+
+    BfresFile::VertexBuffer::BufferData BData = Buffer.Buffers[BufferIndex];
+    BfresBinaryVectorReader Reader(BData.Data);
+    for (int i = 0; i < Buffer.VertexCount; i++)
     {
-        uint64_t FMDLBaseOffset = Reader.GetPosition();
-        //Reader.Seek(4, BinaryVectorReader::Position::Current); //Skipping magic, should be FMDL
-
-        Reader.Seek(FMDLBaseOffset + 24, BinaryVectorReader::Position::Begin);
-        uint64_t FSKLOffset = Reader.ReadUInt64();
-        uint64_t FVTXOffset = Reader.ReadUInt64();
-        uint64_t FSHPOffset = Reader.ReadUInt64();
-        uint64_t FMATValuesOffset = Reader.ReadUInt64();
-        uint64_t FMATDictOffset = Reader.ReadUInt64();
-
-        Reader.Seek(FMDLBaseOffset + 104, BinaryVectorReader::Position::Begin);
-        uint16_t FVTXCount = Reader.ReadUInt16();
-        uint16_t FSHPCount = Reader.ReadUInt16();
-        uint16_t FMATCount = Reader.ReadUInt16();
-
-        this->m_Models[FMDLIndex].Materials.resize(FSHPCount);
-
-        std::vector<Material> Materials(FMATCount);
-
-        //Materials
-        Reader.Seek(FMATDictOffset, BinaryVectorReader::Position::Begin);
-        for (int FMATIndex = 0; FMATIndex < FMATCount; FMATIndex++)
-        {
-            uint64_t FMATBaseOffset = Reader.GetPosition();
-            Reader.Seek(8, BinaryVectorReader::Position::Current);
-
-            Materials[FMATIndex].Name = this->ReadString(Reader, Reader.ReadUInt64() + 2);
-
-            Reader.Seek(FMATBaseOffset + 32, BinaryVectorReader::Position::Begin);
-            uint64_t TextureArrayOffset = Reader.ReadUInt64();
-            uint64_t TextureNameArray = Reader.ReadUInt64();
-            uint64_t SamplerArrayOffset = Reader.ReadUInt64();
-
-            uint64_t SamplerValuesOffset = Reader.ReadUInt64();
-            uint64_t SamplerOffset = Reader.ReadUInt64();
-
-            Reader.Seek(FMATBaseOffset + 162, BinaryVectorReader::Position::Begin);
-            uint8_t SamplerCount = Reader.ReadUInt8();
-            uint8_t TextureCount = Reader.ReadUInt8();
-
-            Reader.Seek(TextureArrayOffset, BinaryVectorReader::Position::Begin);
-
-            //std::vector<std::string> NrmTextureNames;
-
-            std::vector<std::pair<TextureToGo*, std::string>> LocalTextures; //Texture pointer -> Sampler (_aN = Albedo)
-            std::vector<std::pair<TextureToGo*, std::string>> LocalTransparentTextures; // - "" -
-
-            if (Path.find("WaterPlane") != std::string::npos)
-            {
-                LocalTextures.push_back({ TextureToGoLibrary::GetTexture("TerraWater01_Alb.txtg"), "_a0" });
-                goto TextureInterpreter;
-            }
-
-            for (int i = 0; i < TextureCount; i++)
-            {
-                std::string TextureName = this->ReadString(Reader, Reader.ReadUInt64() + 2);
-
-                Reader.Seek(SamplerValuesOffset + 32 + i * 16, BinaryVectorReader::Position::Begin);
-                Reader.Seek(Reader.ReadUInt64(), BinaryVectorReader::Position::Begin);
-
-                uint16_t NameLength = Reader.ReadUInt16();
-                std::string Sampler = "";
-                for (int j = 0; j < NameLength; j++) { //-1 to remove the index, normally textures are not _a, they are _a0, _a1, _a2 ... _an. Same for Nrm...
-                    Sampler += (char)Reader.ReadInt8();
-                }
-
-                //if (Sampler.rfind("_a", 0) == 0 || Sampler.rfind("_gn0", 0) == 0) Sampler.pop_back();
-
-                if (Sampler.starts_with("_a"))
-                {
-                    TextureToGo* TexToGo = TextureToGoLibrary::GetTexture(TextureName + ".txtg");
-                    if (TexToGo->IsTransparent())
-                    {
-                        LocalTransparentTextures.push_back({ TexToGo, Sampler });
-                    }
-                    else
-                    {
-                        LocalTextures.push_back({ TexToGo, Sampler });
-                    }
-                    Reader.Seek(TextureArrayOffset + (i + 1) * 8, BinaryVectorReader::Position::Begin);
-                }
-                //else if (Sampler == "_n") NrmTextureNames.push_back(TextureName);
-
-                Reader.Seek(TextureArrayOffset + (i + 1) * 8, BinaryVectorReader::Position::Begin);
-            }
-
-            TextureInterpreter:
-
-            int LocalTextureCount = LocalTextures.size();
-            int LocalTransparentTextureCount = LocalTransparentTextures.size();
-            Materials[FMATIndex].Textures.resize(LocalTextureCount + LocalTransparentTextureCount);
-
-
-            for (int i = 0; i < (LocalTextureCount + LocalTransparentTextureCount); i++)
-            {
-                BfresFile::BfresTexture MaterialTexture;
-                MaterialTexture.Texture = i < LocalTextureCount ? LocalTextures[i].first : LocalTransparentTextures[i - LocalTextureCount].first;
-                MaterialTexture.Sampler = i < LocalTextureCount ? LocalTextures[i].second : LocalTransparentTextures[i - LocalTextureCount].second;
-                if (i >= LocalTextureCount)
-                {
-                    Materials[FMATIndex].IsTransparent = true;
-                }
-                Materials[FMATIndex].Textures[i] = MaterialTexture;
-            }
-
-            if (Materials[FMATIndex].Textures.empty())
-            {
-                Reader.Seek(TextureArrayOffset, BinaryVectorReader::Position::Begin);
-
-                for (int i = 0; i < TextureCount; i++)
-                {
-                    std::string TextureName = this->ReadString(Reader, Reader.ReadUInt64() + 2);
-
-                    Reader.Seek(SamplerValuesOffset + 32 + i * 16, BinaryVectorReader::Position::Begin);
-                    Reader.Seek(Reader.ReadUInt64(), BinaryVectorReader::Position::Begin);
-
-                    uint16_t NameLength = Reader.ReadUInt16();
-                    std::string Sampler = "";
-                    for (int j = 0; j < NameLength; j++) {
-                        Sampler += (char)Reader.ReadInt8();
-                    }
-
-                    BfresFile::BfresTexture MaterialTexture;
-                    MaterialTexture.Texture = TextureToGoLibrary::GetTexture(TextureName + ".txtg");
-                    Materials[FMATIndex].Textures.push_back(MaterialTexture);
-                    Materials[FMATIndex].IsTransparent = MaterialTexture.Texture->IsTransparent();
-
-                    Reader.Seek(TextureArrayOffset + (i + 1) * 8, BinaryVectorReader::Position::Begin);
-                }
-            }
-
-            //LocalTextures[FMATIndex] = TextureToGo(TexToGoPath + "/" + AlbTextureNames[AlbTextureNames.size() - 1] + ".txtg");
-            //this->m_Models[FMDLIndex].Textures[FMATIndex].Normal = TextureToGo(TexToGoPath + "/" + NrmTextureNames[AlbTextureNames.size() - 1] + ".txtg");
-
-            Reader.Seek(FMATBaseOffset + 176, BinaryVectorReader::Position::Begin);
-        }
-
-        //Parsing FSKL
-        Reader.Seek(FSKLOffset, BinaryVectorReader::Position::Begin);
-        {
-            uint32_t FSKLBaseOffset = Reader.GetPosition();
-            Reader.Seek(4, BinaryVectorReader::Position::Current);
-
-            uint32_t FSKLFlags = Reader.ReadUInt32();
-            uint64_t BoneDictOffset = Reader.ReadUInt64();
-            uint64_t BoneArrayOffset = Reader.ReadUInt64();
-            uint64_t MatrixToBoneListOffset = Reader.ReadUInt64();
-            uint64_t InverseModelMatricesOffset = Reader.ReadUInt64();
-
-            Reader.Seek(8, BinaryVectorReader::Position::Current); //Padding
-            uint64_t FSKLUserPointer = Reader.ReadUInt64();
-            uint16_t NumBones = Reader.ReadUInt16();
-            uint16_t NumSmoothMatrices = Reader.ReadUInt16();
-            uint16_t NumRigidMatrices = Reader.ReadUInt16();
-            
-            //std::cout << "NumBones: " << NumBones << ", NumSmoothMatrices: " << NumSmoothMatrices << ", NumRigidMatrices: " << NumRigidMatrices << std::endl;
-
-            /*
-            Reader.Seek(BoneDictOffset, BinaryVectorReader::Position::Begin);
-            Reader.Seek(4, BinaryVectorReader::Position::Current); //Always 0x00000000
-            uint32_t NumBoneEntries = Reader.ReadUInt32();
-            */
-            this->m_SkeletonBones.resize(NumBones);
-
-            Reader.Seek(MatrixToBoneListOffset, BinaryVectorReader::Position::Begin);
-
-            if (NumRigidMatrices > 0)
-            {
-                m_Rigids.resize(NumSmoothMatrices + NumRigidMatrices);
-                Reader.ReadStruct(m_Rigids.data(), (NumSmoothMatrices + NumRigidMatrices) * 2);
-            }
-
-            for (int BoneNodeIndex = 0; BoneNodeIndex < NumBones; BoneNodeIndex++)
-            {
-                Reader.Seek(BoneArrayOffset + (BoneNodeIndex * 0x58), BinaryVectorReader::Position::Begin); //BaseOffset + Index * BoneSize
-                Reader.Seek(32, BinaryVectorReader::Position::Current); //Not important
-                Reader.ReadStruct(&this->m_SkeletonBones[BoneNodeIndex], sizeof(BfresFile::SkeletonBone));
-                //std::cout << "BONE " << BoneNodeIndex << ": " << this->m_SkeletonBones[BoneNodeIndex].Position[0] << ", " << this->m_SkeletonBones[BoneNodeIndex].Position[1] << ", " << this->m_SkeletonBones[BoneNodeIndex].Position[2] << std::endl;
-            }
-        }
-
-        //Parsing FSHP
-        Reader.Seek(FSHPOffset, BinaryVectorReader::Position::Begin);
-        for (int FSHPIndex = 0; FSHPIndex < FSHPCount; FSHPIndex++)
-        {
-            uint64_t FSHPBaseOffset = Reader.GetPosition();
-            Reader.Seek(24, BinaryVectorReader::Position::Current);
-            uint64_t MeshArrayOffset = Reader.ReadUInt64();
-            uint64_t SkinBoneIndexListOffset = Reader.ReadUInt64();
-            Reader.Seek(24, BinaryVectorReader::Position::Current);
-            uint64_t BoundingBoxOffset = Reader.ReadUInt64();
-            uint64_t RadiusOffset = Reader.ReadUInt64();
-            int64_t UserPointer = Reader.ReadInt64();
-
-            Reader.Seek(FSHPBaseOffset + 82, BinaryVectorReader::Position::Begin);
-            uint16_t MaterialIndex = Reader.ReadUInt16();
-            uint16_t BoneIndex = Reader.ReadUInt16();
-            uint16_t VertexBufferIndex = Reader.ReadUInt16();
-            uint16_t NumSkinBoneIndex = Reader.ReadUInt16();
-            uint8_t VertexSkinCount = Reader.ReadUInt8();
-
-            //std::cout << "BoneIndex: " << BoneIndex << ", " << NumSkinBoneIndex << std::endl;
-
-            uint8_t NumLODs = Reader.ReadUInt8();
-
-            Reader.Seek(MeshArrayOffset, BinaryVectorReader::Position::Begin);
-            uint64_t MeshBaseOffset = Reader.GetPosition();
-            this->m_Models[FMDLIndex].LODs.resize(NumLODs);
-
-            for (int LODIndex = 0; LODIndex < NumLODs; LODIndex++)
-            {
-                this->m_Models[FMDLIndex].LODs[LODIndex].Faces.resize(FSHPCount);
-                    uint64_t SubMeshArrayOffset = Reader.ReadUInt64();
-                    Reader.Seek(24, BinaryVectorReader::Position::Current);
-                    uint32_t FaceBufferOffset = Reader.ReadUInt32();
-                    Reader.Seek(4, BinaryVectorReader::Position::Current);
-                    uint32_t FaceType = Reader.ReadUInt32();
-                    uint32_t FaceCount = Reader.ReadUInt32();
-                    uint32_t VertexSkip = Reader.ReadUInt32();
-                    //uint16_t NumSubMeshes = Reader.ReadUInt16();
-
-                    Reader.Seek(DataStart + FaceBufferOffset, BinaryVectorReader::Position::Begin);
-
-                    this->m_Models[FMDLIndex].LODs[LODIndex].Faces[FSHPIndex].resize(FaceCount);
-                    if (FaceType == 1)
-                    {
-                        for (uint32_t FaceIndex = 0; FaceIndex < FaceCount; FaceIndex++)
-                        {
-                            this->m_Models[FMDLIndex].LODs[LODIndex].Faces[FSHPIndex][FaceIndex] = VertexSkip + Reader.ReadUInt16();
-                        }
-                    }
-                    else if(FaceType == 2)
-                    {
-                        for (uint32_t FaceIndex = 0; FaceIndex < FaceCount; FaceIndex++)
-                        {
-                            this->m_Models[FMDLIndex].LODs[LODIndex].Faces[FSHPIndex][FaceIndex] = VertexSkip + Reader.ReadUInt32();
-                        }
-                    }
-                    else
-                    {
-                        Logger::Error("Bfres", "Unknown face type");
-                    }
-
-                Reader.Seek(MeshBaseOffset + ((LODIndex+1) * 56), BinaryVectorReader::Position::Begin);
-            }
-
-            this->m_Models[FMDLIndex].Materials[FSHPIndex] = Materials[MaterialIndex];
-
-            Reader.Seek(FSHPBaseOffset + 96, BinaryVectorReader::Position::Begin);
-        }
-
-        this->m_Models[FMDLIndex].Vertices.resize(FVTXCount);
-        Reader.Seek(FVTXOffset, BinaryVectorReader::Position::Begin);
-        for (int FVTXIndex = 0; FVTXIndex < FVTXCount; FVTXIndex++)
-        {
-            uint64_t FVTXBaseOffset = Reader.GetPosition();
-            Reader.Seek(8, BinaryVectorReader::Position::Current);
-
-            uint64_t FVTXAttArrOffset = Reader.ReadUInt64();
-            uint64_t FVTXAttArrDictionary = Reader.ReadUInt64();
-
-            Reader.Seek(FVTXBaseOffset + 48, BinaryVectorReader::Position::Begin);
-            uint64_t VertexBufferSizeOffset = Reader.ReadUInt64();
-            uint64_t VertexStrideSizeOffset = Reader.ReadUInt64();
-
-            Reader.Seek(8, BinaryVectorReader::Position::Current); //Padding
-
-            int32_t BufferOffset = Reader.ReadInt32();
-            uint8_t NumVertexAttrib = Reader.ReadUInt8();
-            uint8_t NumBuffer = Reader.ReadUInt8();
-            uint16_t Idx = Reader.ReadUInt16();
-            uint32_t VertexCount = Reader.ReadUInt32();
-            uint8_t VertexSkinCount = Reader.ReadUInt8();
-
-            std::vector<BfresFile::VertexBufferSize> VertexBufferSizeArray(NumBuffer);
-            std::vector<uint32_t> VertexBufferStrideArray(NumBuffer);
-            std::vector<BfresFile::VertexBufferAttribute> VertexBufferAttributes(NumVertexAttrib);
-
-            Reader.Seek(VertexBufferSizeOffset, BinaryVectorReader::Position::Begin);
-            for (int i = 0; i < NumBuffer; i++)
-            {
-                BfresFile::VertexBufferSize VBufferSize;
-                VBufferSize.Size = Reader.ReadUInt32();
-                VBufferSize.GPUFlags = Reader.ReadUInt32();
-                Reader.Seek(8, BinaryVectorReader::Position::Current);
-                VertexBufferSizeArray[i] = VBufferSize;
-            }
-
-            Reader.Seek(VertexStrideSizeOffset, BinaryVectorReader::Position::Begin);
-            for (int i = 0; i < NumBuffer; i++)
-            {
-                VertexBufferStrideArray[i] = Reader.ReadUInt32();
-                Reader.Seek(12, BinaryVectorReader::Position::Current);
-            }
-
-            Reader.Seek(FVTXAttArrOffset, BinaryVectorReader::Position::Begin);
-            for (int i = 0; i < NumVertexAttrib; i++)
-            {
-                Reader.Seek(Reader.ReadUInt64(), BinaryVectorReader::Position::Begin);
-
-                uint16_t NameLength = Reader.ReadUInt16();
-                for (int j = 0; j < NameLength; j++) {
-                    VertexBufferAttributes[i].Name += (char)Reader.ReadInt8();
-                }
-
-                Reader.Seek(FVTXAttArrOffset + 16 * i + 8, BinaryVectorReader::Position::Begin);
-            
-                VertexBufferAttributes[i].Format = Reader.ReadUInt16();
-                Reader.Seek(2, BinaryVectorReader::Position::Current);
-                VertexBufferAttributes[i].Offset = Reader.ReadUInt16();
-                VertexBufferAttributes[i].BufferIndex = Reader.ReadUInt16();
-
-                Reader.Seek(FVTXAttArrOffset + 16 * (i + 1), BinaryVectorReader::Position::Begin);
-            }
-
-            std::vector<BfresFile::VertexBuffer> VertexBuffers(NumBuffer);
-            for (int i = 0; i < NumBuffer; i++)
-            {
-                VertexBuffers[i].Stride = VertexBufferStrideArray[i];
-                VertexBuffers[i].Size = VertexBufferSizeArray[i].Size;
-                VertexBuffers[i].Data.resize(VertexBuffers[i].Size);
-
-                if (i == 0) VertexBuffers[i].BufferOffset = DataStart + BufferOffset;
-                if (i > 0) VertexBuffers[i].BufferOffset = VertexBuffers[i - 1].BufferOffset + VertexBuffers[i - 1].Size;
-                if (VertexBuffers[i].BufferOffset % 8 != 0) VertexBuffers[i].BufferOffset = VertexBuffers[i].BufferOffset + (8 - (VertexBuffers[i].BufferOffset % 8));
-
-                Reader.Seek(VertexBuffers[i].BufferOffset, BinaryVectorReader::Position::Begin);
-                Reader.ReadStruct(VertexBuffers[i].Data.data(), VertexBuffers[i].Size);
-            }
-
-            this->m_Models[FMDLIndex].Vertices[FVTXIndex].resize(VertexCount * 3);
-
-            /* Parsing vertices */
-            for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-            {
-                if (VertexBufferAttributes[0].Format != (uint16_t)BfresFile::VertexBufferFormat::Format_32_32_32_Single)
-                {
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3] = this->ShortToFloat(VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 1]);
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1] = this->ShortToFloat(VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 2], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 3]);
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2] = this->ShortToFloat(VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 4], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 5]);
-                }
-                else
-                {
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3] = this->UInt32ToFloat(VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 1], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 2], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 3]);
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1] = this->UInt32ToFloat(VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 4], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 5], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 6], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 7]);
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2] = this->UInt32ToFloat(VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 8], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 9], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 10], VertexBuffers[0].Data[VertexIndex * VertexBuffers[0].Stride + 11]);
-                }
-            }
-
-            bool TransformedRoot = false;
-            int UVBufferIndex = 0;
-            /* Parsing UV Data */
-            for (BfresFile::VertexBufferAttribute& Attribute : VertexBufferAttributes)
-            {
-                if (Attribute.Name[0] == '_' && Attribute.Name[1] == 'u') //UV Buffer Attribute
-                {
-                    if (!(this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures.size()-1 >= UVBufferIndex)) continue;
-                    this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates.resize(VertexCount * 2);
-
-                    //std::cout << "VERTEX BUFFER UV " << Attribute.BufferIndex << ": " << VertexBuffers[Attribute.BufferIndex].Stride << std::endl;
-                    //std::cout << "SegSize: " << AttributeSegmentSize << std::endl;
-
-                    for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-                    {
-                        switch (Attribute.Format)
-                        {
-                        case (uint16_t)VertexBufferFormat::Format_16_16_Single:
-                            this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->ShortToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1]);
-                            this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->ShortToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]);                            
-                            break;
-                        case (uint16_t)VertexBufferFormat::Format_16_16_UNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1]) / 65536.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]) / 65536.0f;
-                            break;
-                        case (uint16_t)VertexBufferFormat::Format_16_16_SNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1]) / 32768.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->CombineToUInt16(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]) / 32768.0f;
-                            break;
-                        case (uint16_t)VertexBufferFormat::Format_8_8_UNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset] / 256.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1] / 256.0f;
-                            break;
-                        case (uint16_t)VertexBufferFormat::Format_8_8_SNorm:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset] / 128.0f;
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = (float)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1] / 128.0f;
-                            break;
-                        case (uint16_t)VertexBufferFormat::Format_32_32_Single:
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2] = this->UInt32ToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 1], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 2], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 3]);
-                             this->m_Models[FMDLIndex].Materials[FVTXIndex].Textures[UVBufferIndex].TexCoordinates[VertexIndex * 2 + 1] = this->UInt32ToFloat(VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 4], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 5], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 6], VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset + 7]);
-                            break;
-                        }
-                    }
-
-                    UVBufferIndex++;
-                }
-
-                if (Attribute.Name[0] == '_' && Attribute.Name[1] == 'i' && !this->m_Rigids.empty() && VertexSkinCount == 1) //UV Buffer Attribute
-                {
-                    for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-                    {
-                        BfresFile::SkeletonBone RootBone = this->m_SkeletonBones[this->m_Rigids[VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset]]];
-                        //Vector3F Translation(RootBone.Position[0], RootBone.Position[1], RootBone.Position[2]);
-
-                        auto ApplyTransformOfParent = [&RootBone](int32_t ParentIndex, std::vector<BfresFile::SkeletonBone>& Bones, float& X, float& Y, float& Z)
-                            {
-                                if (ParentIndex == -1) return false;
-
-                                X += Bones[ParentIndex].Position[0];
-                                Y += Bones[ParentIndex].Position[1];
-                                Z += Bones[ParentIndex].Position[2];
-
-                                Vector3F Rotation(Bones[ParentIndex].Rotation[0], Bones[ParentIndex].Rotation[1], Bones[ParentIndex].Rotation[2]);
-
-                                float NewX = Bones[ParentIndex].Position[0] + ((X - Bones[ParentIndex].Position[0]) * (std::cosf(Rotation.GetZ()) * std::cosf(Rotation.GetY()))) +
-                                    ((Y - Bones[ParentIndex].Position[1]) * (std::cosf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::sinf(Rotation.GetX()) - std::sinf(Rotation.GetZ()) * std::cosf(Rotation.GetX()))) +
-                                    ((Z - Bones[ParentIndex].Position[2]) * (std::cosf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::cosf(Rotation.GetX()) + std::sinf(Rotation.GetZ()) * std::sinf(Rotation.GetX())));
-
-                                float NewY = Bones[ParentIndex].Position[1] + ((X - Bones[ParentIndex].Position[0]) * (std::sinf(Rotation.GetZ()) * std::cosf(Rotation.GetY()))) +
-                                    ((Y - Bones[ParentIndex].Position[1]) * (std::sinf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::sinf(Rotation.GetX()) + std::cosf(Rotation.GetZ()) * std::cosf(Rotation.GetX()))) +
-                                    ((Z - Bones[ParentIndex].Position[2]) * (std::sinf(Rotation.GetZ()) * std::sinf(Rotation.GetY()) * std::cosf(Rotation.GetX()) - std::cosf(Rotation.GetZ()) * std::sinf(Rotation.GetX())));
-
-                                float NewZ = Bones[ParentIndex].Position[2] + ((X - Bones[ParentIndex].Position[0]) * (-std::sinf(Rotation.GetY()))) +
-                                    ((Y - Bones[ParentIndex].Position[1]) * (std::cosf(Rotation.GetY()) * std::sinf(Rotation.GetX()))) +
-                                    ((Z - Bones[ParentIndex].Position[2]) * (std::cosf(Rotation.GetY()) * std::cosf(Rotation.GetX())));
-
-                                X = NewX;
-                                Y = NewY;
-                                Z = NewZ;
-
-                                RootBone = Bones[ParentIndex];
-
-                                return true;
-                            };
-
-                        if (ApplyTransformOfParent(RootBone.Index, m_SkeletonBones, this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2]))
-                        {
-                            while (true)
-                            {
-                                if (!ApplyTransformOfParent(RootBone.ParentIndex, m_SkeletonBones, this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1], this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2]))
-                                    break;
-                            }
-                        }
-
-                        TransformedRoot = true;
-                        //std::cout << "_i Buffer Element: " << (int)VertexBuffers[Attribute.BufferIndex].Data[VertexIndex * VertexBuffers[Attribute.BufferIndex].Stride + Attribute.Offset] << std::endl;
-                    }
-                }
-            }
-
-            if (!TransformedRoot)
-            {
-                for (int VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-                {
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3] += this->m_SkeletonBones[0].Position[0];
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 1] += this->m_SkeletonBones[0].Position[1];
-                    this->m_Models[FMDLIndex].Vertices[FVTXIndex][VertexIndex * 3 + 2] += this->m_SkeletonBones[0].Position[2];
-                }
-            }
-
-            Reader.Seek(FVTXBaseOffset + 88, BinaryVectorReader::Position::Begin);
-        }
+        Reader.Seek(i * BData.Stride + Offset, BfresBinaryVectorReader::Position::Begin);
+        Data[i] = Reader.ReadAttribute(Format);
     }
 
-    this->CreateOpenGLObjects();
+    return Data;
+}
+
+void BfresFile::VertexBuffer::VertexBufferInfo::Read(BfresBinaryVectorReader& Reader)
+{
+    Size = Reader.ReadUInt32();
+    Reader.Seek(12, BfresBinaryVectorReader::Position::Current);
+}
+
+void BfresFile::VertexBuffer::VertexStrideInfo::Read(BfresBinaryVectorReader& Reader)
+{
+    Stride = Reader.ReadUInt32();
+    Reader.Seek(12, BfresBinaryVectorReader::Position::Current);
+}
+
+void BfresFile::VertexBuffer::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(BfresFile::VertexBufferHeader));
+    VertexCount = Header.VertexCount;
+
+    uint32_t Pos = Reader.GetPosition();
+    Attributes = Reader.ReadDictionary<VertexAttribute>(Header.AttributeArrayDictionary, Header.AttributeArrayOffset);
+    BufferInfo = Reader.ReadArray<VertexBufferInfo>(Header.VertexBufferInfoArray, Header.VertexBufferCount);
+    BufferStrides = Reader.ReadArray<VertexStrideInfo>(Header.VertexBufferStrideArray, Header.VertexBufferCount);
+
+    Reader.Seek(Pos, BfresBinaryVectorReader::Position::Begin);
+}
+
+void BfresFile::VertexBuffer::InitBuffers(BfresBinaryVectorReader& Reader, BufferMemoryPool PoolInfo)
+{
+    Reader.Seek(PoolInfo.Offset + Header.BufferOffset, BfresBinaryVectorReader::Position::Begin);
+    Buffers.resize(Header.VertexBufferCount);
+    for (int Buff = 0; Buff < Header.VertexBufferCount; Buff++)
+    {
+        Reader.Align(8);
+
+        BufferData Buffer;
+        Buffer.Data.resize(BufferInfo[Buff].Size);
+        Reader.ReadStruct(Buffer.Data.data(), BufferInfo[Buff].Size);
+        Buffer.Stride = BufferStrides[Buff].Stride;
+        Buffers[Buff] = Buffer;
+    }
+}
+
+std::vector<glm::vec4> BfresFile::VertexBuffer::TryGetAttributeData(std::string Name)
+{
+    if (Attributes.Nodes.count(Name))
+        return Attributes.Nodes[Name].Value.GetData(*this);
+
+    return std::vector<glm::vec4>();
+}
+
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetPositions()
+{
+    return TryGetAttributeData("_p0");
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetNormals()
+{
+    return TryGetAttributeData("_n0");
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetTexCoords(int Channel)
+{
+    return TryGetAttributeData("_u" + std::to_string(Channel));
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetColors(int Channel)
+{
+    return TryGetAttributeData("_c" + std::to_string(Channel));
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetBoneWeights(int Channel)
+{
+    return TryGetAttributeData("_w" + std::to_string(Channel));
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetBoneIndices(int Channel)
+{
+    return TryGetAttributeData("_i" + std::to_string(Channel));
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetTangents()
+{
+    return TryGetAttributeData("_t0");
+}
+std::vector<glm::vec4> BfresFile::VertexBuffer::GetBitangent()
+{
+    return TryGetAttributeData("_b0");
+}
+
+void BfresFile::Material::Sampler::Read(BfresBinaryVectorReader& Reader)
+{
+    WrapModeU = (BfresFile::TexWrap)Reader.ReadUInt8();
+    WrapModeV = (BfresFile::TexWrap)Reader.ReadUInt8();
+    WrapModeW = (BfresFile::TexWrap)Reader.ReadUInt8();
+    CompareFunc = (BfresFile::CompareFunction)Reader.ReadUInt8();
+    BorderColorType = (BfresFile::TexBorderType)Reader.ReadUInt8();
+    Anisotropic = (BfresFile::MaxAnisotropic)Reader.ReadUInt8();
+    FilterFlags = Reader.ReadUInt16();
+    MinLOD = Reader.ReadFloat();
+    MaxLOD = Reader.ReadFloat();
+    LODBias = Reader.ReadFloat();
+    Reader.Seek(12, BfresBinaryVectorReader::Position::Current);
+
+    Mipmap = (MipFilterModes)(FilterFlags & FlagsMipmapMask);
+    MagFilter = (ExpandFilterModes)(FilterFlags & FlagsExpandMask);
+    MinFilter = (ShrinkFilterModes)(FilterFlags & FlagsShrinkMask);
+}
+
+void BfresFile::Material::ShaderParam::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadUInt64(); //Padding
+    Name = Reader.ReadStringOffset(Reader.ReadUInt64());
+    DataOffset = Reader.ReadUInt16();
+    Type = (BfresFile::ShaderParamType)Reader.ReadUInt16();
+    Reader.ReadUInt32(); //Padding
+}
+
+void BfresFile::Material::ShaderParam::ReadShaderParamData(BfresBinaryVectorReader& Reader)
+{
+    Reader.Seek(DataOffset, BfresBinaryVectorReader::Position::Begin);
+    this->DataValue = ReadParamData(this->Type, Reader);
+}
+
+//TODO: Find a better way
+std::variant<bool, float, int32_t, uint32_t, uint8_t, std::vector<bool>, std::vector<float>, std::vector<int32_t>, std::vector<uint32_t>, std::vector<uint8_t>, BfresFile::Material::ShaderParam::Srt2D, BfresFile::Material::ShaderParam::Srt3D, BfresFile::Material::ShaderParam::TexSrt> BfresFile::Material::ShaderParam::ReadParamData(BfresFile::ShaderParamType Type, BfresBinaryVectorReader& Reader)
+{
+    switch (Type)
+    {
+    case BfresFile::Bool:
+        return (bool)Reader.ReadUInt8();
+    case BfresFile::Bool2:
+        return Reader.ReadRawBoolArray(2);
+    case BfresFile::Bool3:
+        return Reader.ReadRawBoolArray(3);
+    case BfresFile::Bool4:
+        return Reader.ReadRawBoolArray(4);
+    case BfresFile::Int:
+        return (int32_t)Reader.ReadInt32();
+    case BfresFile::Int2:
+        return Reader.ReadRawArray<int32_t>(2);
+    case BfresFile::Int3:
+        return Reader.ReadRawArray<int32_t>(3);
+    case BfresFile::Int4:
+        return Reader.ReadRawArray<int32_t>(4);
+    case BfresFile::UInt:
+        return (uint32_t)Reader.ReadUInt32();
+    case BfresFile::UInt2:
+        return Reader.ReadRawArray<uint32_t>(2);
+    case BfresFile::UInt3:
+        return Reader.ReadRawArray<uint32_t>(2);
+    case BfresFile::UInt4:
+        return Reader.ReadRawArray<uint32_t>(2);
+    case BfresFile::Float:
+        return (float)Reader.ReadFloat();
+    case BfresFile::Float2:
+        return Reader.ReadRawArray<float>(2);
+    case BfresFile::Float3:
+        return Reader.ReadRawArray<float>(3);
+    case BfresFile::Float4:
+        return Reader.ReadRawArray<float>(4);
+    case BfresFile::Reserved2:
+        return Reader.ReadRawArray<uint8_t>(2);
+    case BfresFile::Float2x2:
+        return Reader.ReadRawArray<float>(2 * 2);
+    case BfresFile::Float2x3:
+        return Reader.ReadRawArray<float>(2 * 3);
+    case BfresFile::Float2x4:
+        return Reader.ReadRawArray<float>(2 * 4);
+    case BfresFile::Reserved3:
+        return Reader.ReadRawArray<uint8_t>(3);
+    case BfresFile::Float3x2:
+        return Reader.ReadRawArray<float>(3 * 2);
+    case BfresFile::Float3x3:
+        return Reader.ReadRawArray<float>(3 * 3);
+    case BfresFile::Float3x4:
+        return Reader.ReadRawArray<float>(3 * 4);
+    case BfresFile::Reserved4:
+        return Reader.ReadRawArray<uint8_t>(4);
+    case BfresFile::Float4x2:
+        return Reader.ReadRawArray<float>(4 * 2);
+    case BfresFile::Float4x3:
+        return Reader.ReadRawArray<float>(4 * 3);
+    case BfresFile::Float4x4:
+        return std::vector<float>(4 * 4);
+        break;
+    case BfresFile::Srt2D:
+    {
+        Srt2D Value2d;
+        Value2d.Scaling = glm::vec2(Reader.ReadFloat(), Reader.ReadFloat());
+        Value2d.Rotation = Reader.ReadFloat();
+        Value2d.Translation = glm::vec2(Reader.ReadFloat(), Reader.ReadFloat());
+        return Value2d;
+    }
+    case BfresFile::Srt3D:
+    {
+        Srt3D Value3d;
+        Value3d.Scaling = glm::vec3(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
+        Value3d.Rotation = glm::vec3(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
+        Value3d.Translation = glm::vec3(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
+        return Value3d;
+    }
+    case BfresFile::TexSrt:
+    case BfresFile::TexSrtEx:
+    {
+        TexSrt ValueTex;
+        ValueTex.Mode = (TexSrt::TexSrtMode)Reader.ReadInt32();
+        ValueTex.Scaling = glm::vec2(Reader.ReadFloat(), Reader.ReadFloat());
+        ValueTex.Rotation = Reader.ReadFloat();
+        ValueTex.Translation = glm::vec2(Reader.ReadFloat(), Reader.ReadFloat());
+        return ValueTex;
+    }
+    }
+}
+
+std::vector<float> BfresFile::Material::RenderInfo::GetValueSingles()
+{
+    return *(std::vector<float>*) & _Value;
+}
+
+std::vector<int32_t> BfresFile::Material::RenderInfo::GetValueInt32s()
+{
+    return *(std::vector<int32_t>*) & _Value;
+}
+
+std::vector<std::string> BfresFile::Material::RenderInfo::GetValueStrings()
+{
+    return *(std::vector<std::string>*) & _Value;
+}
+
+void BfresFile::Material::RenderInfo::ReadData(BfresBinaryVectorReader& Reader, uint32_t Count)
+{
+    switch (Type)
+    {
+    case BfresFile::Material::RenderInfo::Int32:
+        _Value = Reader.ReadRawArray<int32_t>(Count);
+        break;
+    case BfresFile::Material::RenderInfo::Single:
+        _Value = Reader.ReadRawArray<float>(Count);
+        break;
+    case BfresFile::Material::RenderInfo::String:
+        _Value = Reader.ReadStringOffsets(Count);
+        break;
+    default:
+        break;
+    }
+}
+
+void BfresFile::Material::RenderInfo::Read(BfresBinaryVectorReader& Reader)
+{
+}
+
+void BfresFile::Material::ReadShaderOptions(BfresBinaryVectorReader& Reader)
+{
+    uint32_t NumBoolChoices = HeaderShaderInfo.NumOptionBooleans;
+    std::vector<bool> _OptionBooleans = Reader.ReadCustom<std::vector<bool>>([&Reader, &NumBoolChoices]() {
+        return Reader.ReadBooleanBits(NumBoolChoices);
+        }, HeaderShaderInfo.OptionBoolChoiceOffset);
+
+    uint32_t NumChoiceValues = HeaderShaderInfo.NumOptions - HeaderShaderInfo.NumOptionBooleans;
+    std::vector<std::string> _OptionStrings = Reader.ReadCustom<std::vector<std::string>>([&Reader, &NumChoiceValues]()
+        {
+            return Reader.ReadStringOffsets(NumChoiceValues);
+        }, HeaderShaderInfo.OptionStringChoiceOffset);
+
+    BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> _OptionKeys = Reader.ReadDictionary<BfresBinaryVectorReader::ResString>(HeaderShaderAssign.OptionsDictOffset);
+
+    uint32_t NumOptionIndices = HeaderShaderInfo.NumOptions;
+    std::vector<int16_t> _OptionIndices = Reader.ReadCustom<std::vector<int16_t>>([&Reader, &NumOptionIndices]()
+        {
+            return Reader.ReadRawArray<int16_t>(NumOptionIndices);
+        }, HeaderShaderInfo.OptionIndicesOffset);
+
+    std::vector<std::string> Choices;
+    for (int i = 0; i < _OptionBooleans.size(); i++)
+    {
+        Choices.push_back(_OptionBooleans[i] ? "True" : "False");
+    }
+    if (!_OptionStrings.empty())
+    {
+        Choices.insert(Choices.end(), _OptionStrings.begin(), _OptionStrings.end());
+    }
+
+    int ChoiceIndex = 0;
+    for (int i = 0; i < _OptionKeys.Nodes.size(); i++)
+    {
+        if (std::find(_OptionIndices.begin(), _OptionIndices.end(), i) == _OptionIndices.end())
+            continue;
+
+        BfresBinaryVectorReader::ResString Value;
+        Value.String = Choices[ChoiceIndex];
+        std::string Key = _OptionKeys.GetKey(i);
+        ChoiceIndex++;
+        ShaderAssign.ShaderOptions.Add(Key, Value);
+
+        //std::cout << "Shader Assign Option " << Key << ": " << Value.String << std::endl;
+    }
+}
+
+void BfresFile::Material::ReadRenderInfo(BfresBinaryVectorReader& Reader)
+{
+    BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> Dict = Reader.ReadDictionary<BfresBinaryVectorReader::ResString>(HeaderShaderAssign.RenderInfoDictOffset);
+    if (Dict.Nodes.empty()) return;
+
+    for (int i = 0; i < Dict.Nodes.size(); i++)
+    {
+        RenderInfo Info;
+
+        Reader.Seek(HeaderShaderAssign.RenderInfoOffset + i * 16, BfresBinaryVectorReader::Position::Begin);
+        Info.Name = Reader.ReadStringOffset(Reader.ReadUInt64());
+        Info.Type = (RenderInfo::RenderInfoType)Reader.ReadUInt8();
+
+        Reader.Seek(Header.RenderInfoNumOffset + i * 2, BfresBinaryVectorReader::Position::Begin);
+        uint16_t Count = Reader.ReadUInt16();
+
+        Reader.Seek(Header.RenderInfoDataOffsetTable + i * 2, BfresBinaryVectorReader::Position::Begin);
+        uint16_t DataOffset = Reader.ReadUInt16();
+
+        Reader.Seek(Header.RenderInfoBufferOffset + DataOffset, BfresBinaryVectorReader::Position::Begin);
+        Info.ReadData(Reader, Count);
+
+        //std::cout << "Render info " << Info.Name << std::endl;
+
+        RenderInfos.Add(Info.Name, Info);
+    }
+}
+
+void BfresFile::Material::ReadShaderParameters(BfresBinaryVectorReader& Reader)
+{
+    BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> Dict = Reader.ReadDictionary<BfresBinaryVectorReader::ResString>(HeaderShaderAssign.ShaderParamDictOffset);
+    if (Dict.Nodes.empty()) return;
+
+    Reader.Seek(HeaderShaderAssign.ShaderParamOffset, BfresBinaryVectorReader::Position::Begin);
+    for (int i = 0; i < Dict.Nodes.size(); i++)
+    {
+        ShaderParam Param;
+        Param.Read(Reader);
+        ShaderParams.Add(Param.Name, Param);
+    }
+
+    uint32_t ShaderParamSize = HeaderShaderAssign.ShaderParamSize;
+    std::vector<uint8_t> ParamData = Reader.ReadCustom<std::vector<uint8_t>>([&Reader, &ShaderParamSize]()
+        {
+            return Reader.ReadRawArray<uint8_t>(ShaderParamSize);
+        }, Header.ParamDataOffset);
+
+    BfresBinaryVectorReader DataReader(ParamData);
+    for (auto& [Key, Val] : ShaderParams.Nodes)
+    {
+        Val.Value.ReadShaderParamData(DataReader);
+    }
+}
+
+BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> BfresFile::Material::ReadAssign(BfresBinaryVectorReader& Reader, uint64_t StringListOffset, uint64_t StringDictOffset, uint64_t IndicesOffset, int32_t NumValues)
+{
+    BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> Dict;
+    if (NumValues == 0) return Dict;
+
+    std::vector<std::string> _ValueStrings = Reader.ReadCustom<std::vector<std::string>>([&Reader, &NumValues]()
+        {
+            return Reader.ReadStringOffsets(NumValues);
+        }, StringListOffset);
+
+    std::vector<int16_t> _ValueIndices = Reader.ReadCustom<std::vector<int16_t>>([&Reader, &NumValues]()
+        {
+            return Reader.ReadRawArray<int16_t>(NumValues);
+        }, IndicesOffset);
+
+    BfresBinaryVectorReader::ResDict<BfresBinaryVectorReader::ResString> _OptionKeys = Reader.ReadDictionary<BfresBinaryVectorReader::ResString>(StringDictOffset);
+
+    int ChoiceIndex = 0;
+    for (int i = 0; i < _ValueStrings.size(); i++)
+    {
+        if (std::find(_ValueIndices.begin(), _ValueIndices.end(), i) == _ValueIndices.end())
+            continue;
+
+        BfresBinaryVectorReader::ResString Value;
+        Value.String = _ValueStrings[ChoiceIndex];
+        std::string Key = _OptionKeys.GetKey(i);
+        ChoiceIndex++;
+        Dict.Add(Key, Value);
+    }
+    return Dict;
+}
+
+void BfresFile::Material::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(MaterialHeader));
+    Name = Reader.ReadStringOffset(Header.NameOffset);
+    uint32_t Pos = Reader.GetPosition();
+    Reader.Seek(Header.TextureNamesOffset, BfresBinaryVectorReader::Position::Begin);
+    Textures = Reader.ReadStringOffsets(Header.TextureRefCount);
+
+    Samplers = Reader.ReadDictionary<Sampler>(Header.SamplerDictionaryOffset, Header.SamplerOffset);
+
+    Reader.Seek(Header.ShaderInfoOffset, BfresBinaryVectorReader::Position::Begin);
+    Reader.ReadStruct(&HeaderShaderInfo, sizeof(ShaderInfoHeader));
+
+    Reader.Seek(HeaderShaderInfo.ShaderAssignOffset, BfresBinaryVectorReader::Position::Begin);
+    Reader.ReadStruct(&HeaderShaderAssign, sizeof(ShaderAssignHeader));
+
+    ReadShaderOptions(Reader);
+    ReadRenderInfo(Reader);
+    ReadShaderParameters(Reader);
+
+    ShaderAssign.ShaderArchiveName = Reader.ReadStringOffset(HeaderShaderAssign.ShaderArchiveNameOffset);
+    ShaderAssign.ShadingModelName = Reader.ReadStringOffset(HeaderShaderAssign.ShaderModelNameOffset);
+
+    ShaderAssign.SamplerAssign = ReadAssign(Reader,
+        HeaderShaderInfo.SamplerAssignOffset,
+        HeaderShaderAssign.SamplerAssignDictOffset,
+        HeaderShaderInfo.SamplerAssignIndicesOffset,
+        HeaderShaderInfo.NumSamplerAssign);
+
+    ShaderAssign.AttributeAssign = ReadAssign(Reader,
+        HeaderShaderInfo.AttributeAssignOffset,
+        HeaderShaderAssign.AttributeAssignDictOffset,
+        HeaderShaderInfo.AttributeAssignIndicesOffset,
+        HeaderShaderInfo.NumAttributeAssign);
+
+    Reader.Seek(Pos, BfresBinaryVectorReader::Position::Begin);
+}
+
+/*
+void BfresFile::Material::LoadTextures(BfresFile& File, std::string TexDir)
+{
+    for (std::string Tex : Textures)
+    {
+        if (!File.Textures.count(Tex))
+        {
+            if (!Util::FileExists(TexDir == "" ? Editor::GetRomFSFile("TexToGo/" + Tex + ".txtg") : (TexDir + "/" + Tex + ".txtg")))
+                continue;
+
+            TextureToGo* TexToGo = TextureToGoLibrary::GetTexture(Tex + ".txtg", TexDir);
+
+            if (!TexToGo->IsLoaded())
+                continue;
+
+            File.Textures.insert({ Tex, TexToGo });
+        }
+    }
+}
+*/
+
+std::string BfresFile::Material::GetRenderInfoString(std::string Key)
+{
+    if (RenderInfos.Nodes.count(Key))
+    {
+        if (!RenderInfos.Nodes[Key].Value.GetValueStrings().empty())
+            return RenderInfos.Nodes[Key].Value.GetValueStrings()[0];
+    }
+    return "";
+}
+
+float BfresFile::Material::GetRenderInfoFloat(std::string Key)
+{
+    if (RenderInfos.Nodes.count(Key))
+    {
+        if (!RenderInfos.Nodes[Key].Value.GetValueSingles().empty())
+            return RenderInfos.Nodes[Key].Value.GetValueSingles()[0];
+    }
+    return 1.0f;
+}
+
+int32_t BfresFile::Material::GetRenderInfoInt(std::string Key)
+{
+    if (RenderInfos.Nodes.count(Key))
+    {
+        if (!RenderInfos.Nodes[Key].Value.GetValueInt32s().empty())
+            return RenderInfos.Nodes[Key].Value.GetValueInt32s()[0];
+    }
+    return 1;
+}
+
+void BfresFile::Shape::Mesh::IndexBufferInfo::Read(BfresBinaryVectorReader& Reader)
+{
+    Size = Reader.ReadUInt32();
+    Flag = Reader.ReadUInt32();
+    Reader.Seek(40, BfresBinaryVectorReader::Position::Current);
+}
+
+void BfresFile::Shape::Mesh::SubMesh::Read(BfresBinaryVectorReader& Reader)
+{
+    Offset = Reader.ReadUInt32();
+    Count = Reader.ReadUInt32();
+}
+
+void BfresFile::Shape::Mesh::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(BfresFile::MeshHeader));
+
+    uint32_t Pos = Reader.GetPosition();
+
+    Reader.Seek(Header.BufferInfoOffset, BfresBinaryVectorReader::Position::Begin);
+    BufferInfo = Reader.ReadResObject<IndexBufferInfo>();
+    Reader.Seek(Header.SubMeshArrayOffset, BfresBinaryVectorReader::Position::Begin);
+    SubMeshes = Reader.ReadArray<SubMesh>(Header.SubMeshArrayOffset, Header.SubMeshCount);
+
+    IndexCount = Header.IndexCount;
+    IndexFormat = Header.IndexFormat;
+    PrimitiveType = Header.PrimType;
+
+    Reader.Seek(Pos, BfresBinaryVectorReader::Position::Begin);
+}
+
+void BfresFile::Shape::Mesh::InitBuffers(BfresBinaryVectorReader& Reader, BufferMemoryPool Pool)
+{
+    uint32_t BaseIndexSize = 0;
+
+    switch (Header.IndexFormat)
+    {
+    case BfresFile::BfresIndexFormat::UnsignedByte:
+    {
+        BaseIndexSize++;
+        break;
+    }
+    case BfresFile::BfresIndexFormat::UInt16:
+    {
+        BaseIndexSize += 2;
+        break;
+    }
+    case BfresFile::BfresIndexFormat::UInt32:
+    {
+        BaseIndexSize += 4;
+        break;
+    }
+    }
+
+    Reader.Seek(Pool.Offset + Header.BufferOffset + Header.BaseIndex * BaseIndexSize, BfresBinaryVectorReader::Position::Begin);
+    IndexBuffer.resize(BufferInfo.Size);
+    Reader.ReadStruct(IndexBuffer.data(), BufferInfo.Size);
+}
+
+std::vector<uint32_t> BfresFile::Shape::Mesh::GetIndices()
+{
+    BfresBinaryVectorReader Reader(IndexBuffer);
+    std::vector<uint32_t> Indices(Header.IndexCount);
+
+    for (int i = 0; i < Indices.size(); i++)
+    {
+        switch (Header.IndexFormat)
+        {
+        case BfresFile::BfresIndexFormat::UnsignedByte:
+        {
+            Indices[i] = Reader.ReadUInt8();
+            break;
+        }
+        case BfresFile::BfresIndexFormat::UInt16:
+        {
+            Indices[i] = Reader.ReadUInt16();
+            break;
+        }
+        case BfresFile::BfresIndexFormat::UInt32:
+        {
+            Indices[i] = Reader.ReadUInt32();
+            break;
+        }
+        }
+    }
+    return Indices;
+}
+
+void BfresFile::Shape::ShapeBounding::Read(BfresBinaryVectorReader& Reader)
+{
+    Center = glm::vec3(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
+    Extent = glm::vec3(Reader.ReadFloat(), Reader.ReadFloat(), Reader.ReadFloat());
+}
+
+void BfresFile::Shape::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(BfresFile::ShapeHeader));
+
+    uint32_t Pos = Reader.GetPosition();
+    Name = Reader.ReadStringOffset(Header.NameOffset);
+    VertexBufferIndex = Header.VertexBufferIndex;
+    MaterialIndex = Header.MaterialIndex;
+    BoneIndex = Header.BoneIndex;
+    SkinCount = Header.MaxSkinInfluence;
+    Meshes = Reader.ReadArray<Mesh>(Header.MeshArrayOffset, Header.MeshCount);
+
+    uint32_t NumBounding = 0;
+    for (Mesh M : Meshes)
+    {
+        NumBounding += M.SubMeshes.size() + 1;
+    }
+    uint32_t NumRadius = Meshes.size();
+    BoundingSpheres = Reader.ReadCustom<std::vector<glm::vec4>>([&NumRadius, &Reader]() {
+
+        std::vector<glm::vec4> Values(NumRadius);
+        for (int i = 0; i < Values.size(); i++)
+        {
+            Values[i] = Reader.ReadVector4F();
+        }
+
+        return Values;
+        }, 0);
+
+    BoundingBoxes = Reader.ReadArray<ShapeBounding>(Header.BoundingBoxOffset, NumBounding);
+
+    Reader.Seek(Pos, BfresBinaryVectorReader::Position::Begin);
+}
+
+void BfresFile::Shape::Init(BfresBinaryVectorReader& Reader, BfresFile::VertexBuffer Buffer, BufferMemoryPool Pool, BfresFile::Skeleton& Skeleton)
+{
+    this->Buffer = Buffer;
+    this->Buffer.InitBuffers(Reader, Pool);
+
+    for (Mesh& M : Meshes)
+        M.InitBuffers(Reader, Pool);
+}
+
+void BfresFile::Skeleton::Bone::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(BoneHeader));
+    Name = Reader.ReadStringOffset(Header.NameOffset);
+
+    _Flags = Header.Flags;
+    FlagsRotation = (BoneFlagsRotation)(_Flags & _FlagsMaskRotate);
+    Position = glm::vec3(Header.PositionX, Header.PositionY, Header.PositionZ);
+    Rotate = glm::vec4(Header.RotationX, Header.RotationY, Header.RotationZ, Header.RotationW);
+    Scale = glm::vec3(Header.ScaleX, Header.ScaleY, Header.ScaleZ);
+
+    Index = Header.Index;
+
+    SmoothMatrixIndex = Header.SmoothMatrixIndex;
+    RigidMatrixIndex = Header.RigidMatrixIndex;
+    ParentIndex = Header.ParentIndex;
+}
+
+void BfresFile::Skeleton::Bone::CalculateLocalMatrix(BfresBinaryVectorReader::ResDict<Bone>& Bones)
+{
+    if (CalculatedMatrices)
+        return;
+
+    WorldMatrix = glm::mat4(1.0f);
+
+    WorldMatrix = glm::translate(WorldMatrix, Position);
+    WorldMatrix = glm::scale(WorldMatrix, Scale);
+
+    if (FlagsRotation == BoneFlagsRotation::EulerXYZ)
+    {
+        WorldMatrix = glm::rotate(WorldMatrix, Rotate.z, glm::vec3(0.0f, 0.0f, 1.0f));
+        WorldMatrix = glm::rotate(WorldMatrix, Rotate.y, glm::vec3(0.0f, 1.0f, 0.0f));
+        WorldMatrix = glm::rotate(WorldMatrix, Rotate.x, glm::vec3(1.0f, 0.0f, 0.0f));
+    }
+    else
+    {
+        WorldMatrix = glm::toMat4(glm::qua(Rotate[0], Rotate[1], Rotate[2], Rotate[3]));
+    }
+
+    if (ParentIndex != -1)
+    {
+        Bone& Parent = Bones.GetByIndex(ParentIndex).Value;
+        Parent.CalculateLocalMatrix(Bones);
+        WorldMatrix = Parent.WorldMatrix * WorldMatrix;
+    }
+
+    //TODO: INVERSE
+    CalculatedMatrices = true;
+}
+
+void BfresFile::Skeleton::CalculateMatrices(bool CalculateInverse)
+{
+    for (auto& [Key, Val] : Bones.Nodes)
+    {
+        Val.Value.CalculateLocalMatrix(Bones);
+    }
+}
+
+void BfresFile::Skeleton::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(SkeletonHeader));
+    uint32_t Pos = Reader.GetPosition();
+
+    uint32_t NumBoneIndices = Header.NumSmoothMatrices + Header.NumRigidMatrices;
+
+    Bones = Reader.ReadDictionary<Bone>(Header.BoneDictionaryOffset, Header.BoneArrayOffset);
+    MatrixToBoneList = Reader.ReadCustom<std::vector<uint16_t>>([&Reader, &NumBoneIndices]()
+        {
+            return Reader.ReadRawArray<uint16_t>(NumBoneIndices);
+        }, Header.MatrixToBoneListOffset);
+
+    CalculateMatrices(true);
+
+    Reader.Seek(Pos, BfresBinaryVectorReader::Position::Begin);
+}
+
+void BfresFile::Model::Read(BfresBinaryVectorReader& Reader)
+{
+    Reader.ReadStruct(&Header, sizeof(BfresFile::ModelHeader));
+
+    uint32_t Pos = Reader.GetPosition();
+    Name = Reader.ReadStringOffset(Header.NameOffset);
+
+    VertexBuffers = Reader.ReadArray<VertexBuffer>(Header.VertexArrayOffset, Header.VertexBufferCount);
+    Shapes = Reader.ReadDictionary<Shape>(Header.ShapeDictionaryOffset, Header.ShapeArrayOffset);
+    Materials = Reader.ReadDictionary<Material>(Header.MaterialDictionaryOffset, Header.MaterialArrayOffset);
+
+    Reader.Seek(Header.SkeletonOffset, BfresBinaryVectorReader::Position::Begin);
+    ModelSkeleton = Reader.ReadResObject<Skeleton>();
+}
+
+void BfresFile::Model::Init(BfresFile& Bfres, BfresBinaryVectorReader& Reader, BufferMemoryPool PoolInfo, std::string TexDir)
+{
+    for (auto& [Key, BfresShape] : Shapes.Nodes)
+    {
+        BfresShape.Value.Init(Reader, VertexBuffers[BfresShape.Value.VertexBufferIndex], PoolInfo, ModelSkeleton);
+    }
+
+    /*
+    for (auto& [Key, BfresMaterial] : Materials.Nodes)
+    {
+        BfresMaterial.Value.LoadTextures(Bfres, TexDir);
+    }
+    */
+
+    for (BfresFile::VertexBuffer& Buffer : VertexBuffers)
+    {
+        Buffer.InitBuffers(Reader, PoolInfo);
+    }
+
+    for (auto& [Key, BfresShape] : Shapes.Nodes)
+    {
+        BfresShape.Value.Vertices = VertexBuffers[BfresShape.Value.VertexBufferIndex].GetPositions();
+
+        std::vector<glm::vec4> BoneIndices = BfresShape.Value.Buffer.GetBoneIndices();
+        if (!BoneIndices.empty() && !BfresShape.Value.Buffer.Attributes.Nodes.contains("_w0"))
+        {
+            for (size_t i = 0; i < BoneIndices.size(); i++)
+            {
+                BfresShape.Value.Vertices[i].w = 1.0f;
+                BfresShape.Value.Vertices[i] = ModelSkeleton.Bones.GetByIndex(ModelSkeleton.MatrixToBoneList[BoneIndices[i].x]).Value.WorldMatrix * BfresShape.Value.Vertices[i];
+                BoundingBoxSphereRadius = std::fmax(BoundingBoxSphereRadius, std::sqrt(std::pow(BfresShape.Value.Vertices[i].x, 2) + std::pow(BfresShape.Value.Vertices[i].y, 2) + std::pow(BfresShape.Value.Vertices[i].z, 2))); //sqrt(PointA^2 + PointB^2 + PointC^2) = distance to middle
+            }
+        }
+        else
+        {
+            glm::mat4& Matrix = ModelSkeleton.Bones.GetByIndex(0).Value.WorldMatrix;
+            for (size_t i = 0; i < BfresShape.Value.Vertices.size(); i++)
+            {
+                BfresShape.Value.Vertices[i].w = 1.0f;
+                BfresShape.Value.Vertices[i] = Matrix * BfresShape.Value.Vertices[i];
+                BoundingBoxSphereRadius = std::fmax(BoundingBoxSphereRadius, std::sqrt(std::pow(BfresShape.Value.Vertices[i].x, 2) + std::pow(BfresShape.Value.Vertices[i].y, 2) + std::pow(BfresShape.Value.Vertices[i].z, 2))); //sqrt(PointA^2 + PointB^2 + PointC^2) = distance to middle
+            }
+        }
+    }
+}
+
+void BfresFile::EmbeddedFile::Read(BfresBinaryVectorReader& Reader)
+{
+    uint64_t Offset = Reader.ReadUInt64();
+    uint32_t Size = Reader.ReadUInt32();
+    Reader.ReadUInt32(); //padding
+
+    Data = Reader.ReadCustom<std::vector<unsigned char>>([&Reader, &Size]()
+        {
+            return Reader.ReadRawArray<unsigned char>(Size);
+        }, Offset);
+}
+
+BfresFile::BfresFile(std::string Path, std::vector<unsigned char> Bytes, std::string TexDir) : mTexDir(TexDir)
+{
+    BfresBinaryVectorReader Reader(Bytes);
+    Reader.StringCache = ExternalBinaryStrings;
+
+    Reader.ReadStruct(&BinHeader, sizeof(BinaryHeader));
+    Reader.ReadStruct(&Header, sizeof(ResHeader));
+
+    std::string Name = Reader.ReadStringOffset(Header.NameOffset);
+
+    Reader.Seek(0xEE, BfresBinaryVectorReader::Position::Begin);
+    uint8_t Flag = Reader.ReadUInt8();
+
+    if (Header.MemoryPoolInfoOffset > 0)
+    {
+        Reader.Seek(Header.MemoryPoolInfoOffset, BfresBinaryVectorReader::Position::Begin);
+        Reader.ReadStruct(&BufferMemoryPoolInfo, sizeof(BufferMemoryPool));
+    }
+    else
+    {
+        if (BinHeader.FileSize == Reader.GetSize())
+        {
+            Logger::Error("BfresDecoder", "Could not find pointer to memory buffer");
+            return;
+        }
+
+        BufferMemoryPoolInfo.Offset = BinHeader.FileSize + 288; //FileSize is in this case the GlobalBufferOffset
+    }
+
+    Models = Reader.ReadDictionary<Model>(Header.ModelDictionaryOffset, Header.ModelOffset);
+    EmbeddedFiles = Reader.ReadDictionary<EmbeddedFile>(Header.EmbeddedFilesDictionaryOffset, Header.EmbeddedFilesOffset);
+
+    for (auto& [Key, BfresModel] : Models.Nodes)
+    {
+        BfresModel.Value.Init(*this, Reader, BufferMemoryPoolInfo, TexDir);
+    }
+
+    //m_DefaultModel = false; 
+}
+
+void BfresFile::DecompressMeshCodec(std::string Path, std::vector<unsigned char> Bytes)
+{
+    BfresBinaryVectorReader Reader(Bytes);
+    Reader.ReadUInt64(); //Magic(4) + Version(4)
+    int32_t Flags = Reader.ReadInt32();
+    uint32_t DecompressedSize = (Flags >> 5) << (Flags & 0xF);
+    Reader.Seek(0xC, BfresBinaryVectorReader::Position::Begin);
+    std::vector<unsigned char> Source(Reader.GetSize() - 0xC);
+    Reader.ReadStruct(Source.data(), Reader.GetSize() - 0xC);
+
+    std::vector<unsigned char> Decompressed(DecompressedSize);
+
+    ZSTD_DCtx* const DCtx = ZSTD_createDCtx();
+    ZSTD_DCtx_setFormat(DCtx, ZSTD_format_e::ZSTD_f_zstd1_magicless);
+    const size_t DecompSize = ZSTD_decompressDCtx(DCtx, (void*)Decompressed.data(), Decompressed.size(), Source.data(), Source.size());
+    ZSTD_freeDCtx(DCtx);
+
+    this->BfresFile::BfresFile(Path, Decompressed);
 }
 
 BfresFile::BfresFile(std::vector<unsigned char> Bytes)
@@ -849,23 +946,13 @@ BfresFile::BfresFile(std::string Path)
 
         File.close();
 
-        this->BfresFile::BfresFile(Path, Bytes);
+        if (Path.ends_with(".bfres"))
+            this->BfresFile::BfresFile(Path, Bytes);
+        else
+            DecompressMeshCodec(Path, Bytes);
     }
     else
     {
         Logger::Error("Bfres", "Could not open file " + Path);
-    }
-}
-
-void BfresFile::Delete()
-{
-    if (this->m_Models.size() == 0) return;
-
-    for (BfresFile::LOD& LODModel : this->m_Models[0].LODs)
-    {
-        for (int SubModelIndex = 0; SubModelIndex < LODModel.Faces.size(); SubModelIndex++)
-        {
-            LODModel.GL_Meshes[SubModelIndex].Delete();
-        }
     }
 }

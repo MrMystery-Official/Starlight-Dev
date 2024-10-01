@@ -13,12 +13,23 @@
 bool PopupSettings::IsOpen = false;
 std::string PopupSettings::ColorActorName = "";
 
+float PopupSettings::SizeX = 660.0f;
+float PopupSettings::SizeY = 300.0f;
+const float PopupSettings::OriginalSizeX = 660.0f;
+const float PopupSettings::OriginalSizeY = 300.0f;
+
+void PopupSettings::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupSettings::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(660, 300));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Settings");
 		if (ImGui::BeginPopupModal("Settings"))
 		{
@@ -63,6 +74,7 @@ void PopupSettings::Render()
 			ImGui::Unindent();
 			ImGui::Columns();
 
+			/*
 			ImGui::NewLine();
 			ImGui::Text("Colors");
 			ImGui::SameLine();
@@ -93,7 +105,7 @@ void PopupSettings::Render()
 			ImGui::Indent();
 
 			int ModelIndex = -1;
-			for (std::map<std::string, BfresFile>::iterator Iter = BfresLibrary::Models.begin(); Iter != BfresLibrary::Models.end(); )
+			for (std::unordered_map<std::string, BfresFile>::iterator Iter = BfresLibrary::Models.begin(); Iter != BfresLibrary::Models.end(); )
 			{
 				if (!Iter->second.IsDefaultModel())
 				{
@@ -156,6 +168,7 @@ void PopupSettings::Render()
 			ImGui::Columns();
 
 			ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+			*/
 
 			if (ImGui::Button("Close"))
 			{

@@ -3,7 +3,7 @@
 #include <vector>
 #include <string>
 #include "Vector3F.h"
-#include "Bfres.h"
+#include "GLBfres.h"
 #include "Shader.h"
 #include "Camera.h"
 
@@ -24,10 +24,7 @@ public:
 private:
 	struct ModelElement
 	{
-		BfresFile* Model;
-		Vector3F Translate;
-		Vector3F Rotate;
-		Vector3F Scale;
+		GLBfres* Model;
 	};
 
 	std::vector<ModelElement> m_ModelElements;

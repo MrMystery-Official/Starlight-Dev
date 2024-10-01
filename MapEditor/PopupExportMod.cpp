@@ -10,12 +10,23 @@ bool PopupExportMod::IsOpen = false;
 std::string PopupExportMod::Path = "";
 void (*PopupExportMod::Func)(std::string) = nullptr;
 
+float PopupExportMod::SizeX = 650.0f;
+float PopupExportMod::SizeY = 67.0f;
+const float PopupExportMod::OriginalSizeX = 650.0f;
+const float PopupExportMod::OriginalSizeY = 67.0f;
+
+void PopupExportMod::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupExportMod::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(650, 67));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Export mod");
 		if (ImGui::BeginPopupModal("Export mod", NULL, ImGuiWindowFlags_NoResize))
 		{

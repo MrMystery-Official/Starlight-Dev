@@ -11,12 +11,23 @@ std::string PopupAddLink::Gyml = "";
 std::string PopupAddLink::Name = "";
 void (*PopupAddLink::Func)(uint64_t, uint64_t, std::string, std::string) = nullptr;
 
+float PopupAddLink::SizeX = 334.0f;
+float PopupAddLink::SizeY = 135.0f;
+const float PopupAddLink::OriginalSizeX = 334.0f;
+const float PopupAddLink::OriginalSizeY = 135.0f;
+
+void PopupAddLink::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupAddLink::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(334, 135));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Add link");
 		if (ImGui::BeginPopupModal("Add link", NULL, ImGuiWindowFlags_NoResize))
 		{

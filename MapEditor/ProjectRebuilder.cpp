@@ -57,36 +57,36 @@ void ProjectRebuilder::RebuildProject()
 			{
 				for (BymlFile::Node& ActorNode : MapFile.GetNode("Actors")->GetChildren())
 				{
-					std::vector<BymlFile::Node*> PivotDataNodes = GetPivotDataNode(ActorNode);
-					if (!PivotDataNodes.empty())
-					{
-						for (int i = 0; i < PivotDataNodes.size(); i++)
-						{
-							//NEEDS FIXING
-							BymlFile::Node* PivotDataNode = PivotDataNodes[i];
-							if (PivotDataNode->GetChildren().empty())
-							{
-								bool Fixed = false;
-								for (BymlFile::Node& VanillaActorNode : VanillaMapFile.GetNode("Actors")->GetChildren())
-								{
-									if (VanillaActorNode.GetChild("Gyaml")->GetValue<std::string>() == ActorNode.GetChild("Gyaml")->GetValue<std::string>() &&
-										VanillaActorNode.GetChild("Hash")->GetValue<uint64_t>() == ActorNode.GetChild("Hash")->GetValue<uint64_t>())
-									{
-										std::vector<BymlFile::Node*> VanillaPivotDataNodes = GetPivotDataNode(VanillaActorNode);
-										PivotDataNode->GetChildren() = VanillaPivotDataNodes[VanillaPivotDataNodes.size() > i ? i : 0]->GetChildren();
-										FixedEntries++;
-										Fixed = true;
-										break;
-									}
-								}
+					//std::vector<BymlFile::Node*> PivotDataNodes = GetPivotDataNode(ActorNode);
 
-								if (!Fixed)
+					if (ActorNode.HasChild("Phive"))
+					{
+						BymlFile::Node* PhiveNode = ActorNode.GetChild("Phive");
+						if (PhiveNode->HasChild("ConstraintLink"))
+						{
+							BymlFile::Node* ConstraintLinkNode = PhiveNode->GetChild("ConstraintLink");
+
+							for (BymlFile::Node& VanillaActorNode : VanillaMapFile.GetNode("Actors")->GetChildren())
+							{
+								if (VanillaActorNode.GetChild("Gyaml")->GetValue<std::string>() == ActorNode.GetChild("Gyaml")->GetValue<std::string>() &&
+									VanillaActorNode.GetChild("Hash")->GetValue<uint64_t>() == ActorNode.GetChild("Hash")->GetValue<uint64_t>())
 								{
-									Logger::Error("ProjectRebuilder", "Could not fix PivotData in " + LocalRomFSPath);
-									NotFixable++;
+									if (VanillaActorNode.HasChild("Phive"))
+									{
+										BymlFile::Node* VanillaPhiveNode = VanillaActorNode.GetChild("Phive");
+										if (VanillaPhiveNode->HasChild("ConstraintLink"))
+										{
+											BymlFile::Node* VanillaConstraintLinkNode = VanillaPhiveNode->GetChild("ConstraintLink");
+											ConstraintLinkNode->GetChildren() = VanillaConstraintLinkNode->GetChildren();
+											FixedEntries++;
+										}
+									}
+									break;
 								}
 							}
+
 						}
+
 					}
 				}
 			}

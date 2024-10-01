@@ -9,6 +9,8 @@
 #include "BinaryVectorReader.h"
 #include "UIActorTool.h"
 #include "Logger.h"
+#include "HashMgr.h"
+#include "SceneMgr.h"
 
 void Exporter::CreateExportOnlyFiles(std::string Path)
 {
@@ -20,6 +22,44 @@ void Exporter::CreateExportOnlyFiles(std::string Path)
 			uint32_t Size = ZStdFile::GetDecompressedFileSize(Path);
 			Size = (floor((Size + 0x1F) / 0x20)) * 0x20 + 256;
 			return Size;
+		};
+
+	auto RSTBEstimateBfevflSize = [](std::string Path)
+		{
+			uint32_t Size = ZStdFile::GetDecompressedFileSize(Path);
+			Size = (floor((Size + 0x1F) / 0x20)) * 0x20 + 288;
+			return Size;
+		};
+
+	auto RSTBEstimateBphnmSize = [](std::string Path)
+		{
+			uint32_t Size = ZStdFile::GetDecompressedFileSize(Path);
+			Size = (floor((Size + 0x1F) / 0x20)) * 0x20 + 288;
+			return Size;
+		};
+
+	auto RSTBEstimateBphscSize = [](std::string Path)
+		{
+			uint32_t Size = ZStdFile::GetDecompressedFileSize(Path);
+			Size = (Size + 1500) * 4;
+			return Size;
+		};
+
+	auto RSTBEstimateBgymlSizeWithoutZStd = [](std::string Path)
+		{
+			std::ifstream File(Path, std::ios::binary);
+
+			if (File.eof() || File.fail()) return (uint32_t)0;
+
+			File.seekg(0, std::ios_base::end);
+			std::streampos FileSize = File.tellg();
+
+			uint32_t Size = FileSize;
+
+			File.close();
+
+			Size = (floor((Size + 0x1F) / 0x20)) * 0x20 + 256;
+			return Size * 10;
 		};
 
 	auto RSTBEstimateAinbSizeByte = [](std::vector<unsigned char> Bytes)
@@ -85,17 +125,41 @@ void Exporter::CreateExportOnlyFiles(std::string Path)
 	{
 		if (dirEntry.is_regular_file())
 		{
-			if (dirEntry.path().string().ends_with(".bcett.byml.zs"))
+			if (dirEntry.path().string().ends_with(".byml.zs"))
 			{
 				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 4 - Editor::GetWorkingDirFile("Save").length());
 				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
 				ResTable.SetFileSize(LocalPath, RSTBEstimateBymlSize(dirEntry.path().string()));
+			}
+			if (dirEntry.path().string().ends_with(".bgyml"))
+			{
+				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 1 - Editor::GetWorkingDirFile("Save").length());
+				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
+				ResTable.SetFileSize(LocalPath, RSTBEstimateBgymlSizeWithoutZStd(dirEntry.path().string()));
 			}
 			if (dirEntry.path().string().ends_with(".ainb"))
 			{
 				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 1 - Editor::GetWorkingDirFile("Save").length());
 				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
 				ResTable.SetFileSize(LocalPath, RSTBEstimateAinbSize(dirEntry.path().string()));
+			}
+			if (dirEntry.path().string().ends_with(".bfevfl.zs"))
+			{
+				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 4 - Editor::GetWorkingDirFile("Save").length());
+				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
+				ResTable.SetFileSize(LocalPath, RSTBEstimateBfevflSize(dirEntry.path().string()));
+			}
+			if (dirEntry.path().string().ends_with(".bphnm.zs"))
+			{
+				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 4 - Editor::GetWorkingDirFile("Save").length());
+				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
+				ResTable.SetFileSize(LocalPath, RSTBEstimateBphnmSize(dirEntry.path().string()));
+			}
+			if (dirEntry.path().string().ends_with(".bphsc.zs"))
+			{
+				std::string LocalPath = dirEntry.path().string().substr(Editor::GetWorkingDirFile("Save").length() + 1, dirEntry.path().string().length() - 4 - Editor::GetWorkingDirFile("Save").length());
+				std::replace(LocalPath.begin(), LocalPath.end(), '\\', '/');
+				ResTable.SetFileSize(LocalPath, RSTBEstimateBphscSize(dirEntry.path().string()));
 			}
 			if (dirEntry.path().string().ends_with(".pack.zs"))
 			{
@@ -256,6 +320,417 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 	UIAINBEditor::Save();
 	UIActorTool::Save(Path);
 
+	//Static compound stuff
+#ifdef STARLIGHT_SHARED
+	if(false)
+	{
+#else
+	if (!SceneMgr::mStaticCompounds.empty())
+	{
+#endif
+		std::unordered_map<PhiveStaticCompound*, bool> StaticCompoundToRebuild;
+		std::unordered_map<PhiveStaticCompound*, uint32_t> ActorLinkSize;
+
+		for (PhiveStaticCompound& StaticCompound : SceneMgr::mStaticCompounds)
+		{
+			//StaticCompound.mWaterBoxArray.clear();
+
+			ActorLinkSize[&StaticCompound] = StaticCompound.mActorLinks.size();
+			StaticCompoundToRebuild[&StaticCompound] = false;
+		}
+
+		//Unused hash removal
+		/*
+		for (auto& [Key, Val] : StaticCompoundToRebuild)
+		{
+			for (auto Iter = Key->mActorLinks.begin(); Iter != Key->mActorLinks.end(); )
+			{
+				bool Found = false;
+				for (Actor& SceneActor : ActorMgr::GetActors())
+				{
+					if (SceneActor.Hash == Iter->mActorHash)
+					{
+						Found = true;
+						break;
+					}
+
+					for (Actor& Child : SceneActor.MergedActorContent)
+					{
+						if (Child.Hash == Iter->mActorHash)
+						{
+							Found = true;
+							break;
+						}
+					}
+
+					if (Found)
+						break;
+				}
+
+				if (!Found)
+				{
+					Val = true;
+					Iter = Key->mActorLinks.erase(Iter);
+				}
+				else
+				{
+					Iter++;
+				}
+			}
+		}
+		*/
+
+		for (Actor& SceneActor : ActorMgr::GetActors())
+		{
+			if (std::find(HashMgr::mNewHashes.begin(), HashMgr::mNewHashes.end(), SceneActor.Hash) == HashMgr::mNewHashes.end())
+				continue;
+
+			if (ActorMgr::IsPhysicsActor(SceneActor.Gyml))
+			{
+				PhiveStaticCompound* StaticCompound = SceneMgr::GetStaticCompoundForPos(glm::vec3(SceneActor.Translate.GetX(), SceneActor.Translate.GetY(), SceneActor.Translate.GetZ()));
+				if (StaticCompound == nullptr)
+				{
+					Logger::Error("Exporter", "Could not find position specific static compound for actor " + SceneActor.Gyml);
+					continue;
+				}
+
+				bool Found = false;
+				for (PhiveStaticCompound::PhiveStaticCompoundActorLink& Link : StaticCompound->mActorLinks)
+				{
+					if (Link.mActorHash == SceneActor.Hash)
+					{
+						Found = true;
+						break;
+					}
+				}
+				if (Found)
+					continue;
+
+				ActorLinkSize[StaticCompound] = ActorLinkSize[StaticCompound] + 1;
+				StaticCompoundToRebuild[StaticCompound] = true;
+			}
+		}
+
+		for (Actor& SceneActor : ActorMgr::GetActors())
+		{
+			if (std::find(HashMgr::mNewHashes.begin(), HashMgr::mNewHashes.end(), SceneActor.Hash) == HashMgr::mNewHashes.end())
+				continue;
+
+			if (ActorMgr::IsPhysicsActor(SceneActor.Gyml))
+			{
+				PhiveStaticCompound* StaticCompound = SceneMgr::GetStaticCompoundForPos(glm::vec3(SceneActor.Translate.GetX(), SceneActor.Translate.GetY(), SceneActor.Translate.GetZ()));
+				if (StaticCompound == nullptr)
+				{
+					Logger::Error("Exporter", "Could not find position specific static compound for actor " + SceneActor.Gyml);
+					continue;
+				}
+
+				bool Found = false;
+				for (PhiveStaticCompound::PhiveStaticCompoundActorLink& Link : StaticCompound->mActorLinks)
+				{
+					if (Link.mActorHash == SceneActor.Hash)
+					{
+						Found = true;
+						break;
+					}
+				}
+				if (Found)
+					continue;
+
+				uint32_t OptimalIndex = 0xFFFFFFFF;
+				for (uint64_t Index : StaticCompound->mActorHashMap)
+				{
+					if (Index == 0)
+					{
+						OptimalIndex = Index;
+						break;
+					}
+				}
+				if (OptimalIndex == 0xFFFFFFFF)
+				{
+					OptimalIndex = StaticCompound->mActorLinks.size() * 2;
+				}
+
+				uint64_t NewHash = 0;
+				uint64_t OldHash = SceneActor.Hash;
+
+				while (true)
+				{
+					NewHash = HashMgr::GenerateStaticCompoundHash(SceneActor.Hash,
+						(StaticCompound->mActorLinks.size() + 1) * 2,
+						OptimalIndex);
+
+					bool Duplicate = false;
+					for (Actor& ChildActor : ActorMgr::GetActors())
+					{
+						if (ChildActor.Hash == NewHash)
+						{
+							Duplicate = true;
+							break;
+						}
+
+						for (Actor& MergedActorChild : ChildActor.MergedActorContent)
+						{
+							if (MergedActorChild.Hash == NewHash)
+							{
+								Duplicate = true;
+								break;
+							}
+						}
+						if (Duplicate)
+							break;
+					}
+
+					SceneActor.Hash = NewHash;
+
+					if (!Duplicate)
+						break;
+
+					SceneActor.Hash++;
+				}
+
+				Logger::Info("Exporter", "Hash transformer called, old hash: " + std::to_string(OldHash) + ", new hash: " + std::to_string(NewHash));
+
+				if (StaticCompound->mActorHashMap.size() > OptimalIndex)
+				{
+					StaticCompound->mActorHashMap[OptimalIndex] = NewHash;
+				}
+				else
+				{
+					StaticCompound->mActorHashMap.resize(OptimalIndex + 2);
+					StaticCompound->mActorHashMap[OptimalIndex] = NewHash;
+				}
+
+				if (NewHash != SceneActor.Hash)
+				{
+					for (Actor& ChildActor : ActorMgr::GetActors())
+					{
+						if (ChildActor.Hash == OldHash) ChildActor.Hash = NewHash;
+						
+						for (Actor::Link& Link : ChildActor.Links)
+						{
+							if (Link.Src == OldHash) Link.Src = NewHash;
+							if (Link.Dest == OldHash) Link.Dest = NewHash;
+						}
+
+						for (Actor::Rail& Rail : ChildActor.Rails)
+						{
+							if (Rail.Dest == OldHash) Rail.Dest = NewHash;
+						}
+
+						for (auto& [Key, Val] : ChildActor.Phive.Placement)
+						{
+							if (!Util::IsNumber(Val))
+								continue;
+
+							if (std::stoull(Val) == OldHash)
+								Val = std::to_string(NewHash);
+						}
+
+						if (ChildActor.Phive.ConstraintLink.ID == OldHash) ChildActor.Phive.ConstraintLink.ID = NewHash;
+						for (Actor::PhiveData::ConstraintLinkData::OwnerData& Owner : ChildActor.Phive.ConstraintLink.Owners)
+						{
+							if (Owner.Refer == OldHash)
+								Owner.Refer = NewHash;
+						}
+
+						if (ChildActor.Phive.RopeHeadLink.ID == OldHash) ChildActor.Phive.RopeHeadLink.ID = NewHash;
+						for (uint64_t& HeadLink : ChildActor.Phive.RopeHeadLink.Owners)
+						{
+							if (HeadLink == OldHash)
+								HeadLink = NewHash;
+						}
+
+						if (ChildActor.Phive.RopeTailLink.ID == OldHash) ChildActor.Phive.RopeTailLink.ID = NewHash;
+						for (uint64_t& TailLink : ChildActor.Phive.RopeTailLink.Owners)
+						{
+							if (TailLink == OldHash)
+								TailLink = NewHash;
+						}
+					}
+
+					if (Editor::StaticActorsByml.HasChild("AiGroups"))
+					{
+						for (BymlFile::Node& AiGroup : Editor::StaticActorsByml.GetNode("AiGroups")->GetChildren())
+						{
+							if (!AiGroup.HasChild("References"))
+								continue;
+
+							for (BymlFile::Node& Ref : AiGroup.GetChild("References")->GetChildren())
+							{
+								if (!Ref.HasChild("Reference"))
+									continue;
+
+								if (Ref.GetChild("Reference")->GetValue<uint64_t>() == OldHash)
+								{
+									Ref.GetChild("Reference")->SetValue<uint64_t>(NewHash);
+								}
+							}
+						}
+					}
+				}
+
+				SceneActor.Phive.Placement["ID"] = std::to_string(SceneActor.Hash);
+
+				PhiveStaticCompound::PhiveStaticCompoundActorLink Link;
+				Link.mActorHash = NewHash;
+				Link.mBaseIndex = 0xFFFFFFFF;
+				Link.mEndIndex = 0xFFFFFFFF;
+				Link.mCompoundRigidBodyIndex = 0;
+				Link.mIsValid = 0;
+				Link.mReserve0 = SceneActor.SRTHash;
+				Link.mReserve1 = 0;
+				Link.mReserve2 = 0;
+				Link.mReserve3 = 0;
+
+				StaticCompound->mActorLinks.push_back(Link);
+
+				HashMgr::BiggestHash = std::max(HashMgr::BiggestHash, Link.mActorHash + 1);
+			}
+		}
+
+		HashMgr::mNewHashes.clear();
+
+		if (Editor::Identifier.length() != 0)
+		{
+			for (Actor& SceneActor : ActorMgr::GetActors())
+			{
+				if (!SceneActor.mBakeFluid)
+					continue;
+
+				switch (SceneActor.mWaterShapeType)
+				{
+				case Actor::WaterShapeType::Box:
+				{
+					std::optional<glm::vec2> Scale = PhiveStaticCompound::GetActorModelScale(SceneActor);
+					if (!Scale.has_value())
+					{
+						Logger::Error("Exporter", "Could not bake water box, scale was empty");
+						break;
+					}
+
+					PhiveStaticCompound* StaticCompound = SceneMgr::GetStaticCompoundForPos(glm::vec3(SceneActor.Translate.GetX(), SceneActor.Translate.GetY(), SceneActor.Translate.GetZ()));
+
+					if (StaticCompound == nullptr)
+					{
+						Logger::Error("Exporter", "Could not bake water box, position specific static compound was a nullptr");
+						continue;
+					}
+
+					PhiveStaticCompound::PhiveStaticCompoundWaterBox WaterBox;
+					WaterBox.mCompoundId = 0;
+					WaterBox.mReserve0 = 0;
+					WaterBox.mFlowSpeed = SceneActor.mWaterFlowSpeed;
+					WaterBox.mReserve2 = 1.0f;
+					WaterBox.mScaleTimesTenX = Scale.value().x;
+					WaterBox.mScaleTimesTenY = SceneActor.mWaterBoxHeight;
+					WaterBox.mScaleTimesTenZ = Scale.value().y;
+					WaterBox.mRotationX = Util::DegreesToRadians(SceneActor.Rotate.GetX());
+					WaterBox.mRotationY = Util::DegreesToRadians(SceneActor.Rotate.GetY());
+					WaterBox.mRotationZ = Util::DegreesToRadians(SceneActor.Rotate.GetZ());
+					WaterBox.mPositionX = SceneActor.Translate.GetX();
+					WaterBox.mPositionY = SceneActor.Translate.GetY();
+					WaterBox.mPositionZ = SceneActor.Translate.GetZ();
+					WaterBox.mFluidType = PhiveStaticCompound::ActorFluidTypeToInternalFluidType(SceneActor.mWaterFluidType);
+					WaterBox.mReserve7 = 0;
+					WaterBox.mReserve8 = 0;
+					WaterBox.mReserve9 = 0;
+					StaticCompound->mWaterBoxArray.push_back(WaterBox);
+					break;
+				}
+				case Actor::WaterShapeType::Cylinder:
+				{
+					std::optional<glm::vec2> Scale = PhiveStaticCompound::GetActorModelScale(SceneActor);
+					if (!Scale.has_value())
+					{
+						Logger::Error("Exporter", "Could not bake water cylinder, scale was empty");
+						break;
+					}
+
+					PhiveStaticCompound* StaticCompound = SceneMgr::GetStaticCompoundForPos(glm::vec3(SceneActor.Translate.GetX(), SceneActor.Translate.GetY(), SceneActor.Translate.GetZ()));
+
+					if (StaticCompound == nullptr)
+					{
+						Logger::Error("Exporter", "Could not bake water cylinder, position specific static compound was a nullptr");
+						continue;
+					}
+
+					PhiveStaticCompound::PhiveStaticCompoundWaterCylinder WaterCylinder;
+					WaterCylinder.mCompoundId = 0;
+					WaterCylinder.mReserve0 = 0;
+					WaterCylinder.mFlowSpeed = SceneActor.mWaterFlowSpeed;
+					WaterCylinder.mReserve2 = 1.0f;
+					WaterCylinder.mScaleTimesTenX = Scale.value().x;
+					WaterCylinder.mScaleTimesTenY = SceneActor.mWaterBoxHeight;
+					WaterCylinder.mScaleTimesTenZ = Scale.value().y;
+					WaterCylinder.mRotationX = Util::DegreesToRadians(SceneActor.Rotate.GetX());
+					WaterCylinder.mRotationY = Util::DegreesToRadians(SceneActor.Rotate.GetY());
+					WaterCylinder.mRotationZ = Util::DegreesToRadians(SceneActor.Rotate.GetZ());
+					WaterCylinder.mPositionX = SceneActor.Translate.GetX();
+					WaterCylinder.mPositionY = SceneActor.Translate.GetY();
+					WaterCylinder.mPositionZ = SceneActor.Translate.GetZ();
+					WaterCylinder.mFluidType = PhiveStaticCompound::ActorFluidTypeToInternalFluidType(SceneActor.mWaterFluidType);
+					WaterCylinder.mReserve7 = 0;
+					WaterCylinder.mReserve8 = 0;
+					WaterCylinder.mReserve9 = 0;
+					StaticCompound->mWaterCylinderArray.push_back(WaterCylinder);
+					break;
+				}
+				default:
+					Logger::Error("Exporter", "Invalid fluid shape type: " + std::to_string((uint32_t)SceneActor.mWaterShapeType));
+					break;
+				}
+			}
+		}
+		Util::CreateDir(Path + "/" + Editor::StaticCompoundDirectory);
+
+		auto WriteBphsc = [&Path, &StaticCompoundToRebuild](PhiveStaticCompound& File, std::string FileNameSuffix = "")
+			{
+				if (!StaticCompoundToRebuild[&File])
+					return;
+
+				//std::vector<unsigned char> Data = File.ToBinary();
+				//Util::WriteFile(Path + "/" + Editor::StaticCompoundPrefix + Editor::Identifier + FileNameSuffix + ".DEBUG.bphsc", Data);
+				ZStdFile::Compress(File.ToBinary(), ZStdFile::Dictionary::Base).WriteToFile(Path + "/" + Editor::StaticCompoundPrefix + Editor::Identifier + FileNameSuffix + ".Nin_NX_NVN.bphsc.zs");
+			};
+
+		switch (SceneMgr::SceneType)
+		{
+		case SceneMgr::Type::MainField:
+		case SceneMgr::Type::MinusField:
+			WriteBphsc(SceneMgr::mStaticCompounds[0], "_X0_Z0");
+			WriteBphsc(SceneMgr::mStaticCompounds[1], "_X1_Z0");
+			WriteBphsc(SceneMgr::mStaticCompounds[2], "_X2_Z0");
+			WriteBphsc(SceneMgr::mStaticCompounds[3], "_X3_Z0");
+			WriteBphsc(SceneMgr::mStaticCompounds[4], "_X0_Z1");
+			WriteBphsc(SceneMgr::mStaticCompounds[5], "_X1_Z1");
+			WriteBphsc(SceneMgr::mStaticCompounds[6], "_X2_Z1");
+			WriteBphsc(SceneMgr::mStaticCompounds[7], "_X3_Z1");
+			WriteBphsc(SceneMgr::mStaticCompounds[8], "_X0_Z2");
+			WriteBphsc(SceneMgr::mStaticCompounds[9], "_X1_Z2");
+			WriteBphsc(SceneMgr::mStaticCompounds[10], "_X2_Z2");
+			WriteBphsc(SceneMgr::mStaticCompounds[11], "_X3_Z2");
+			WriteBphsc(SceneMgr::mStaticCompounds[12], "_X0_Z3");
+			WriteBphsc(SceneMgr::mStaticCompounds[13], "_X1_Z3");
+			WriteBphsc(SceneMgr::mStaticCompounds[14], "_X2_Z3");
+			WriteBphsc(SceneMgr::mStaticCompounds[15], "_X3_Z3");
+			break;
+		case SceneMgr::Type::SkyIslands:
+		case SceneMgr::Type::LargeDungeon:
+		case SceneMgr::Type::SmallDungeon:
+		case SceneMgr::Type::NormalStage:
+		{
+			WriteBphsc(SceneMgr::mStaticCompounds[0]);
+		}
+		default:
+			break;
+		}
+	}
+
+#ifndef STARLIGHT_SHARED
+	GameDataListMgr::RebuildAndSave();
+#endif // !STARLIGHT_SHARED
+
 	if (Editor::Identifier.length() != 0)
 	{
 		BymlFile& StaticByml = Editor::StaticActorsByml;
@@ -266,8 +741,13 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 
 		for (Actor& ExportedActor : ActorMgr::GetActors())
 		{
-			if (ExportedActor.Dynamic.DynamicString.count("BancPath"))
+			if (ExportedActor.Dynamic.count("BancPath"))
 			{
+				if (ExportedActor.Dynamic["BancPath"].Type != BymlFile::Type::StringIndex)
+					goto SkipMergedActorProcessing;
+
+				std::string BancPath = std::get<std::string>(ExportedActor.Dynamic["BancPath"].Data);
+
 				if(ExportedActor.MergedActorByml.HasChild("Actors")) ExportedActor.MergedActorByml.GetNode("Actors")->GetChildren().clear();
 				else
 				{
@@ -333,11 +813,12 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 
 					ExportedActor.MergedActorByml.GetNode("Actors")->AddChild(ActorMgr::ActorToByml(MergedActor));
 				}
-				size_t Found = ExportedActor.Dynamic.DynamicString["BancPath"].find_last_of("/\\");
-				Util::CreateDir(Path + "/" + ExportedActor.Dynamic.DynamicString["BancPath"].substr(0, Found));
-				ZStdFile::Compress(ExportedActor.MergedActorByml.ToBinary(BymlFile::TableGeneration::Auto), ZStdFile::Dictionary::BcettByaml).WriteToFile(Path + "/" + ExportedActor.Dynamic.DynamicString["BancPath"] + ".zs");
+				size_t Found = BancPath.find_last_of("/\\");
+				Util::CreateDir(Path + "/" + BancPath.substr(0, Found));
+				ZStdFile::Compress(ExportedActor.MergedActorByml.ToBinary(BymlFile::TableGeneration::Auto), ZStdFile::Dictionary::BcettByaml).WriteToFile(Path + "/" + BancPath + ".zs");
 				//ExportedActor.Scale = Vector3F(1, 1, 1);
 			}
+		SkipMergedActorProcessing:
 
 			if (ExportedActor.ActorType == Actor::Type::Static)
 			{
@@ -358,7 +839,7 @@ Copy:
 	if (Op == Exporter::Operation::Export)
 	{
 		CreateRSTBL(Path);
-		CreateExportOnlyFiles(OldPath);
+		CreateExportOnlyFiles(Path);
 
 		Util::CopyDirectoryRecursively(Editor::GetWorkingDirFile("Save"), OldPath);
 	}

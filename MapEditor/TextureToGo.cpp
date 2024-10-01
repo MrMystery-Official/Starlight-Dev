@@ -1,224 +1,373 @@
 #include "TextureToGo.h"
 
-#include "TegraSwizzle.h"
-#include <stb/stb_image_write.h>
-#include <stb/stb_image.h>
-#include <zstd.h>
-#include <fstream>
 #include "BinaryVectorReader.h"
-#include "Editor.h"
-#include "Logger.h"
+#include "BinaryVectorWriter.h"
 #include "Util.h"
+#include "ZStdFile.h"
+#include "Logger.h"
+#include "TegraSwizzle.h"
+#include "Editor.h"
+#include <iostream>
+#include <zstd.h>
 
-std::vector<unsigned char>& TextureToGo::GetPixels()
+bool TextureToGo::Parse()
 {
-    return this->m_Pixels;
+	mReader.ReadStruct(&mHeader, sizeof(TextureToGo::Header));
+	if (mHeader.mMagic[0] != '6' || mHeader.mMagic[1] != 'P' || mHeader.mMagic[2] != 'K' || mHeader.mMagic[3] != '0')
+	{
+		Logger::Error("TexToGo", "Wrong magic, expected 6PK0");
+		return false;
+	}
+
+	if (mHeader.mVersion != 0x11)
+	{
+		Logger::Error("TexToGo", "Wrong version, expected 0x11");
+		return false;
+	}
+
+	mWidth = mReader.ReadUInt16();
+	mHeight = mReader.ReadUInt16();
+	mDepth = mReader.ReadUInt16();
+	mMipCount = mReader.ReadUInt8();
+	mUnk1 = mReader.ReadUInt8();
+	mUnk2 = mReader.ReadUInt8();
+	mReader.ReadUInt16(); //Padding
+
+	mFormatFlag = mReader.ReadUInt8();
+	mFormatSetting = mReader.ReadUInt32();
+
+	mCompSelectR = mReader.ReadUInt8();
+	mCompSelectG = mReader.ReadUInt8();
+	mCompSelectB = mReader.ReadUInt8();
+	mCompSelectA = mReader.ReadUInt8();
+
+	mReader.Read(reinterpret_cast<char*>(&mHash[0]), 32);
+
+	mFormat = mReader.ReadUInt16();
+	mUnk3 = mReader.ReadUInt16();
+
+	mTextureSetting1 = mReader.ReadUInt32();
+	mTextureSetting2 = mReader.ReadUInt32();
+	mTextureSetting3 = mReader.ReadUInt32();
+	mTextureSetting4 = mReader.ReadUInt32();
+
+	//Copied from https://github.com/KillzXGaming/Switch-Toolbox/blob/master/File_Format_Library/FileFormats/Texture/TXTG.cs
+	//Dumb hack. Terrain is oddly 8x8 astc, but the format seems to be 0x101
+	//Use some of the different texture settings, as they likely configure the astc blocks in some way
+	if (mTextureSetting2 == 32628)
+	{
+		mFormat = 0x101;
+	}
+	else if (mTextureSetting2 == 32631)
+	{
+		mFormat = 0x102;
+	}
+
+	mSurfaces.resize(mMipCount * mDepth);
+	for (int i = 0; i < mMipCount * mDepth; i++)
+	{
+		uint16_t ArrayIndex = mReader.ReadUInt16();
+		uint8_t MipLevel = mReader.ReadUInt8();
+		uint8_t SurfaceCount = mReader.ReadUInt8();
+		mSurfaces[i] = TextureToGo::Surface
+		{
+			.ArrayIndex = ArrayIndex,
+			.MipLevel = MipLevel,
+			.SurfaceCount = SurfaceCount
+		};
+	}
+	for (int i = 0; i < mMipCount * mDepth; i++)
+	{
+		mSurfaces[i].ZSTDCompressedSize = mReader.ReadUInt32();
+		mSurfaces[i].Unk = mReader.ReadUInt32();
+	}
+
+	mPolishedFormat = GetFormat();
+	if (mPolishedFormat == TextureFormat::Format::UNKNOWN)
+	{
+		Logger::Error("TexToGo", "Texture format unknown: " + std::to_string(mFormat) + ", " + mFileName);
+		return false;
+	}
+
+	uint32_t BlkWidth = TextureFormat::GetFormatBlockWidth(mPolishedFormat);
+	uint32_t BlkHeight = TextureFormat::GetFormatBlockHeight(mPolishedFormat);
+	uint32_t BytesPerPixel = TextureFormat::GetFormatBytesPerBlock(mPolishedFormat);
+
+	for (int i = 0; i < mDepth; i++)
+	{
+		std::vector<unsigned char> CompressedSurface(mSurfaces[i].ZSTDCompressedSize);
+		mReader.Read(reinterpret_cast<char*>(CompressedSurface.data()), mSurfaces[i].ZSTDCompressedSize);
+
+		mSurfaces[i].Width = std::max(1, mWidth >> mSurfaces[i].MipLevel);
+		mSurfaces[i].Height = std::max(1, mHeight >> mSurfaces[i].MipLevel);
+
+		mSurfaces[i].PolishedFormat = mPolishedFormat;
+
+		std::vector<unsigned char> Decompressed;
+
+		Decompressed.resize(ZSTD_getFrameContentSize(CompressedSurface.data(), CompressedSurface.size()));
+		ZSTD_DCtx* const DCtx = ZSTD_createDCtx();
+		ZSTD_decompressDCtx(DCtx, (void*)Decompressed.data(), Decompressed.size(), CompressedSurface.data(), CompressedSurface.size());
+		ZSTD_freeDCtx(DCtx);
+
+		uint32_t BlockHeight = TegraSwizzle::GetBlockHeight(TegraSwizzle::DIV_ROUND_UP(mSurfaces[i].Height, BlkHeight));
+		if (BlockHeight == 0) BlockHeight = BlkHeight;
+
+		mSurfaces[i].Data = TegraSwizzle::Deswizzle(mSurfaces[i].Width, mSurfaces[i].Height, 1, BlkWidth, BlkHeight, 1, 1, BytesPerPixel, 0, std::log10(BlockHeight) / std::log10(2), Decompressed);
+		mSurfaces[i].DataSize = mSurfaces[i].Data.size();
+	}
+
+	mLoaded = true;
+
+	{
+		BinaryVectorWriter Writer;
+		Writer.WriteBytes("ETEX");
+		Writer.WriteByte(0x01);
+		Writer.WriteByte(0x00);
+		Writer.WriteInteger(mFormat, sizeof(uint16_t));
+		Writer.WriteInteger(mDepth, sizeof(uint32_t));
+		Writer.WriteInteger(0, sizeof(uint32_t));
+		Writer.Seek(8 * mDepth, BinaryVectorWriter::Position::Current);
+		Writer.Align(16);
+		std::vector<std::pair<uint32_t, uint32_t>> Offsets;
+		for (size_t i = 0; i < mDepth; i++)
+		{
+			uint32_t Start = Writer.GetPosition();
+			Writer.WriteInteger(mSurfaces[i].Width, sizeof(uint32_t));
+			Writer.WriteInteger(mSurfaces[i].Height, sizeof(uint32_t));
+			Writer.WriteInteger(0, sizeof(uint64_t));
+			Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(mSurfaces[i].Data.data()), mSurfaces[i].Data.size());
+			Offsets.push_back({ Start, mSurfaces[i].Data.size() });
+			Writer.Align(16);
+		}
+		uint32_t FileEnd = Writer.GetPosition();
+		Writer.Seek(16, BinaryVectorWriter::Position::Begin);
+		for (auto& [Offset, Size] : Offsets)
+		{
+			Writer.WriteInteger(Offset, sizeof(uint32_t));
+			Writer.WriteInteger(Size, sizeof(uint32_t));
+		}
+		std::vector<unsigned char> Data = Writer.GetData();
+		Data.resize(FileEnd);
+		Util::WriteFile(Editor::GetWorkingDirFile("Cache/" + mFileName + ".etex"), Data);
+	}
+
+	return true;
+}
+
+bool TextureToGo::IsCached()
+{
+	if (Util::FileExists(Editor::GetWorkingDirFile("Cache/" + mFileName + ".etex")))
+	{
+		std::vector<unsigned char> Data = Util::ReadFile(Editor::GetWorkingDirFile("Cache/" + mFileName + ".etex"));
+		BinaryVectorReader Reader(Data);
+		char Magic[4];
+		Reader.ReadStruct(&Magic[0], 4);
+		if (Magic[0] != 'E' || Magic[1] != 'T' || Magic[2] != 'E' || Magic[3] != 'X')
+		{
+			Logger::Error("TexToGo", "Cached TexToGo called " + mFileName + " is invalid");
+			return false;
+		}
+		uint8_t Version = Reader.ReadUInt8();
+		if (Version != 0x01)
+		{
+			Logger::Error("TexToGo", "Cached TexToGo called " + mFileName + " has wrong version, expected 0x01, got " + std::to_string(Version));
+			return false;
+		}
+		Reader.Seek(1, BinaryVectorReader::Position::Current);
+
+		mFormat = Reader.ReadUInt16();
+		mPolishedFormat = GetFormat();
+		uint32_t SurfCount = Reader.ReadUInt32();
+		mDepth = SurfCount;
+		mSurfaces.resize(SurfCount);
+
+		Reader.Seek(4, BinaryVectorReader::Position::Current);
+
+		std::vector<std::pair<uint32_t, uint32_t>> Offsets;
+		for (uint32_t i = 0; i < SurfCount; i++)
+		{
+			uint32_t Offset = Reader.ReadUInt32();
+			uint32_t Size = Reader.ReadUInt32();
+			Offsets.push_back({ Offset, Size });
+		}
+
+		Reader.Align(16);
+
+		uint32_t SurfaceIndex = 0;
+		for (auto [Offset, Size] : Offsets)
+		{
+			Reader.Seek(Offset, BinaryVectorReader::Position::Begin);
+
+			mSurfaces[SurfaceIndex].Width = Reader.ReadUInt32();
+			mSurfaces[SurfaceIndex].Height = Reader.ReadUInt32();
+			Reader.Seek(8, BinaryVectorReader::Position::Current);
+			mSurfaces[SurfaceIndex].DataSize = Size;
+			mSurfaces[SurfaceIndex].Data.resize(Size);
+			Reader.ReadStruct(mSurfaces[SurfaceIndex].Data.data(), Size);
+			mSurfaces[SurfaceIndex].ArrayIndex = SurfaceIndex;
+			mSurfaces[SurfaceIndex].MipLevel = 0;
+			mSurfaces[SurfaceIndex].PolishedFormat = mPolishedFormat;
+
+			SurfaceIndex++;
+		}
+
+		mWidth = mSurfaces[0].Width;
+		mHeight = mSurfaces[0].Height;
+
+		mLoaded = true;
+
+		return mLoaded;
+	}
+	return false;
+}
+
+bool& TextureToGo::IsLoaded()
+{
+	return mLoaded;
+}
+
+TextureFormat::Format& TextureToGo::GetPolishedFormat()
+{
+	return mPolishedFormat;
 }
 
 uint16_t& TextureToGo::GetWidth()
 {
-    return this->m_Width;
+	return mWidth;
 }
 
 uint16_t& TextureToGo::GetHeight()
 {
-    return this->m_Height;
+	return mHeight;
 }
 
 uint16_t& TextureToGo::GetDepth()
 {
-    return this->m_Depth;
+	return mDepth;
 }
 
-uint16_t& TextureToGo::GetFormat()
+uint8_t& TextureToGo::GetMipCount()
 {
-    return this->m_Format;
+	return mMipCount;
 }
 
-uint8_t& TextureToGo::GetMipMapCount()
+TextureToGo::Surface& TextureToGo::GetSurface(uint16_t ArrayIndex)
 {
-    return this->m_MipMapCount;
+	return mSurfaces[mSurfaces.size() > ArrayIndex ? ArrayIndex : 0];
 }
 
-bool& TextureToGo::IsTransparent()
+uint16_t TextureToGo::GetRawFormat()
 {
-    return this->m_Transparent;
+	switch (mPolishedFormat)
+	{
+	case TextureFormat::Format::ASTC_8x5_UNORM:
+		return 0x101;
+	case TextureFormat::Format::ASTC_8x8_UNORM:
+		return 0x102;
+	case TextureFormat::Format::ASTC_8x8_SRGB:
+		return 0x105;
+	case TextureFormat::Format::ASTC_4x4_SRGB:
+		return 0x109;
+	case TextureFormat::Format::BC1_UNORM:
+		return 0x202;
+	case TextureFormat::Format::BC1_UNORM_SRGB:
+		return 0x203;
+
+	case TextureFormat::Format::BC3_UNORM_SRGB:
+		return 0x505;
+	case TextureFormat::Format::BC4_UNORM:
+		return 0x602;
+	case TextureFormat::Format::BC5_UNORM:
+		return 0x702;
+	case TextureFormat::Format::BC7_UNORM:
+		return 0x901;
+
+	default:
+		return 0x0; //UNKOWN
+	}
 }
 
-bool& TextureToGo::IsFail()
+TextureFormat::Format TextureToGo::GetFormat()
 {
-    return this->m_Fail;
+	switch (mFormat)
+	{
+	case 0x101:
+		return TextureFormat::Format::ASTC_8x5_UNORM;
+	case 0x102:
+		return TextureFormat::Format::ASTC_8x8_UNORM;
+	case 0x105:
+		return TextureFormat::Format::ASTC_8x8_SRGB;
+	case 0x109:
+		return TextureFormat::Format::ASTC_4x4_SRGB;
+	case 0x202:
+		return TextureFormat::Format::BC1_UNORM;
+	case 0x203:
+		return TextureFormat::Format::BC1_UNORM_SRGB;
+	case 0x302:
+		return TextureFormat::Format::BC1_UNORM;
+
+	case 0x505:
+		return TextureFormat::Format::BC3_UNORM_SRGB;
+	case 0x602:
+		return TextureFormat::Format::BC4_UNORM;
+	case 0x606:
+		return TextureFormat::Format::BC4_UNORM;
+	case 0x607:
+		return TextureFormat::Format::BC4_UNORM;
+	case 0x702:
+		return TextureFormat::Format::BC5_UNORM;
+	case 0x703:
+		return TextureFormat::Format::BC5_UNORM;
+	case 0x707:
+		return TextureFormat::Format::BC5_UNORM;
+	case 0x901:
+		return TextureFormat::Format::BC7_UNORM;
+
+	default:
+		return TextureFormat::Format::UNKNOWN;
+	}
 }
 
-TextureToGo::TextureToGo(std::string Path, std::vector<unsigned char> Bytes)
+std::string& TextureToGo::GetFileName()
 {
-    this->m_Fail = false;
-    BinaryVectorReader Reader(Bytes);
-
-    uint16_t HeaderSize = Reader.ReadUInt16(); //Always 80
-    uint64_t Version = Reader.ReadUInt16(); //Always 17
-
-    char Magic[4];
-    Reader.Read(Magic, 4);
-    if (Magic[0] != '6' || Magic[1] != 'P' || Magic[2] != 'K' || Magic[3] != '0')
-    {
-        Logger::Error("TexToGoDecoder", "Magic mismatch, expected 6PK0");
-        return;
-    }
-
-    this->m_Width = Reader.ReadUInt16();
-    this->m_Height = Reader.ReadUInt16();
-    this->m_Depth = Reader.ReadUInt16();
-    this->m_MipMapCount = Reader.ReadUInt8();
-
-    Reader.Seek(13, BinaryVectorReader::Position::Current);
-
-    uint8_t Hash[32];
-    Reader.Read(reinterpret_cast<char*>(Hash), 32);
-
-    this->m_Format = Reader.ReadUInt16();
-
-    Reader.Seek(HeaderSize, BinaryVectorReader::Position::Begin);
-
-    std::vector<TextureToGo::SurfaceInfo> Surfaces(this->m_MipMapCount * this->m_Depth);
-    for (int i = 0; i < this->m_MipMapCount * this->m_Depth; i++)
-    {
-        Surfaces[i].ArrayLevel = Reader.ReadUInt16();
-        Surfaces[i].MipMapLevel = Reader.ReadUInt8();
-        Reader.Seek(1, BinaryVectorReader::Position::Current); //Always 1 - SurfaceCount
-    }
-
-    for (int i = 0; i < this->m_MipMapCount * this->m_Depth; i++)
-    {
-        Surfaces[i].Size = Reader.ReadUInt32();
-        Reader.Seek(4, BinaryVectorReader::Position::Current); //Always 6
-    }
-
-    for (int j = 0; j < this->m_Depth; j++) {
-
-        std::vector<unsigned char> RawImageData(Surfaces[j].Size);
-        std::vector<unsigned char> Result;
-
-        for (int i = 0; i < Surfaces[j].Size; i++)
-        {
-            RawImageData[i] = Reader.ReadUInt8();
-        }
-
-        Result.resize(ZSTD_getFrameContentSize(RawImageData.data(), RawImageData.size()));
-        ZSTD_DCtx* const DCtx = ZSTD_createDCtx();
-        ZSTD_decompressDCtx(DCtx, (void*)Result.data(), Result.size(), RawImageData.data(), RawImageData.size());
-        ZSTD_freeDCtx(DCtx);
-
-        Result = TegraSwizzle::GetDirectImageData(this, Result, this->m_Format, this->m_Width, this->m_Height, j);
-
-        this->m_Pixels.insert(this->m_Pixels.end(), Result.begin(), Result.end());
-    }
-
-    std::vector<unsigned char> Input = this->m_Pixels;
-
-    if (this->DecompressFunction != nullptr && Input.size() > 0)
-    {
-        this->m_Pixels.clear();
-        DecompressFunction(this->m_Width, this->m_Height, Input, this->m_Pixels, this);
-
-        int Length = 0;
-        unsigned char* PNG = stbi_write_png_to_mem_forward(this->m_Pixels.data(), this->m_Width * 4, this->m_Width, this->m_Height, 4, &Length);
-
-        std::vector<unsigned char> FileData(Length + 1);
-        FileData[0] = this->m_Transparent;
-        std::copy(PNG, PNG + Length, FileData.data() + 1);
-
-        std::ofstream OutputFile(Editor::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + ".epng"), std::ios::binary);
-        OutputFile.write((char*)FileData.data(), FileData.size());
-        OutputFile.close();
-
-        free(PNG);
-
-        //stbi_write_png(Config::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + (this->m_Transparent ? "_Trans" : "") + ".png").c_str(), this->m_Width, this->m_Height, 4, this->m_Pixels.data(), this->m_Width * 4);
-    }
-    else
-    {
-        this->m_Pixels.resize(this->m_Width * this->m_Height * 4);
-        for (int i = 0; i < this->m_Width * this->m_Height / 2; i++)
-        {
-            //Red-black texture indicating that the texture format is unsupported
-            this->m_Pixels[i * 8] = 255;
-            this->m_Pixels[i * 8 + 1] = 0;
-            this->m_Pixels[i * 8 + 2] = 0;
-            this->m_Pixels[i * 8 + 3] = 255;
-
-            this->m_Pixels[i * 8 + 4] = 0;
-            this->m_Pixels[i * 8 + 5] = 0;
-            this->m_Pixels[i * 8 + 6] = 0;
-            this->m_Pixels[i * 8 + 7] = 255;
-        }
-    }
+	return mFileName;
 }
 
-TextureToGo::TextureToGo(std::string Path)
+BinaryVectorReader& TextureToGo::GetReader()
 {
-    if (Util::FileExists(Editor::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + ".epng")))
-    {
-        std::ifstream File(Editor::GetWorkingDirFile("Cache/" + Path.substr(Path.find_last_of("/\\") + 1) + ".epng"), std::ios::binary);
-        File.seekg(0, std::ios_base::end);
-
-        std::streampos FileSize = File.tellg();
-
-        std::vector<unsigned char> Bytes(FileSize);
-
-        File.seekg(0, std::ios_base::beg);
-        File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
-
-        File.close();
-
-        int Width, Height, Components;
-        unsigned char* Image = (unsigned char*)stbi_load_from_memory(Bytes.data() + 1, Bytes.size() - 1, &Width, &Height, &Components, STBI_rgb_alpha);
-        
-        this->m_Pixels.assign(Image, Image + Width * Height * 4);
-
-        this->m_Width = Width;
-        this->m_Height = Height;
-        this->m_Transparent = (bool)Bytes[0];
-        stbi_image_free(Image);
-        return;
-    }
-
-    std::ifstream File(Path, std::ios::binary);
-
-    if (!File.eof() && !File.fail())
-    {
-        File.seekg(0, std::ios_base::end);
-        std::streampos FileSize = File.tellg();
-
-        std::vector<unsigned char> Bytes(FileSize);
-
-        File.seekg(0, std::ios_base::beg);
-        File.read(reinterpret_cast<char*>(Bytes.data()), FileSize);
-
-        File.close();
-
-        this->TextureToGo::TextureToGo(Path, Bytes);
-    }
-    else
-    {
-        Logger::Error("TexToGoDecoder", "Could not open file \"" + Path + "\"");
-    }
+	return mReader;
 }
-std::map<std::string, TextureToGo> TextureToGoLibrary::Textures;
+
+void TextureToGo::SetData(std::vector<unsigned char> Bytes)
+{
+	mReader = BinaryVectorReader(Bytes);
+}
+
+std::unordered_map<std::string, TextureToGo> TextureToGoLibrary::mTextures;
 
 bool TextureToGoLibrary::IsTextureLoaded(std::string Name)
 {
-    return TextureToGoLibrary::Textures.count(Name);
+	return TextureToGoLibrary::mTextures.count(Name);
 }
 
-TextureToGo* TextureToGoLibrary::GetTexture(std::string Name)
+TextureToGo* TextureToGoLibrary::GetTexture(std::string Name, std::string Directory)
 {
-    if (!TextureToGoLibrary::IsTextureLoaded(Name))
-        TextureToGoLibrary::Textures.insert({ Name, Editor::GetRomFSFile("TexToGo/" + Name)});
-    return &TextureToGoLibrary::Textures[Name];
+	if (!TextureToGoLibrary::IsTextureLoaded(Name))
+	{
+		TextureToGo TexToGo;
+		TexToGo.GetFileName() = Name;
+		if (!TexToGo.IsCached())
+		{
+			TexToGo.SetData(Util::ReadFile(Directory.empty() ? Editor::GetRomFSFile("TexToGo/" + Name) : (Directory + "/" + Name)));
+			TexToGo.Parse();
+		}
+		TextureToGoLibrary::mTextures.insert({ Name, TexToGo });
+	}
+	return &TextureToGoLibrary::mTextures[Name];
 }
 
-std::map<std::string, TextureToGo>& TextureToGoLibrary::GetTextures()
+std::unordered_map<std::string, TextureToGo>& TextureToGoLibrary::GetTextures()
 {
-    return TextureToGoLibrary::Textures;
+	return TextureToGoLibrary::mTextures;
 }

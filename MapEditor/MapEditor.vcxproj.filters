@@ -118,6 +118,63 @@
     <Filter Include="Source Files\file\phive">
       <UniqueIdentifier>{9e46f963-451a-49a5-bdab-931b370a32a8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\phive_creator">
+      <UniqueIdentifier>{bf8dc5de-723b-41fa-98b9-2b382a33031c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\phive_creator">
+      <UniqueIdentifier>{5c774177-1fc8-4630-a98e-cdf1c3f8ec81}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\meshDecimation">
+      <UniqueIdentifier>{db0eff2b-fc17-45e4-beb7-3bfe1334fa68}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\meshDecimation">
+      <UniqueIdentifier>{466f3bf2-fdfc-4a2d-acaf-8b7324d1e6c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui\ui_parts\ainb\nodes">
+      <UniqueIdentifier>{e9ca7ec5-115c-4a24-a83c-f854683e9e7c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui\ui_parts\ainb\nodes">
+      <UniqueIdentifier>{fa7418ab-434d-40dc-ac25-4146143b57ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\recastnavigation">
+      <UniqueIdentifier>{dd939e52-6999-4ea1-b144-e6ff5b1520ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\recastnavigation\detour">
+      <UniqueIdentifier>{9a013077-d153-4de3-9e23-dfc78d298c61}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\recastnavigation\recast">
+      <UniqueIdentifier>{f7e2bebb-3110-4fe7-a7f9-a058b1593383}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\recastnavigation">
+      <UniqueIdentifier>{a5ec115a-9f98-494b-8cf0-72f9cbd9c70a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\recastnavigation\detour">
+      <UniqueIdentifier>{ce753baf-6cd0-49ba-bda5-79cb9c7abb37}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\recastnavigation\recast">
+      <UniqueIdentifier>{5556a4d4-b628-43e8-92c7-b06350b831fd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\bvh">
+      <UniqueIdentifier>{ad9fe63f-0665-42e7-9f5c-46e917620fb2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\file\bfevfl">
+      <UniqueIdentifier>{fc48261f-c43a-4bde-bc83-43a6ed244ad9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\file\bfevfl">
+      <UniqueIdentifier>{8150de6d-672b-4473-b7ed-aab9ca0de08a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui\ui_parts\bfevfl">
+      <UniqueIdentifier>{122e0413-ba81-42c7-a219-70f94a941640}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui\ui_parts\bfevfl">
+      <UniqueIdentifier>{002a3fab-7888-432c-a196-27fb32bbb401}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ui\ui_parts\bfevfl\nodes">
+      <UniqueIdentifier>{ad7a59bc-f485-4d98-b153-26f125105fde}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ui\ui_parts\bfevfl\nodes">
+      <UniqueIdentifier>{d78d0049-b1f1-4ea6-ae9c-0537538d5f04}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -169,9 +226,6 @@
       <Filter>Source Files\imgui_gizmo</Filter>
     </ClCompile>
     <ClCompile Include="Shader.cpp">
-      <Filter>Source Files\ui</Filter>
-    </ClCompile>
-    <ClCompile Include="Framebuffer.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
     <ClCompile Include="Camera.cpp">
@@ -242,9 +296,6 @@
     </ClCompile>
     <ClCompile Include="PopupAddActor.cpp">
       <Filter>Source Files\ui\popup</Filter>
-    </ClCompile>
-    <ClCompile Include="SceneMgr.cpp">
-      <Filter>Source Files\manager</Filter>
     </ClCompile>
     <ClCompile Include="Util.cpp">
       <Filter>Source Files\util</Filter>
@@ -378,13 +429,223 @@
     <ClCompile Include="UMii.cpp">
       <Filter>Source Files\engine</Filter>
     </ClCompile>
-    <ClCompile Include="TextureFormatDecoder.cpp">
-      <Filter>Source Files\file\bfres</Filter>
-    </ClCompile>
     <ClCompile Include="ActorCollisionCreator.cpp">
       <Filter>Source Files\engine</Filter>
     </ClCompile>
     <ClCompile Include="ProjectRebuilder.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupStackActors.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="SplatoonShapeToTotK.cpp">
+      <Filter>Source Files\phive_creator</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveSocketConnector.cpp">
+      <Filter>Source Files\phive_creator</Filter>
+    </ClCompile>
+    <ClCompile Include="UICollisionCreator.cpp">
+      <Filter>Source Files\ui\ui_parts</Filter>
+    </ClCompile>
+    <ClCompile Include="meshDecimation\mdMeshDecimator.cpp">
+      <Filter>Source Files\meshDecimation</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveShape2.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeSplitTiming.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeBoolSelector.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeDefault.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeS32Selector.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeSequential.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeSimultaneous.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIAINBNodeBase.cpp">
+      <Filter>Source Files\ui\ui_parts\ainb</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGuiNodeEditorExt.cpp">
+      <Filter>Source Files\imgui_node_editor</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveNavMesh.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="Framebuffer.cpp">
+      <Filter>Source Files\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneCreator.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupCreateScene.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAddDynamicData.cpp">
+      <Filter>Source Files\ui\popup</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveClassGenerator.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveBinaryVectorReader.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveWrapper.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveBinaryVectorWriter.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\Recast.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastAlloc.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastArea.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastAssert.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastContour.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastFilter.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastLayers.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastMesh.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastMeshDetail.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastRasterization.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\recast\RecastRegion.cpp">
+      <Filter>Source Files\recastnavigation\recast</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourAlloc.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourAssert.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourCommon.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourNavMesh.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourNavMeshBuilder.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourNavMeshQuery.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="recastnavigation\detour\DetourNode.cpp">
+      <Filter>Source Files\recastnavigation\detour</Filter>
+    </ClCompile>
+    <ClCompile Include="NavMeshGenerator.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="BVHBuilder.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="BVNode.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveStaticCompound.cpp">
+      <Filter>Source Files\file\phive</Filter>
+    </ClCompile>
+    <ClCompile Include="GameDataListMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureFormat.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="GLFormatHelper.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="BfresBinaryVectorReader.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="GLBfres.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="BufferObject.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="GLBfresVAO.cpp">
+      <Filter>Source Files\file\bfres</Filter>
+    </ClCompile>
+    <ClCompile Include="StartlightData.cpp">
+      <Filter>Source Files\util</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="ActionMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="BFEVFL.cpp">
+      <Filter>Source Files\file\bfevfl</Filter>
+    </ClCompile>
+    <ClCompile Include="BFEVFLBinaryVectorReader.cpp">
+      <Filter>Source Files\file\bfevfl</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditor.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorEntryPoint.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorSubFlow.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorNodeBase.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorAction.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="HGHT.cpp">
+      <Filter>Source Files\file\terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorFork.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorJoin.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="UIEventEditorSwitch.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupModifyNodeActionQuery.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl</Filter>
+    </ClCompile>
+    <ClCompile Include="EventNodeDefMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="PopupAddActorActionQuery.cpp">
+      <Filter>Source Files\ui\ui_parts\bfevfl</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneExporter.cpp">
       <Filter>Source Files\engine</Filter>
     </ClCompile>
   </ItemGroup>
@@ -653,13 +914,298 @@
     <ClInclude Include="UMii.h">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
-    <ClInclude Include="TextureFormatDecoder.h">
-      <Filter>Header Files\file\bfres</Filter>
-    </ClInclude>
     <ClInclude Include="ActorCollisionCreator.h">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="ProjectRebuilder.h">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupStackActors.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="SplatoonShapeToTotK.h">
+      <Filter>Header Files\phive_creator</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveSocketConnector.h">
+      <Filter>Header Files\phive_creator</Filter>
+    </ClInclude>
+    <ClInclude Include="UICollisionCreator.h">
+      <Filter>Header Files\ui\ui_parts</Filter>
+    </ClInclude>
+    <ClInclude Include="meshDecimation\mdMeshDecimator.h">
+      <Filter>Header Files\meshDecimation</Filter>
+    </ClInclude>
+    <ClInclude Include="meshDecimation\mdSArray.h">
+      <Filter>Header Files\meshDecimation</Filter>
+    </ClInclude>
+    <ClInclude Include="meshDecimation\mdVector.h">
+      <Filter>Header Files\meshDecimation</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveShape2.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeBase.h">
+      <Filter>Header Files\ui\ui_parts\ainb</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeBoolSelector.h">
+      <Filter>Header Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeDefault.h">
+      <Filter>Header Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeS32Selector.h">
+      <Filter>Header Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeSequential.h">
+      <Filter>Header Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeSimultaneous.h">
+      <Filter>Header Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIAINBNodeSplitTiming.h">
+      <Filter>Header Files\ui\ui_parts\ainb\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGuiNodeEditorExt.h">
+      <Filter>Header Files\imgui_node_editor</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveNavMesh.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneCreator.h">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupCreateScene.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAddDynamicData.h">
+      <Filter>Header Files\ui\popup</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveClassGenerator.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="json.hpp">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveBinaryVectorReader.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveWrapper.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveBinaryVectorWriter.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourAssert.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourCommon.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourMath.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourNavMesh.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourNavMeshBuilder.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourNavMeshQuery.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourNode.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourStatus.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\detour\DetourAlloc.h">
+      <Filter>Header Files\recastnavigation\detour</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\recast\RecastAssert.h">
+      <Filter>Header Files\recastnavigation\recast</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\recast\Recast.h">
+      <Filter>Header Files\recastnavigation\recast</Filter>
+    </ClInclude>
+    <ClInclude Include="recastnavigation\recast\RecastAlloc.h">
+      <Filter>Header Files\recastnavigation\recast</Filter>
+    </ClInclude>
+    <ClInclude Include="NavMeshGenerator.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="BVHBuilder.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\binned_sah_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\bottom_up_algorithm.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\bounding_box.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\bvh.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\heuristic_primitive_splitter.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\hierarchy_refitter.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\leaf_collapser.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\linear_bvh_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\locally_ordered_clustering_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\morton.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\morton_code_based_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\node_intersectors.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\node_layout_optimizer.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\parallel_reinsertion_optimizer.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\platform.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\prefix_sum.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\primitive_intersectors.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\radix_sort.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\ray.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\sah_based_algorithm.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\single_ray_traverser.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\spatial_split_bvh_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\sphere.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\sweep_sah_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\top_down_builder.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\triangle.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\utilities.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="bvh\vector.hpp">
+      <Filter>Header Files\bvh</Filter>
+    </ClInclude>
+    <ClInclude Include="BVNode.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="obj_io.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="ObjWriter.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveStaticCompound.h">
+      <Filter>Header Files\file\phive</Filter>
+    </ClInclude>
+    <ClInclude Include="GameDataListMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureFormat.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="GLFormatHelper.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="BfresBinaryVectorReader.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="GLBfres.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="GLBfresVAO.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="BufferObject.h">
+      <Filter>Header Files\file\bfres</Filter>
+    </ClInclude>
+    <ClInclude Include="StarlightData.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="ActionMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="FixedSizeStack.h">
+      <Filter>Header Files\util</Filter>
+    </ClInclude>
+    <ClInclude Include="BFEVFL.h">
+      <Filter>Header Files\file\bfevfl</Filter>
+    </ClInclude>
+    <ClInclude Include="BFEVFLBinaryVectorReader.h">
+      <Filter>Header Files\file\bfevfl</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditor.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorNodeBase.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorEntryPoint.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorSubFlow.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorAction.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorFork.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorJoin.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="UIEventEditorSwitch.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl\nodes</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupModifyNodeActionQuery.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl</Filter>
+    </ClInclude>
+    <ClInclude Include="EventNodeDefMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="PopupAddActorActionQuery.h">
+      <Filter>Header Files\ui\ui_parts\bfevfl</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneExporter.h">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
   </ItemGroup>
@@ -702,6 +1248,27 @@
     </None>
     <None Include="imgui_node_editor\imgui_extra_math.inl">
       <Filter>Source Files\imgui_node_editor</Filter>
+    </None>
+    <None Include="meshDecimation\mdVector.inl">
+      <Filter>Header Files\meshDecimation</Filter>
+    </None>
+    <None Include="Assets\Shaders\Disabled.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\Disabled.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\InstancedDiscard.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\InstancedDiscard.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\NavMesh.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Assets\Shaders\NavMesh.vert">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
   </ItemGroup>
 </Project>

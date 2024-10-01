@@ -1,5 +1,8 @@
 #include "Texture.h"
 
+#include "GLFormatHelper.h"
+#include <iostream>
+
 Texture::Texture(const char* image, GLenum texType, GLenum slot, GLenum format, GLenum pixelType)
 {
 	// Assigns the type of the texture ot the texture object
@@ -42,7 +45,7 @@ Texture::Texture(const char* image, GLenum texType, GLenum slot, GLenum format, 
 	glBindTexture(texType, 0);
 }
 
-Texture::Texture(std::vector<unsigned char> Pixels, int Width, int Height, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType, std::string TexSampler)
+Texture::Texture(std::vector<unsigned char> Pixels, int Width, int Height, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType, std::string TexSampler, bool GenMipMaps)
 {
 	// Assigns the type of the texture ot the texture object
 	type = texType;
@@ -56,7 +59,7 @@ Texture::Texture(std::vector<unsigned char> Pixels, int Width, int Height, GLenu
 	glBindTexture(texType, ID);
 
 	// Configures the type of algorithm that is used to make the image smaller or bigger
-	glTexParameteri(texType, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+	glTexParameteri(texType, GL_TEXTURE_MIN_FILTER, GenMipMaps ? GL_NEAREST_MIPMAP_LINEAR : GL_NEAREST);
 	glTexParameteri(texType, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	// Configures the way the texture repeats (if it does at all)
@@ -70,51 +73,45 @@ Texture::Texture(std::vector<unsigned char> Pixels, int Width, int Height, GLenu
 	// Assigns the image to the OpenGL Texture object
 	glTexImage2D(texType, 0, ValueType, Width, Height, 0, format, pixelType, Pixels.data());
 	// Generates MipMaps
-	glGenerateMipmap(texType);
+	if(GenMipMaps)
+		glGenerateMipmap(texType);
 
 	// Unbinds the OpenGL Texture object so that it can't accidentally be modified
 	glBindTexture(texType, 0);
 }
 
-Texture::Texture(std::vector<TextureToGo*>& Textures, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType)
+Texture::Texture(TextureToGo::Surface* Surface, GLenum Slot, bool GenMipMaps, GLenum TextureFilter)
 {
-	int Width = 0;
-	int Height = 0;
+	// Assigns the type of the texture ot the texture object
+	type = GL_TEXTURE_2D;
+	Texture::Slot = Slot;
 
-	for (TextureToGo* TexToGo : Textures)
-	{
-		if (TexToGo->GetWidth() > Width) Width = TexToGo->GetWidth();
-		if (TexToGo->GetHeight() > Height) Height = TexToGo->GetHeight();
-	}
+	// Generates an OpenGL texture object
+	glGenTextures(1, &ID);
+	// Assigns the texture to a Texture Unit
+	glActiveTexture(Slot);
+	glBindTexture(GL_TEXTURE_2D, ID);
 
-	std::vector<unsigned char> Pixels(Width * Height * 4);
-	for (TextureToGo* TexToGo : Textures)
-	{
-		for (int PixelIndex = 0; PixelIndex < TexToGo->GetPixels().size() / 4; PixelIndex++)
-		{
-			if (TexToGo->GetPixels()[PixelIndex * 4 + 3] == 0) continue;
+	// Configures the type of algorithm that is used to make the image smaller or bigger
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GenMipMaps ? GL_NEAREST_MIPMAP_LINEAR : GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TextureFilter);
 
-			if (TexToGo->GetPixels()[PixelIndex * 4 + 3] == 255)
-			{
-				Pixels[PixelIndex * 4] = TexToGo->GetPixels()[PixelIndex * 4];
-				Pixels[PixelIndex * 4 + 1] = TexToGo->GetPixels()[PixelIndex * 4 + 1];
-				Pixels[PixelIndex * 4 + 2] = TexToGo->GetPixels()[PixelIndex * 4 + 2];
-				Pixels[PixelIndex * 4 + 3] = 255;
-			}
+	// Configures the way the texture repeats (if it does at all)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-			if (Pixels[PixelIndex * 4] == 0) Pixels[PixelIndex * 4] = TexToGo->GetPixels()[PixelIndex * 4];
-			if (Pixels[PixelIndex * 4 + 1] == 0) Pixels[PixelIndex * 4 + 1] = TexToGo->GetPixels()[PixelIndex * 4 + 1];
-			if (Pixels[PixelIndex * 4 + 2] == 0) Pixels[PixelIndex * 4 + 2] = TexToGo->GetPixels()[PixelIndex * 4 + 2];
-			if (Pixels[PixelIndex * 4 + 3] == 0) Pixels[PixelIndex * 4 + 3] = TexToGo->GetPixels()[PixelIndex * 4 + 3];
-		}
-	}
+	// Extra lines in case you choose to use GL_CLAMP_TO_BORDER
+	// float flatColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+	// glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, flatColor);
 
-	this->Texture::Texture(Pixels, Width, Height, ValueType, texType, slot, format, pixelType, "_a0");
-}
+	// Assigns the image to the OpenGL Texture object
+	glCompressedTexImage2D(GL_TEXTURE_2D, 0, GLFormatHelper::InternalFormatList[Surface->PolishedFormat], Surface->Width, Surface->Height, 0, Surface->Data.size(), Surface->Data.data());
+	// Generates MipMaps
+	if (GenMipMaps)
+		glGenerateMipmap(GL_TEXTURE_2D);
 
-Texture::Texture(TextureToGo* TxtToGo, GLenum ValueType, GLenum texType, GLenum slot, GLenum format, GLenum pixelType, std::string TexSampler)
-{
-	this->Texture::Texture(TxtToGo->GetPixels(), TxtToGo->GetWidth(), TxtToGo->GetHeight(), ValueType, texType, slot, format, pixelType, TexSampler);
+	// Unbinds the OpenGL Texture object so that it can't accidentally be modified
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void Texture::texUnit(Shader& shader, const char* uniform, GLuint unit)

@@ -7,15 +7,26 @@
 bool PopupGeneralInputPair::IsOpen = false;
 std::string PopupGeneralInputPair::Key = "";
 std::string PopupGeneralInputPair::Value = "";
-void (*PopupGeneralInputPair::Func)(std::string, std::string) = nullptr;
+std::function<void(std::string, std::string)> PopupGeneralInputPair::Func;
 std::string PopupGeneralInputPair::PopupTitle = "";
+
+float PopupGeneralInputPair::SizeX = 334.0f;
+float PopupGeneralInputPair::SizeY = 88.0f;
+const float PopupGeneralInputPair::OriginalSizeX = 334.0f;
+const float PopupGeneralInputPair::OriginalSizeY = 88.0f;
+
+void PopupGeneralInputPair::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
 
 void PopupGeneralInputPair::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(334, 88));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup(PopupTitle.c_str());
 		if (ImGui::BeginPopupModal(PopupTitle.c_str(), NULL, ImGuiWindowFlags_NoResize))
 		{
@@ -25,7 +36,7 @@ void PopupGeneralInputPair::Render()
 			{
 				Func(Key, Value);
 				IsOpen = false;
-				Func = nullptr;
+				Func = NULL;
 				Key = "";
 				Value = "";
 			}
@@ -33,7 +44,7 @@ void PopupGeneralInputPair::Render()
 			if (ImGui::Button("Return"))
 			{
 				IsOpen = false;
-				Func = nullptr;
+				Func = NULL;
 				Key = "";
 				Value = "";
 			}
@@ -44,7 +55,7 @@ void PopupGeneralInputPair::Render()
 	}
 }
 
-void PopupGeneralInputPair::Open(std::string Title, void (*Callback)(std::string, std::string))
+void PopupGeneralInputPair::Open(std::string Title, std::function<void(std::string, std::string)> Callback)
 {
 	Func = Callback;
 	Key = "";

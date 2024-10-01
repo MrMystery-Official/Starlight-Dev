@@ -6,6 +6,7 @@
 #include "imgui_stdlib.h"
 #include "imgui_internal.h"
 #include <glad/glad.h>
+#include <iostream>
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -21,6 +22,7 @@
 #include "UIProperties.h"
 #include "UIMapView.h"
 #include "UITools.h"
+#include "UICollisionCreator.h"
 #include "TextureMgr.h"
 #include "Editor.h"
 #include "EditorConfig.h"
@@ -30,6 +32,9 @@
 #include "UIMSBTEditor.h"
 #include "PreferencesConfig.h"
 #include "ProjectRebuilder.h"
+#include "SceneCreator.h"
+#include "StarImGui.h"
+#include "UIEventEditor.h"
 
 #include "PopupAddActor.h"
 #include "PopupGeneralInputPair.h"
@@ -43,13 +48,67 @@
 #include "PopupEditorAINBActorLinks.h"
 #include "PopupAINBElementSelector.h"
 #include "PopupCredits.h"
+#include "PopupStackActors.h"
 #include "PopupSettings.h"
+#include "PopupCreateScene.h"
+#include "PopupAddDynamicData.h"
+#include "PopupModifyNodeActionQuery.h"
+#include "PopupMgr.h"
+#include "PopupAddActorActionQuery.h"
 
 #include "ImGuizmo.h"
 
 GLFWwindow* Window;
 ImVec4 ClearColor = ImVec4(0.18f, 0.21f, 0.25f, 1.00f);
 bool FirstFrame = true;
+const bool mEnableDebugging = false;
+
+void APIENTRY glDebugOutput(GLenum source,
+	GLenum type,
+	unsigned int id,
+	GLenum severity,
+	GLsizei length,
+	const char* message,
+	const void* userParam)
+{
+	// ignore non-significant error/warning codes
+	if (id == 131169 || id == 131185 || id == 131218 || id == 131204) return;
+
+	std::cout << "---------------" << std::endl;
+	std::cout << "Debug message (" << id << "): " << message << std::endl;
+
+	switch (source)
+	{
+	case GL_DEBUG_SOURCE_API:             std::cout << "Source: API"; break;
+	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:   std::cout << "Source: Window System"; break;
+	case GL_DEBUG_SOURCE_SHADER_COMPILER: std::cout << "Source: Shader Compiler"; break;
+	case GL_DEBUG_SOURCE_THIRD_PARTY:     std::cout << "Source: Third Party"; break;
+	case GL_DEBUG_SOURCE_APPLICATION:     std::cout << "Source: Application"; break;
+	case GL_DEBUG_SOURCE_OTHER:           std::cout << "Source: Other"; break;
+	} std::cout << std::endl;
+
+	switch (type)
+	{
+	case GL_DEBUG_TYPE_ERROR:               std::cout << "Type: Error"; break;
+	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: std::cout << "Type: Deprecated Behaviour"; break;
+	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:  std::cout << "Type: Undefined Behaviour"; break;
+	case GL_DEBUG_TYPE_PORTABILITY:         std::cout << "Type: Portability"; break;
+	case GL_DEBUG_TYPE_PERFORMANCE:         std::cout << "Type: Performance"; break;
+	case GL_DEBUG_TYPE_MARKER:              std::cout << "Type: Marker"; break;
+	case GL_DEBUG_TYPE_PUSH_GROUP:          std::cout << "Type: Push Group"; break;
+	case GL_DEBUG_TYPE_POP_GROUP:           std::cout << "Type: Pop Group"; break;
+	case GL_DEBUG_TYPE_OTHER:               std::cout << "Type: Other"; break;
+	} std::cout << std::endl;
+
+	switch (severity)
+	{
+	case GL_DEBUG_SEVERITY_HIGH:         std::cout << "Severity: high"; break;
+	case GL_DEBUG_SEVERITY_MEDIUM:       std::cout << "Severity: medium"; break;
+	case GL_DEBUG_SEVERITY_LOW:          std::cout << "Severity: low"; break;
+	case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
+	} std::cout << std::endl;
+	std::cout << std::endl;
+}
 
 void UI::Initialize()
 {
@@ -68,6 +127,8 @@ void UI::Initialize()
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	if(mEnableDebugging)
+		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 
 	gladLoadGL();
 
@@ -124,6 +185,7 @@ void UI::Initialize()
 	*/
 
 	/*
+	* Blue
 	Style.Colors[ImGuiCol_Text] = ImVec4(0.8f, 0.83f, 0.96f, 1.0f);
     Style.Colors[ImGuiCol_WindowBg] = ImVec4(0.16f, 0.18f, 0.21f, 0.94f);
     Style.Colors[ImGuiCol_ChildBg] = ImVec4(0.16f, 0.18f, 0.21f, 0.0f);
@@ -149,9 +211,11 @@ void UI::Initialize()
     Style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.16f, 0.18f, 0.21f, 1.0f);
     Style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.12f, 0.12f, 0.14f, 0.7f);
     Style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.1f, 0.1f, 0.11f, 1.0f);
-    Style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.24f, 0.45f, 0.68f, 0.35f);
+	Style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.24f, 0.45f, 0.68f, 0.35f);
     Style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.66f, 1.0f, 0.0f);
-    Style.Colors[ImGuiCol_Button] = ImVec4(0.24f, 0.25f, 0.29f, 1.0f);*/
+    Style.Colors[ImGuiCol_Button] = ImVec4(0.24f, 0.25f, 0.29f, 1.0f);
+	Style.Colors[ImGuiCol_MenuBarBg] = Style.Colors[ImGuiCol_WindowBg];
+	*/
 
 	Style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 	Style.Colors[ImGuiCol_WindowBg] = ImVec4(0.17f, 0.17f, 0.17f, 0.94f);
@@ -184,9 +248,19 @@ void UI::Initialize()
 	Style.Colors[ImGuiCol_MenuBarBg] = Style.Colors[ImGuiCol_WindowBg];
 
 	glfwSetKeyCallback(Window, UIMapView::GLFWKeyCallback);
+	glfwSetScrollCallback(Window, UICollisionCreator::MouseWheelCallback);
+	//glfwSetCursorPosCallback(Window, UIMapView::GLFWMouseMoveCallback);
 
 	ImGui_ImplGlfw_InitForOpenGL(Window, true);
 	ImGui_ImplOpenGL3_Init("#version 130");
+
+	ImGuiPlatformIO& PlatformIO = ImGui::GetPlatformIO();
+	for (ImGuiPlatformMonitor& Monitor : PlatformIO.Monitors) {
+		ImFont* font = io.Fonts->AddFontFromFileTTF("Assets/Fonts/Regular.ttf", floor(14 * (Monitor.DpiScale * 1.2f)));
+		Editor::Fonts.emplace(Monitor.DpiScale, font);
+	}
+
+	PlatformIO.Platform_OnChangedViewport = PopupMgr::OnViewportChanged;
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
@@ -208,8 +282,19 @@ void UI::Initialize()
 	glfwSetWindowIcon(Window, 2, Icons);
 	*/
 
+	StarImGui::Window = Window;
 	UIMapView::Initialize(Window);
 	UIOutliner::Initalize(UIMapView::CameraView);
+	UICollisionCreator::Initialize(Window);
+
+	if (mEnableDebugging)
+	{
+		glEnable(GL_DEBUG_OUTPUT);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+		glDebugMessageCallback(glDebugOutput, nullptr);
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+		Logger::Info("Renderer", "Enabled GL debugging");
+	}
 
 	Logger::Info("Renderer", "Initialized OpenGL and ImGui");
 }
@@ -240,12 +325,15 @@ void UI::Render()
 	UITools::DrawToolsWindow();
 	UIConsole::DrawConsoleWindow();
 	UIActorTool::DrawActorToolWindow();
+	UICollisionCreator::DrawCollisionCreatorWindow();
 #ifdef ADVANCED_MODE
 	UIMSBTEditor::DrawMSBTEditorWindow();
 #endif
 
 	//if (!UIAINBEditor::AINB.Loaded) UIAINBEditor::LoadAINBFile("Logic/Dungeon001_1800.logic.root.ainb");
 	UIAINBEditor::DrawAinbEditorWindow();
+	//if (!UIEventEditor::mEventFile.mLoaded) UIEventEditor::LoadEventFile(Util::ReadFile("/switchemulator/Zelda TotK/TrialsOfTheChosenHero/Events/SwordTrial_CameraFocus.bfevfl"));
+	//UIEventEditor::DrawEventEditorWindow();
 
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -254,6 +342,14 @@ void UI::Render()
 		ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
 		if (ImGui::BeginMenu("Scene"))
 		{
+			if (ImGui::MenuItem("New"))
+			{
+				PopupCreateScene::Open([](std::string Identifier, std::string Template)
+					{
+						SceneCreator::CreateScene(Identifier, Template);
+					});
+			}
+
 			if (ImGui::MenuItem("Load"))
 			{
 				PopupLoadScene::Open([](SceneMgr::Type Type, std::string Identifier)
@@ -311,6 +407,10 @@ void UI::Render()
 			{
 				UIAINBEditor::Open = !UIAINBEditor::Open;
 			}
+			if (ImGui::MenuItem("Event Editor", "", UIEventEditor::mOpen))
+			{
+				UIEventEditor::mOpen = !UIEventEditor::mOpen;
+			}
 			if (ImGui::MenuItem("Actor Tool", "", UIActorTool::Open))
 			{
 				UIActorTool::Open = !UIActorTool::Open;
@@ -343,19 +443,21 @@ void UI::Render()
 		ImGui::DockBuilderSetNodeSize(DockSpace, ImGui::GetMainViewport()->Size);
 
 		ImGuiID DockLeft, DockMiddle, DockRight;
-		ImGui::DockBuilderSplitNode(DockSpace, ImGuiDir_Left, 0.2f, &DockLeft, &DockMiddle);
-		ImGui::DockBuilderSplitNode(DockMiddle, ImGuiDir_Right, 0.35f, &DockRight, &DockMiddle);
+		ImGui::DockBuilderSplitNode(DockSpace, ImGuiDir_Left, 0.2f * Editor::UIScale, &DockLeft, &DockMiddle);
+		ImGui::DockBuilderSplitNode(DockMiddle, ImGuiDir_Right, 0.35f * Editor::UIScale, &DockRight, &DockMiddle);
 
 		ImGuiID DockOutlinerTop, DockOutlinerBottom;
-		ImGui::DockBuilderSplitNode(DockLeft, ImGuiDir_Down, 0.4f, &DockOutlinerBottom, &DockOutlinerTop);
+		ImGui::DockBuilderSplitNode(DockLeft, ImGuiDir_Down, 0.4f * Editor::UIScale, &DockOutlinerBottom, &DockOutlinerTop);
 		ImGui::DockBuilderDockWindow("Outliner", DockOutlinerTop);
 		ImGui::DockBuilderDockWindow("Tools", DockOutlinerBottom);
 
 		ImGuiID DockMapViewTop, DockMapViewBottom;
-		ImGui::DockBuilderSplitNode(DockMiddle, ImGuiDir_Down, 0.3f, &DockMapViewBottom, &DockMapViewTop);
+		ImGui::DockBuilderSplitNode(DockMiddle, ImGuiDir_Down, 0.3f * Editor::UIScale, &DockMapViewBottom, &DockMapViewTop);
 		ImGui::DockBuilderDockWindow("Map View", DockMapViewTop);
 		ImGui::DockBuilderDockWindow("AINB Editor", DockMapViewTop);
+		ImGui::DockBuilderDockWindow("Event Editor", DockMapViewTop);
 		ImGui::DockBuilderDockWindow("Actor Tool", DockMapViewTop);
+		ImGui::DockBuilderDockWindow("Collision creator", DockMapViewTop);
 #ifdef ADVANCED_MODE
 		ImGui::DockBuilderDockWindow("MSBT Editor", DockMapViewTop);
 #endif
@@ -383,8 +485,15 @@ void UI::Render()
 	PopupEditorAINBActorLinks::Render();
 	PopupAINBElementSelector::Render();
 	PopupCredits::Render();
+	PopupStackActors::Render();
+	PopupCreateScene::Render();
+	PopupAddDynamicData::Render();
+	PopupModifyNodeActionQuery::Render();
+	PopupAddActorActionQuery::Render();
 
 	PreferencesConfig::Frame();
+
+	StarImGui::RenderPerFrame();
 
     // Rendering
     ImGui::Render();
@@ -397,7 +506,10 @@ void UI::Render()
 void UI::Cleanup()
 {
 	UIAINBEditor::Delete();
+	UIEventEditor::Delete();
+	//UIMapView::Cleanup();
 	TextureMgr::Cleanup();
+	GLBfresLibrary::Cleanup();
 	BfresLibrary::Cleanup();
 	GLTextureLibrary::Cleanup();
 	ShaderMgr::Cleanup();

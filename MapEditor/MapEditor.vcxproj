@@ -92,14 +92,18 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>bvh;recastnavigation/detour;recastnavigation/recast;imgui;imgui_gizmo;imgui_node_editor;meshDecimation</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -110,17 +114,20 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>bvh;recastnavigation/detour;recastnavigation/recast;imgui;imgui_gizmo;imgui_node_editor;meshDecimation</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -129,14 +136,18 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>bvh;recastnavigation/detour;recastnavigation/recast;imgui;imgui_gizmo;imgui_node_editor;meshDecimation</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -147,44 +158,61 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>imgui;imgui_gizmo;imgui_node_editor</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>bvh;recastnavigation/detour;recastnavigation/recast;imgui;imgui_gizmo;imgui_node_editor;meshDecimation</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalOptions>/D _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;zstd_static.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ActionMgr.cpp" />
     <ClCompile Include="Actor.cpp" />
     <ClCompile Include="ActorCollisionCreator.cpp" />
     <ClCompile Include="ActorMgr.cpp" />
     <ClCompile Include="AINB.cpp" />
     <ClCompile Include="AINBNodeDefMgr.cpp" />
     <ClCompile Include="astc_decomp.cpp" />
+    <ClCompile Include="BFEVFL.cpp" />
+    <ClCompile Include="BFEVFLBinaryVectorReader.cpp" />
     <ClCompile Include="Bfres.cpp" />
+    <ClCompile Include="BfresBinaryVectorReader.cpp" />
     <ClCompile Include="BHTMP.cpp" />
     <ClCompile Include="BHTMP.h" />
     <ClCompile Include="BinaryVectorReader.cpp" />
     <ClCompile Include="BinaryVectorWriter.cpp" />
+    <ClCompile Include="BufferObject.cpp" />
+    <ClCompile Include="BVHBuilder.cpp" />
+    <ClCompile Include="BVNode.cpp" />
     <ClCompile Include="Byml.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="EBO.cpp" />
     <ClCompile Include="Editor.cpp" />
     <ClCompile Include="EditorConfig.cpp" />
     <ClCompile Include="EffectFile.cpp" />
+    <ClCompile Include="EventNodeDefMgr.cpp" />
     <ClCompile Include="EXB.cpp" />
     <ClCompile Include="Exporter.cpp" />
     <ClCompile Include="Framebuffer.cpp" />
     <ClCompile Include="FramebufferMgr.cpp" />
     <ClCompile Include="Frustum.cpp" />
+    <ClCompile Include="GameDataListMgr.cpp" />
     <ClCompile Include="glad.c" />
+    <ClCompile Include="GLBfres.cpp" />
+    <ClCompile Include="GLBfresVAO.cpp" />
+    <ClCompile Include="GLFormatHelper.cpp" />
     <ClCompile Include="HashMgr.cpp" />
+    <ClCompile Include="HGHT.cpp" />
+    <ClCompile Include="ImGuiNodeEditorExt.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
@@ -205,11 +233,24 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="meshDecimation\mdMeshDecimator.cpp" />
     <ClCompile Include="MSBT.cpp" />
+    <ClCompile Include="NavMeshGenerator.cpp" />
+    <ClCompile Include="PhiveBinaryVectorReader.cpp" />
+    <ClCompile Include="PhiveBinaryVectorWriter.cpp" />
+    <ClCompile Include="PhiveClassGenerator.cpp" />
+    <ClCompile Include="PhiveNavMesh.cpp" />
     <ClCompile Include="PhiveShape.cpp" />
+    <ClCompile Include="PhiveShape2.cpp" />
+    <ClCompile Include="PhiveSocketConnector.cpp" />
+    <ClCompile Include="PhiveStaticCompound.cpp" />
+    <ClCompile Include="PhiveWrapper.cpp" />
     <ClCompile Include="PopupAddActor.cpp" />
+    <ClCompile Include="PopupAddActorActionQuery.cpp" />
     <ClCompile Include="PopupAddAINBNode.cpp" />
+    <ClCompile Include="PopupAddDynamicData.cpp" />
     <ClCompile Include="PopupAINBElementSelector.cpp" />
+    <ClCompile Include="PopupCreateScene.cpp" />
     <ClCompile Include="PopupCredits.cpp" />
     <ClCompile Include="PopupEditorAINBActorLinks.cpp" />
     <ClCompile Include="PopupExportMod.cpp" />
@@ -219,26 +260,67 @@
     <ClCompile Include="PopupAddRail.cpp" />
     <ClCompile Include="PopupGeneralInputString.cpp" />
     <ClCompile Include="PopupLoadScene.cpp" />
+    <ClCompile Include="PopupMgr.cpp" />
+    <ClCompile Include="PopupModifyNodeActionQuery.cpp" />
     <ClCompile Include="PopupSettings.cpp" />
+    <ClCompile Include="PopupStackActors.cpp" />
     <ClCompile Include="PreferencesConfig.cpp" />
     <ClCompile Include="ProjectRebuilder.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourAlloc.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourAssert.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourCommon.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourNavMesh.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourNavMeshBuilder.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourNavMeshQuery.cpp" />
+    <ClCompile Include="recastnavigation\detour\DetourNode.cpp" />
+    <ClCompile Include="recastnavigation\recast\Recast.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastAlloc.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastArea.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastAssert.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastContour.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastFilter.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastLayers.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastMesh.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastMeshDetail.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastRasterization.cpp" />
+    <ClCompile Include="recastnavigation\recast\RecastRegion.cpp" />
     <ClCompile Include="RESTBL.cpp" />
     <ClCompile Include="SARC.cpp" />
+    <ClCompile Include="SceneCreator.cpp" />
+    <ClCompile Include="SceneExporter.cpp" />
     <ClCompile Include="SceneMgr.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderMgr.cpp" />
+    <ClCompile Include="SplatoonShapeToTotK.cpp" />
     <ClCompile Include="StarImGui.cpp" />
+    <ClCompile Include="StartlightData.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="TegraSwizzle.cpp" />
     <ClCompile Include="Texture.cpp" />
-    <ClCompile Include="TextureFormatDecoder.cpp" />
+    <ClCompile Include="TextureFormat.cpp" />
     <ClCompile Include="TextureMgr.cpp" />
     <ClCompile Include="TextureToGo.cpp" />
     <ClCompile Include="tinyfiledialogs.c" />
     <ClCompile Include="UI.cpp" />
     <ClCompile Include="UIActorTool.cpp" />
     <ClCompile Include="UIAINBEditor.cpp" />
+    <ClCompile Include="UIAINBNodeBase.cpp" />
+    <ClCompile Include="UIAINBNodeBoolSelector.cpp" />
+    <ClCompile Include="UIAINBNodeDefault.cpp" />
+    <ClCompile Include="UIAINBNodeS32Selector.cpp" />
+    <ClCompile Include="UIAINBNodeSequential.cpp" />
+    <ClCompile Include="UIAINBNodeSimultaneous.cpp" />
+    <ClCompile Include="UIAINBNodeSplitTiming.cpp" />
+    <ClCompile Include="UICollisionCreator.cpp" />
     <ClCompile Include="UIConsole.cpp" />
+    <ClCompile Include="UIEventEditor.cpp" />
+    <ClCompile Include="UIEventEditorAction.cpp" />
+    <ClCompile Include="UIEventEditorEntryPoint.cpp" />
+    <ClCompile Include="UIEventEditorFork.cpp" />
+    <ClCompile Include="UIEventEditorJoin.cpp" />
+    <ClCompile Include="UIEventEditorNodeBase.cpp" />
+    <ClCompile Include="UIEventEditorSubFlow.cpp" />
+    <ClCompile Include="UIEventEditorSwitch.cpp" />
     <ClCompile Include="UIMapView.cpp" />
     <ClCompile Include="UIMSBTEditor.cpp" />
     <ClCompile Include="UIOutliner.cpp" />
@@ -252,6 +334,7 @@
     <ClCompile Include="ZStdFile.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ActionMgr.h" />
     <ClInclude Include="Actor.h" />
     <ClInclude Include="ActorCollisionCreator.h" />
     <ClInclude Include="ActorMgr.h" />
@@ -259,22 +342,63 @@
     <ClInclude Include="AINBNodeDefMgr.h" />
     <ClInclude Include="astc_decomp.h" />
     <ClInclude Include="bcdec.h" />
+    <ClInclude Include="BFEVFL.h" />
+    <ClInclude Include="BFEVFLBinaryVectorReader.h" />
     <ClInclude Include="Bfres.h" />
+    <ClInclude Include="BfresBinaryVectorReader.h" />
     <ClInclude Include="BinaryVectorReader.h" />
     <ClInclude Include="BinaryVectorWriter.h" />
+    <ClInclude Include="BufferObject.h" />
+    <ClInclude Include="BVHBuilder.h" />
+    <ClInclude Include="bvh\binned_sah_builder.hpp" />
+    <ClInclude Include="bvh\bottom_up_algorithm.hpp" />
+    <ClInclude Include="bvh\bounding_box.hpp" />
+    <ClInclude Include="bvh\bvh.hpp" />
+    <ClInclude Include="bvh\heuristic_primitive_splitter.hpp" />
+    <ClInclude Include="bvh\hierarchy_refitter.hpp" />
+    <ClInclude Include="bvh\leaf_collapser.hpp" />
+    <ClInclude Include="bvh\linear_bvh_builder.hpp" />
+    <ClInclude Include="bvh\locally_ordered_clustering_builder.hpp" />
+    <ClInclude Include="bvh\morton.hpp" />
+    <ClInclude Include="bvh\morton_code_based_builder.hpp" />
+    <ClInclude Include="bvh\node_intersectors.hpp" />
+    <ClInclude Include="bvh\node_layout_optimizer.hpp" />
+    <ClInclude Include="bvh\parallel_reinsertion_optimizer.hpp" />
+    <ClInclude Include="bvh\platform.hpp" />
+    <ClInclude Include="bvh\prefix_sum.hpp" />
+    <ClInclude Include="bvh\primitive_intersectors.hpp" />
+    <ClInclude Include="bvh\radix_sort.hpp" />
+    <ClInclude Include="bvh\ray.hpp" />
+    <ClInclude Include="bvh\sah_based_algorithm.hpp" />
+    <ClInclude Include="bvh\single_ray_traverser.hpp" />
+    <ClInclude Include="bvh\spatial_split_bvh_builder.hpp" />
+    <ClInclude Include="bvh\sphere.hpp" />
+    <ClInclude Include="bvh\sweep_sah_builder.hpp" />
+    <ClInclude Include="bvh\top_down_builder.hpp" />
+    <ClInclude Include="bvh\triangle.hpp" />
+    <ClInclude Include="bvh\utilities.hpp" />
+    <ClInclude Include="bvh\vector.hpp" />
+    <ClInclude Include="BVNode.h" />
     <ClInclude Include="Byml.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="EBO.h" />
     <ClInclude Include="Editor.h" />
     <ClInclude Include="EditorConfig.h" />
     <ClInclude Include="EffectFile.h" />
+    <ClInclude Include="EventNodeDefMgr.h" />
     <ClInclude Include="EXB.h" />
     <ClInclude Include="Exporter.h" />
+    <ClInclude Include="FixedSizeStack.h" />
     <ClInclude Include="Framebuffer.h" />
     <ClInclude Include="FramebufferMgr.h" />
     <ClInclude Include="Frustum.h" />
+    <ClInclude Include="GameDataListMgr.h" />
+    <ClInclude Include="GLBfres.h" />
+    <ClInclude Include="GLBfresVAO.h" />
+    <ClInclude Include="GLFormatHelper.h" />
     <ClInclude Include="HashMgr.h" />
     <ClInclude Include="HGHT.h" />
+    <ClInclude Include="ImGuiNodeEditorExt.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_impl_glfw.h" />
@@ -297,13 +421,31 @@
     <ClInclude Include="imgui_node_editor\imgui_extra_math.h" />
     <ClInclude Include="imgui_node_editor\imgui_node_editor.h" />
     <ClInclude Include="imgui_node_editor\imgui_node_editor_internal.h" />
+    <ClInclude Include="json.hpp" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Mesh.h" />
+    <ClInclude Include="meshDecimation\mdMeshDecimator.h" />
+    <ClInclude Include="meshDecimation\mdSArray.h" />
+    <ClInclude Include="meshDecimation\mdVector.h" />
     <ClInclude Include="MSBT.h" />
+    <ClInclude Include="NavMeshGenerator.h" />
+    <ClInclude Include="ObjWriter.h" />
+    <ClInclude Include="obj_io.h" />
+    <ClInclude Include="PhiveBinaryVectorReader.h" />
+    <ClInclude Include="PhiveBinaryVectorWriter.h" />
+    <ClInclude Include="PhiveClassGenerator.h" />
+    <ClInclude Include="PhiveNavMesh.h" />
     <ClInclude Include="PhiveShape.h" />
+    <ClInclude Include="PhiveShape2.h" />
+    <ClInclude Include="PhiveSocketConnector.h" />
+    <ClInclude Include="PhiveStaticCompound.h" />
+    <ClInclude Include="PhiveWrapper.h" />
     <ClInclude Include="PopupAddActor.h" />
+    <ClInclude Include="PopupAddActorActionQuery.h" />
     <ClInclude Include="PopupAddAINBNode.h" />
+    <ClInclude Include="PopupAddDynamicData.h" />
     <ClInclude Include="PopupAINBElementSelector.h" />
+    <ClInclude Include="PopupCreateScene.h" />
     <ClInclude Include="PopupCredits.h" />
     <ClInclude Include="PopupEditorAINBActorLinks.h" />
     <ClInclude Include="PopupExportMod.h" />
@@ -313,25 +455,60 @@
     <ClInclude Include="PopupAddRail.h" />
     <ClInclude Include="PopupGeneralInputString.h" />
     <ClInclude Include="PopupLoadScene.h" />
+    <ClInclude Include="PopupMgr.h" />
+    <ClInclude Include="PopupModifyNodeActionQuery.h" />
     <ClInclude Include="PopupSettings.h" />
+    <ClInclude Include="PopupStackActors.h" />
     <ClInclude Include="PreferencesConfig.h" />
     <ClInclude Include="ProjectRebuilder.h" />
+    <ClInclude Include="recastnavigation\detour\DetourAlloc.h" />
+    <ClInclude Include="recastnavigation\detour\DetourAssert.h" />
+    <ClInclude Include="recastnavigation\detour\DetourCommon.h" />
+    <ClInclude Include="recastnavigation\detour\DetourMath.h" />
+    <ClInclude Include="recastnavigation\detour\DetourNavMesh.h" />
+    <ClInclude Include="recastnavigation\detour\DetourNavMeshBuilder.h" />
+    <ClInclude Include="recastnavigation\detour\DetourNavMeshQuery.h" />
+    <ClInclude Include="recastnavigation\detour\DetourNode.h" />
+    <ClInclude Include="recastnavigation\detour\DetourStatus.h" />
+    <ClInclude Include="recastnavigation\recast\Recast.h" />
+    <ClInclude Include="recastnavigation\recast\RecastAlloc.h" />
+    <ClInclude Include="recastnavigation\recast\RecastAssert.h" />
     <ClInclude Include="RESTBL.h" />
     <ClInclude Include="SARC.h" />
+    <ClInclude Include="SceneCreator.h" />
+    <ClInclude Include="SceneExporter.h" />
     <ClInclude Include="SceneMgr.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="ShaderMgr.h" />
+    <ClInclude Include="SplatoonShapeToTotK.h" />
     <ClInclude Include="StarImGui.h" />
+    <ClInclude Include="StarlightData.h" />
     <ClInclude Include="TegraSwizzle.h" />
     <ClInclude Include="Texture.h" />
-    <ClInclude Include="TextureFormatDecoder.h" />
+    <ClInclude Include="TextureFormat.h" />
     <ClInclude Include="TextureMgr.h" />
     <ClInclude Include="TextureToGo.h" />
     <ClInclude Include="tinyfiledialogs.h" />
     <ClInclude Include="UI.h" />
     <ClInclude Include="UIActorTool.h" />
     <ClInclude Include="UIAINBEditor.h" />
+    <ClInclude Include="UIAINBNodeBase.h" />
+    <ClInclude Include="UIAINBNodeBoolSelector.h" />
+    <ClInclude Include="UIAINBNodeDefault.h" />
+    <ClInclude Include="UIAINBNodeS32Selector.h" />
+    <ClInclude Include="UIAINBNodeSequential.h" />
+    <ClInclude Include="UIAINBNodeSimultaneous.h" />
+    <ClInclude Include="UIAINBNodeSplitTiming.h" />
+    <ClInclude Include="UICollisionCreator.h" />
     <ClInclude Include="UIConsole.h" />
+    <ClInclude Include="UIEventEditor.h" />
+    <ClInclude Include="UIEventEditorAction.h" />
+    <ClInclude Include="UIEventEditorEntryPoint.h" />
+    <ClInclude Include="UIEventEditorFork.h" />
+    <ClInclude Include="UIEventEditorJoin.h" />
+    <ClInclude Include="UIEventEditorNodeBase.h" />
+    <ClInclude Include="UIEventEditorSubFlow.h" />
+    <ClInclude Include="UIEventEditorSwitch.h" />
     <ClInclude Include="UIMapView.h" />
     <ClInclude Include="UIMSBTEditor.h" />
     <ClInclude Include="UIOutliner.h" />
@@ -347,10 +524,16 @@
   <ItemGroup>
     <None Include="Assets\Shaders\Default.frag" />
     <None Include="Assets\Shaders\Default.vert" />
+    <None Include="Assets\Shaders\Disabled.frag" />
+    <None Include="Assets\Shaders\Disabled.vert" />
     <None Include="Assets\Shaders\Game.frag" />
     <None Include="Assets\Shaders\Game.vert" />
     <None Include="Assets\Shaders\Instanced.frag" />
     <None Include="Assets\Shaders\Instanced.vert" />
+    <None Include="Assets\Shaders\InstancedDiscard.frag" />
+    <None Include="Assets\Shaders\InstancedDiscard.vert" />
+    <None Include="Assets\Shaders\NavMesh.frag" />
+    <None Include="Assets\Shaders\NavMesh.vert" />
     <None Include="Assets\Shaders\Picking.frag" />
     <None Include="Assets\Shaders\Picking.vert" />
     <None Include="Assets\Shaders\Selected.frag" />
@@ -358,6 +541,7 @@
     <None Include="imgui_node_editor\imgui_bezier_math.inl" />
     <None Include="imgui_node_editor\imgui_extra_math.inl" />
     <None Include="imgui_node_editor\imgui_node_editor_internal.inl" />
+    <None Include="meshDecimation\mdVector.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

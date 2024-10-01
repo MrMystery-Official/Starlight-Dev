@@ -9,6 +9,17 @@
 bool PopupEditorAINBActorLinks::IsOpen = false;
 bool PopupEditorAINBActorLinks::FirstFrame = true;
 
+float PopupEditorAINBActorLinks::SizeX = 1000.0f;
+float PopupEditorAINBActorLinks::SizeY = 700.0f;
+const float PopupEditorAINBActorLinks::OriginalSizeX = 1000.0f;
+const float PopupEditorAINBActorLinks::OriginalSizeY = 700.0f;
+
+void PopupEditorAINBActorLinks::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupEditorAINBActorLinks::DisplayInputText(std::string Key, BymlFile::Node* Node)
 {
 	std::string Data = Node->GetValue<std::string>();
@@ -20,11 +31,12 @@ void PopupEditorAINBActorLinks::DisplayBymlAinbActorLinks(BymlFile& File)
 {
 	if (File.HasChild("AiGroups"))
 	{
-		for (int i = 0; i < File.GetNode("AiGroups")->GetChildren().size(); i++)
+		for (auto AiGroupsIter = File.GetNode("AiGroups")->GetChildren().begin(); AiGroupsIter != File.GetNode("AiGroups")->GetChildren().end(); )
 		{
+			int i = std::distance(File.GetNode("AiGroups")->GetChildren().begin(), AiGroupsIter);
 			BymlFile::Node& Node = File.GetNode("AiGroups")->GetChildren()[i];
 			std::string LogicMetaKey = Node.HasChild("Logic") ? "Logic" : "Meta";
-			if (ImGui::CollapsingHeader(Node.GetChild(LogicMetaKey)->GetValue<std::string>().c_str()))
+			if (ImGui::CollapsingHeader((Node.GetChild(LogicMetaKey)->GetValue<std::string>() + "###AINBActorLinksPopupEntry" + std::to_string(i)).c_str()))
 			{
 				if (ImGui::Button(("Open in AINB Editor##" + std::to_string(i)).c_str()))
 				{
@@ -43,6 +55,16 @@ void PopupEditorAINBActorLinks::DisplayBymlAinbActorLinks(BymlFile& File)
 					Path = Path.substr(Path.find_last_of('/') + 1);
 					UIAINBEditor::LoadAINBFile(LogicPrefix + Path + "b");
 					ImGui::SetWindowFocus("AINB Editor");
+				}
+				ImGui::SameLine();
+				if (ImGui::Button(("Delete AINB entry##" + Node.GetChild(LogicMetaKey)->GetValue<std::string>()).c_str()))
+				{
+					for (size_t j = 0; j < File.GetNode("AiGroups")->GetChildren().size(); j++)
+					{
+						ImGui::GetStateStorage()->SetInt(ImGui::GetID((Node.GetChild(LogicMetaKey)->GetValue<std::string>() + "###AINBActorLinksPopupEntry" + std::to_string(j)).c_str()), false);
+					}
+					AiGroupsIter = File.GetNode("AiGroups")->GetChildren().erase(AiGroupsIter);
+					continue;
 				}
 				ImGui::Separator();
 				ImGui::Indent();
@@ -186,6 +208,8 @@ void PopupEditorAINBActorLinks::DisplayBymlAinbActorLinks(BymlFile& File)
 
 				ImGui::Unindent();
 			}
+
+			AiGroupsIter++;
 		}
 	}
 }
@@ -197,7 +221,7 @@ void PopupEditorAINBActorLinks::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		if (FirstFrame)
 		{
-			ImGui::SetNextWindowSize(ImVec2(1000, 700));
+			ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 			FirstFrame = false;
 		}
 		ImGui::OpenPopup("AINB actor links");

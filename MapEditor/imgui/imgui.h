@@ -30,6 +30,7 @@
 #define IMGUI_HAS_TABLE
 #define IMGUI_HAS_VIEWPORT          // Viewport WIP branch
 #define IMGUI_HAS_DOCK              // Docking WIP branch
+#define IMGUI_HAS_STACK_LAYOUT 1 // Stack-Layout PR #84
 
 /*
 
@@ -604,6 +605,16 @@ namespace ImGui
     IMGUI_API bool          InputScalar(const char* label, ImGuiDataType data_type, void* p_data, const void* p_step = NULL, const void* p_step_fast = NULL, const char* format = NULL, ImGuiInputTextFlags flags = 0);
     IMGUI_API bool          InputScalarN(const char* label, ImGuiDataType data_type, void* p_data, int components, const void* p_step = NULL, const void* p_step_fast = NULL, const char* format = NULL, ImGuiInputTextFlags flags = 0);
     IMGUI_API bool          InputScalarNWidth(const char* label, ImGuiDataType data_type, void* p_data, int components, float ItemWidth, const void* p_step = NULL, const void* p_step_fast = NULL, const char* format = NULL, ImGuiInputTextFlags flags = 0);
+
+    IMGUI_API void BeginHorizontal(const char* str_id, const ImVec2& size = ImVec2(0, 0));
+    IMGUI_API void BeginHorizontal(const void* ptr_id, const ImVec2& size = ImVec2(0, 0));
+    IMGUI_API void EndHorizontal();
+    IMGUI_API void BeginVertical(const char* str_id, const ImVec2& size = ImVec2(0, 0));
+    IMGUI_API void BeginVertical(const void* ptr_id, const ImVec2& size = ImVec2(0, 0));
+    IMGUI_API void EndVertical();
+    IMGUI_API void Spring(float weight = 1.0f, float spacing = -1.0f);
+    IMGUI_API void SuspendLayout();
+    IMGUI_API void ResumeLayout();
 
     // Widgets: Color Editor/Picker (tip: the ColorEdit* functions have a little color square that can be left-clicked to open a picker, and right-clicked to open an option menu.)
     // - Note that in C++ a 'float v[X]' function argument is the _same_ as 'float* v', the array syntax is just a way to document the number of elements that are expected to be accessible.
@@ -1722,6 +1733,7 @@ enum ImGuiStyleVar_
     ImGuiStyleVar_ScrollbarRounding,   // float     ScrollbarRounding
     ImGuiStyleVar_GrabMinSize,         // float     GrabMinSize
     ImGuiStyleVar_GrabRounding,        // float     GrabRounding
+    ImGuiStyleVar_LayoutAlign, // float LayoutAlign
     ImGuiStyleVar_TabRounding,         // float     TabRounding
     ImGuiStyleVar_ButtonTextAlign,     // ImVec2    ButtonTextAlign
     ImGuiStyleVar_SelectableTextAlign, // ImVec2    SelectableTextAlign
@@ -1986,6 +1998,7 @@ struct ImGuiStyle
     float       ScrollbarRounding;          // Radius of grab corners for scrollbar.
     float       GrabMinSize;                // Minimum width/height of a grab box for slider/scrollbar.
     float       GrabRounding;               // Radius of grabs corners rounding. Set to 0.0f to have rectangular slider grabs.
+    float LayoutAlign; // Element alignment inside horizontal and vertical layouts (0.0f - left/top, 1.0f - right/bottom, 0.5f - center).
     float       LogSliderDeadzone;          // The size in pixels of the dead-zone around zero on logarithmic sliders that cross zero.
     float       TabRounding;                // Radius of upper corners of a tab. Set to 0.0f to have rectangular tabs.
     float       TabBorderSize;              // Thickness of border around tabs.

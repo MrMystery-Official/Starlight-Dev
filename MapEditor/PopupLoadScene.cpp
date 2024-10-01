@@ -9,12 +9,23 @@ std::string PopupLoadScene::SceneIdentifier = "";
 SceneMgr::Type PopupLoadScene::SceneType = SceneMgr::Type::SkyIslands;
 void (*PopupLoadScene::Func)(SceneMgr::Type, std::string) = nullptr;
 
+float PopupLoadScene::SizeX = 520.0f;
+float PopupLoadScene::SizeY = 113.0f;
+const float PopupLoadScene::OriginalSizeX = 520.0f;
+const float PopupLoadScene::OriginalSizeY = 113.0f;
+
+void PopupLoadScene::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupLoadScene::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(520, 113));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Load scene");
 		if (ImGui::BeginPopupModal("Load scene"))
 		{
@@ -38,7 +49,7 @@ void PopupLoadScene::Render()
 				Example = "001";
 				break;
 			case SceneMgr::Type::LargeDungeon:
-				Example = "Thunder";
+				Example = "LargeDungeonThunder";
 				break;
 			case SceneMgr::Type::NormalStage:
 				Example = "TitleScene";

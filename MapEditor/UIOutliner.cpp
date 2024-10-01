@@ -30,7 +30,7 @@ void UIOutliner::DrawOutlinerWindow()
 {
 	if (!Open) return;
 
-	ImGui::Begin("Outliner", &Open);
+	ImGui::Begin("Outliner", &Open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
 	if (ImGui::Button("Add actor", ImVec2(ImGui::GetWindowSize().x * 0.3f, 0)))
 	{
@@ -38,6 +38,13 @@ void UIOutliner::DrawOutlinerWindow()
 			{
 				ActorMgr::AddActor(Gyml, true, false);
 				SelectActor(&ActorMgr::GetActors()[ActorMgr::GetActors().size() - 1]);
+
+				glm::vec3 NewPos = UIMapView::CameraView.Position;
+				NewPos += 4.0f * UIMapView::CameraView.Orientation;
+
+				UIOutliner::SelectedActor->Translate.SetX(NewPos.x);
+				UIOutliner::SelectedActor->Translate.SetY(NewPos.y);
+				UIOutliner::SelectedActor->Translate.SetZ(NewPos.z);
 			});
 	}
 	ImGui::SameLine();
@@ -59,6 +66,7 @@ void UIOutliner::DrawOutlinerWindow()
 			{
 				SelectActor(&ActorNames[i]);
 			}
+
 			/*
 			ImGui::Indent();
 			for (int j = 0; j < ActorNames[i].MergedActorContent.size(); j++)

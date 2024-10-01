@@ -273,8 +273,8 @@ public:
 	{
 		hkcdFourAabb FourAabb;
 		uint32_t Data[4] = { 0 };
-		bool IsLeaf = false;
-		bool IsActive = false;
+		uint8_t IsLeaf = 0;
+		uint8_t IsActive = 0;
 		uint16_t Reserve0;
 		uint32_t Reserve1;
 		uint64_t Reserve2;
@@ -396,14 +396,22 @@ public:
 		virtual void Write(BinaryVectorWriter& Writer, int32_t Offset = -1) override;
 	};
 
+	std::vector<unsigned char> PhiveItemSection;
+	std::vector<std::string> m_TagStringTable;
+	std::vector<unsigned char> PhiveBodySection;
+	std::vector<unsigned char> TagBody; //Unknown what this data does, but it is the same for every collision
+	std::vector<unsigned char> TagHashes; //Hashes are always the same
+
 	std::vector<float> ToVertices();
 	std::vector<unsigned int> ToIndices();
 
-	std::vector<unsigned char> ToBinary(std::vector<float> Vertices, std::vector<unsigned int> Indices);
-	void WriteToFile(std::string Path, std::vector<float> Vertices, std::vector<unsigned int> Indices);
+	std::vector<unsigned char> ToBinary();
+	void WriteToFile(std::string Path);
 	hknpMeshShape& GetMeshShape();
+	void ReadStringTable(BinaryVectorReader Reader, std::vector<std::string>* Dest);
 
-	PhiveShape(std::vector<unsigned char> Bytes);
+	PhiveShape(std::vector<unsigned char> Bytes, bool GeometryOnly = false);
+	PhiveShape() {}
 private:
 	struct Item
 	{
@@ -432,12 +440,9 @@ private:
 	};
 
 	PhiveHeader m_Header;
-	std::vector<std::string> m_TagStringTable;
 	std::vector<std::string> m_FieldStringTable;
 	std::vector<Item> m_Items;
 	std::vector<TNAItem> m_TNAItems;
-	std::vector<unsigned char> m_TagBody; //Unknown what this data does, but it is the same for every collision
-	std::vector<unsigned char> m_TagHashes; //Hashes are always the same
 	std::vector<unsigned char> m_PhiveTable1;
 	std::vector<unsigned char> m_PhiveTable2;
 
@@ -452,11 +457,10 @@ private:
 	void ReadPhiveTables(BinaryVectorReader& Reader);
 	void ReadTBDYSection(BinaryVectorReader Reader);
 	void ReadTHSHSection(BinaryVectorReader Reader);
-	void ReadTNASection(BinaryVectorReader Reader);
+	void ReadTNASection(BinaryVectorReader Reader, bool Splatoon);
 	void WriteTNASection(BinaryVectorWriter& Writer);
 	uint32_t FindSection(BinaryVectorReader Reader, std::string Section);
 	uint32_t BitFieldToSize(uint32_t Input);
-	void ReadStringTable(BinaryVectorReader Reader, std::vector<std::string>* Dest);
 	void WriteStringTable(BinaryVectorWriter& Writer, std::string Magic, std::vector<std::string>* Source);
 	void ReadItemSection(BinaryVectorReader Reader);
 	uint32_t WriteItemSection(BinaryVectorWriter& Writer);

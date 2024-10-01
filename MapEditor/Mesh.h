@@ -13,7 +13,7 @@ class Mesh
 public:
 	std::vector<float> vertices;
 	std::vector<GLuint> indices;
-	std::vector<Texture*> textures;
+	unsigned int mTexture;
 	// Store VAO in public so it can be used in the Draw function
 	VAO Vao;
 	VBO instanceVBO;
@@ -30,17 +30,20 @@ public:
 	(
 		std::vector<float>& vertices,
 		std::vector<GLuint>& indices,
-		std::vector<Texture*> textures,
+		unsigned int texture,
 		unsigned int instancing = 1,
 		std::vector<glm::mat4> instanceMatrix = {}
 	);
+
+	Mesh(std::vector<float>& Vertices, std::vector<GLuint>& Indices);
 
 	void UpdateInstances(unsigned int Instances);
 	void UpdateInstanceMatrix(std::vector<glm::mat4>& Matrix);
 
 	// Draws the mesh
-	void Draw(Shader* GameShader = nullptr, int AlbedoTexCount = -1);
+	void Draw();
 	void DrawPicking(Shader* Shader, Camera* Camera, glm::mat4 Matrix);
+	void DrawRaw();
 
 	void Delete();
 };

@@ -6,6 +6,7 @@
 #include "BinaryVectorReader.h"
 #include "BinaryVectorWriter.h"
 #include "Logger.h"
+#include "StarlightData.h"
 
 void ResTableFile::GenerateCrcTable()
 {
@@ -99,7 +100,8 @@ ResTableFile::ResTableFile(std::vector<unsigned char> Data)
     //Checking magic, should be RESTBL
     char Magic[6];
     Reader.Read(Magic, 6);
-    if (Magic[0] != 'R' || Magic[1] != 'E' || Magic[2] != 'S' || Magic[3] != 'T' || Magic[4] != 'B' || Magic[5] != 'L') {
+    if (Magic[0] != 'R' || Magic[1] != 'E' || Magic[2] != 'S' || Magic[3] != 'T' || Magic[4] != 'B' || Magic[5] != 'L')
+    {
         Logger::Error("ResTblDecoder", "Wrong magic, expected RESTBL");
         return;
     }
@@ -112,7 +114,7 @@ ResTableFile::ResTableFile(std::vector<unsigned char> Data)
     this->m_CrcEntries.resize(this->m_Header.CrcMapCount);
     for (int i = 0; i < this->m_Header.CrcMapCount; i++)
     {
-        this->m_CrcEntries[i] = { Reader.ReadUInt32(), Reader.ReadUInt32()};
+        this->m_CrcEntries[i] = { Reader.ReadUInt32(), Reader.ReadUInt32() };
     }
 
     this->m_NameEntries.resize(this->m_Header.NameMapCount);
@@ -160,6 +162,8 @@ ResTableFile::ResTableFile(std::string Path)
 
 std::vector<unsigned char> ResTableFile::ToBinary()
 {
+    SetFileSize("Shader/ExternalBinaryString.bfres", GetFileSize("Shader/ExternalBinaryString.bfres") + 1 + (uint8_t)StarlightData::mLevel);
+
     BinaryVectorWriter Writer;
 
     Writer.WriteBytes("RESTBL");

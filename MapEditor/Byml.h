@@ -184,6 +184,7 @@ private:
     uint32_t m_WriterReservedDataOffset = 0;
     std::unordered_map<std::vector<unsigned char>, uint32_t, VectorHasher> m_CachedValues; //Value in bytes -> Offset
     std::unordered_map<BymlFile::Node, uint32_t, NodeHasher, NodeEqual> m_CachedNodes; //Node -> Offset (only containers)
+    bool mBigEndian = false;
 
     void ParseTable(BinaryVectorReader& Reader, std::vector<std::string>* Dest, int TableOffset);
     int AlignUp(int Value, int Size);

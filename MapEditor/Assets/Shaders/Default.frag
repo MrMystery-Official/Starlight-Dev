@@ -7,10 +7,11 @@ out vec4 FragColor;
 in vec2 texCoord;
 
 // Gets the Texture Unit from the main function
-uniform sampler2D tex0;
+uniform sampler2D texAlb0;
 
+uniform int textureCount;
 
 void main()
 {
-	FragColor = texture(tex0, texCoord);
+	FragColor = texture(texAlb0, texCoord);
 }

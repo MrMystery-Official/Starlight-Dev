@@ -5,6 +5,7 @@
 #include "BinaryVectorWriter.h"
 #include <fstream>
 #include <filesystem>
+#include <iostream>
 #include "SARC.h"
 #include "ZStdFile.h"
 
@@ -66,7 +67,7 @@ void AINBNodeDefMgr::Initialize()
 			Definition.Type = Reader.ReadUInt16();
 			Definition.Category = (AINBNodeDefMgr::NodeDef::CategoryEnum)Reader.ReadUInt8();
 			uint8_t LinkedNodeParamCount = Reader.ReadUInt8();
-			uint8_t FileNameCount = Reader.ReadUInt8();
+			uint32_t FileNameCount = Reader.ReadUInt32();
 			uint8_t FlagCount = Reader.ReadUInt8();
 			uint8_t AllowedAINBCount = Reader.ReadUInt8();
 
@@ -154,7 +155,8 @@ void AINBNodeDefMgr::Initialize()
 			}
 			for (int i = 0; i < AllowedAINBCount; i++)
 			{
-				Definition.AllowedAINBCategories.push_back((AINBNodeDefMgr::NodeDef::CategoryEnum)Reader.ReadUInt8());
+				uint8_t Num = Reader.ReadUInt8();
+				Definition.AllowedAINBCategories.push_back((AINBNodeDefMgr::NodeDef::CategoryEnum)Num);
 			}
 			AINBNodeDefMgr::NodeDefinitions[j] = Definition;
 		}
@@ -194,8 +196,8 @@ void AINBNodeDefMgr::DecodeAINB(std::vector<unsigned char> Bytes, std::string Fi
 			if (Definition.DisplayName == Node.GetName())
 			{
 				NodeFound = true;
-				if (Definition.FileNames.size() < 10) Definition.FileNames.push_back(FileName);
-				//Definition.FileNames.push_back(FileName);
+				//if (Definition.FileNames.size() < 10) Definition.FileNames.push_back(FileName);
+				Definition.FileNames.push_back(FileName);
 				if (std::find(Definition.AllowedAINBCategories.begin(), Definition.AllowedAINBCategories.end(), FileCategory) == Definition.AllowedAINBCategories.end()) Definition.AllowedAINBCategories.push_back(FileCategory);
 				for (int i = 0; i < AINBFile::ValueTypeCount; i++)
 				{
@@ -322,8 +324,8 @@ void AINBNodeDefMgr::DecodeAINB(std::vector<unsigned char> Bytes, std::string Fi
 		Def.Category = File.Header.FileCategory == "AI" ? AINBNodeDefMgr::NodeDef::CategoryEnum::AI : (File.Header.FileCategory == "Logic" ? AINBNodeDefMgr::NodeDef::CategoryEnum::Logic : AINBNodeDefMgr::NodeDef::CategoryEnum::Sequence);
 		Def.Name = Node.Name;
 		Def.DisplayName = Node.GetName();
-		if (Def.FileNames.size() < 10) Def.FileNames.push_back(FileName);
-		//Def.FileNames.push_back(FileName);
+		//if (Def.FileNames.size() < 10) Def.FileNames.push_back(FileName);
+		Def.FileNames.push_back(FileName);
 		Def.NameHash = Node.NameHash;
 		Def.Type = Node.Type;
 		Def.OutputParameters.resize(6);
@@ -520,7 +522,7 @@ void AINBNodeDefMgr::Generate()
 		Writer.WriteInteger(Def.Type, sizeof(uint16_t));
 		Writer.WriteByte((uint8_t)Def.Category);
 		Writer.WriteByte((uint8_t)Def.LinkedNodeParams.size());
-		Writer.WriteByte((uint8_t)Def.FileNames.size());
+		Writer.WriteInteger(Def.FileNames.size(), sizeof(uint32_t));
 		Writer.WriteByte((uint8_t)Def.Flags.size());
 		Writer.WriteByte((uint8_t)Def.AllowedAINBCategories.size());
 		for (int Type = 0; Type < AINBFile::ValueTypeCount; Type++)
@@ -656,7 +658,7 @@ AINBFile::Node AINBNodeDefMgr::NodeDefToNode(AINBNodeDefMgr::NodeDef* Def)
 			Entry.ValueType = (int)Param.ValueType;
 			Entry.Value = Param.Value;
 			Entry.NodeIndex = -1;
-			Entry.ParameterIndex = -1;
+			Entry.ParameterIndex = 0;
 
 			/*
 			if (Param.HasEXBFunction)

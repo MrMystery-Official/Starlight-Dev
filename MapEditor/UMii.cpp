@@ -35,11 +35,17 @@ UMii::UMii(std::vector<unsigned char> BymlBytes)
 
 	/* Constructing model */
 	std::string ModelRace = Race == "Korog" ? "Korogu" : Race;
-	this->m_ModelElements.push_back(ModelElement{
-		.Model = BfresLibrary::GetModel("UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number + "." + "UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number)
-		}); //Body
-
-	std::cout << "Body: " << ("UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number + "." + "UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number) << std::endl;
+	BfresFile* BodyModelPtr = BfresLibrary::GetModel("UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number + "." + "UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number);
+	if (BodyModelPtr != nullptr)
+	{
+		GLBfres* GLModel = GLBfresLibrary::GetModel(BodyModelPtr);
+		if (GLModel != nullptr && !GLModel->mBfres->Models.Nodes.empty())
+		{
+			this->m_ModelElements.push_back(ModelElement{
+				.Model = GLModel
+				}); //Body
+		}
+	}
 
 	/*
 	BfresFile* BodyModelPtr = BfresLibrary::GetModel("UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number + "." + "UMii_" + ModelRace + "_Body" + Type + "_" + SexAge + "_" + Number);
@@ -89,12 +95,12 @@ void UMii::Draw(Vector3F Translate, Vector3F Rotate, Vector3F Scale, Shader* Sha
 {
 	for (UMii::ModelElement& Element : this->m_ModelElements)
 	{
-		if (Element.Model->GetModels().empty())
+		/*
+		if (Element.Model->Models.Nodes.empty())
 		{
 			Element.Model = BfresLibrary::GetModel("Default");
 		}
-
-		BfresFile::LOD* LODModel = &Element.Model->GetModels()[0].LODs[0];
+		*/
 
 		glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
 
@@ -106,28 +112,9 @@ void UMii::Draw(Vector3F Translate, Vector3F Rotate, Vector3F Scale, Shader* Sha
 
 		GLMModel = glm::scale(GLMModel, glm::vec3(Scale.GetX(), Scale.GetY(), Scale.GetZ()));
 
-		if (!Picking)
-		{
-			for (uint32_t SubModelIndexOpaque : LODModel->OpaqueObjects)
-			{
-				LODModel->GL_Meshes[SubModelIndexOpaque].UpdateInstances(1);
-				glUniformMatrix4fv(glGetUniformLocation(Shader->ID, "modelMatrix"), 1, GL_FALSE, glm::value_ptr(GLMModel));
-				LODModel->GL_Meshes[SubModelIndexOpaque].Draw();
-			}
+		std::vector<glm::mat4> Instances;
+		Instances.push_back(GLMModel);
 
-			for (uint32_t SubModelIndexTransparent : LODModel->TransparentObjects)
-			{
-				LODModel->GL_Meshes[SubModelIndexTransparent].UpdateInstances(1);
-				glUniformMatrix4fv(glGetUniformLocation(Shader->ID, "modelMatrix"), 1, GL_FALSE, glm::value_ptr(GLMModel));
-				LODModel->GL_Meshes[SubModelIndexTransparent].Draw();
-			}
-			return;
-		}
-		
-
-		for (Mesh& SubMesh : LODModel->GL_Meshes)
-		{
-			SubMesh.DrawPicking(Shader, CameraView, GLMModel);
-		}
+		Element.Model->Draw(Instances, Shader);
 	}
 }

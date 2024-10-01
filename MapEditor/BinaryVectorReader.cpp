@@ -51,23 +51,24 @@ int8_t BinaryVectorReader::ReadInt8()
 	return this->m_Bytes[this->m_Offset];
 }
 
-uint16_t BinaryVectorReader::ReadUInt16()
+uint16_t BinaryVectorReader::ReadUInt16(bool BigEndian)
 {
 	this->m_Offset += 2;
-	return (static_cast<uint16_t>(this->m_Bytes[this->m_Offset - 1])) | (this->m_Bytes[this->m_Offset] << 8);
+	return !BigEndian ? ((static_cast<uint16_t>(this->m_Bytes[this->m_Offset - 1])) | (this->m_Bytes[this->m_Offset] << 8)) : _byteswap_ushort(((static_cast<uint16_t>(this->m_Bytes[this->m_Offset - 1])) | (this->m_Bytes[this->m_Offset] << 8)));
 }
 
-int16_t BinaryVectorReader::ReadInt16()
+int16_t BinaryVectorReader::ReadInt16(bool BigEndian)
 {
 	this->m_Offset += 2;
-	return (static_cast<int16_t>(this->m_Bytes[this->m_Offset - 1])) | (this->m_Bytes[this->m_Offset] << 8);
+	return !BigEndian ? ((static_cast<int16_t>(this->m_Bytes[this->m_Offset - 1])) | (this->m_Bytes[this->m_Offset] << 8)) : _byteswap_ushort(((static_cast<int16_t>(this->m_Bytes[this->m_Offset - 1])) | (this->m_Bytes[this->m_Offset] << 8)));
 }
 
-uint32_t BinaryVectorReader::ReadUInt24() {
+uint32_t BinaryVectorReader::ReadUInt24(bool BigEndian) {
 	this->m_Offset += 3;
-	return (static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 2])) |
+	uint32_t Value = (static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 2])) |
 		(static_cast<uint32_t>(this->m_Bytes[this->m_Offset - 1]) << 8) |
 		(static_cast<uint32_t>(this->m_Bytes[this->m_Offset]) << 16);
+	return !BigEndian ? Value : (_byteswap_ulong(Value) >> 8);
 }
 
 uint32_t BinaryVectorReader::ReadUInt32(bool BigEndian)
@@ -88,16 +89,16 @@ int32_t BinaryVectorReader::ReadInt32(bool BigEndian)
 	return !BigEndian ? (static_cast<int32_t>(this->m_Bytes[this->m_Offset - 3])) |
 		(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 2]) << 8) |
 		(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 1]) << 16) |
-		static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24) : _byteswap_ulong(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 3])) |
+		static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24) : _byteswap_ulong(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 3]) |
 			(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 2]) << 8) |
 			(static_cast<int32_t>(this->m_Bytes[this->m_Offset - 1]) << 16) |
-			static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24);
+			static_cast<int32_t>(this->m_Bytes[this->m_Offset] << 24));
 }
 
-uint64_t BinaryVectorReader::ReadUInt64()
+uint64_t BinaryVectorReader::ReadUInt64(bool BigEndian)
 {
 	this->m_Offset += 8;
-	return (static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 7])) |
+	uint64_t Data = (static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 7])) |
 		(static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 6]) << 8) |
 		(static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 5]) << 16) |
 		(static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 4]) << 24) |
@@ -105,12 +106,13 @@ uint64_t BinaryVectorReader::ReadUInt64()
 		(static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 2]) << 40) |
 		(static_cast<uint64_t>(this->m_Bytes[this->m_Offset - 1]) << 48) |
 		(static_cast<uint64_t>(this->m_Bytes[this->m_Offset]) << 56);
+	return BigEndian ? _byteswap_uint64(Data) : Data;
 }
 
-int64_t BinaryVectorReader::ReadInt64()
+int64_t BinaryVectorReader::ReadInt64(bool BigEndian)
 {
 	this->m_Offset += 8;
-	return (static_cast<int64_t>(this->m_Bytes[this->m_Offset - 7])) |
+	uint64_t Data = (static_cast<int64_t>(this->m_Bytes[this->m_Offset - 7])) |
 		(static_cast<int64_t>(this->m_Bytes[this->m_Offset - 6]) << 8) |
 		(static_cast<int64_t>(this->m_Bytes[this->m_Offset - 5]) << 16) |
 		(static_cast<int64_t>(this->m_Bytes[this->m_Offset - 4]) << 24) |
@@ -118,20 +120,21 @@ int64_t BinaryVectorReader::ReadInt64()
 		(static_cast<int64_t>(this->m_Bytes[this->m_Offset - 2]) << 40) |
 		(static_cast<int64_t>(this->m_Bytes[this->m_Offset - 1]) << 48) |
 		(static_cast<int64_t>(this->m_Bytes[this->m_Offset]) << 56);
+	return BigEndian ? _byteswap_uint64(Data) : Data;
 }
 
-float BinaryVectorReader::ReadFloat()
+float BinaryVectorReader::ReadFloat(bool BigEndian)
 {
 	float Result;
-	uint32_t Temp = this->ReadUInt32();
+	uint32_t Temp = this->ReadUInt32(BigEndian);
 	memcpy(&Result, &Temp, sizeof(Result));
 	return Result;
 }
 
-double BinaryVectorReader::ReadDouble()
+double BinaryVectorReader::ReadDouble(bool BigEndian)
 {
 	double Result;
-	uint32_t Temp = this->ReadUInt64();
+	uint32_t Temp = this->ReadUInt64(BigEndian);
 	memcpy(&Result, &Temp, sizeof(Result));
 	return Result;
 }
@@ -180,4 +183,10 @@ std::wstring BinaryVectorReader::ReadWString(int Size)
 		Result += static_cast<wchar_t>(this->ReadUInt16());
 
 	return Result;
+}
+
+void BinaryVectorReader::Align(uint32_t Alignment)
+{
+	while (GetPosition() % Alignment != 0)
+		Seek(1, BinaryVectorReader::Position::Current);
 }

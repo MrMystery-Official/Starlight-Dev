@@ -9,15 +9,18 @@
 #include "Util.h"
 #include "HashMgr.h"
 #include "UMii.h"
+#include "SceneMgr.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#include <iostream>
+
 std::vector<Actor> ActorMgr::Actors;
-std::unordered_map<BfresFile*, std::vector<Actor*>> ActorMgr::OpaqueActors;
-std::unordered_map<BfresFile*, std::vector<Actor*>> ActorMgr::TransparentActors;
+std::unordered_map<GLBfres*, std::vector<Actor*>> ActorMgr::OpaqueActors;
+std::unordered_map<GLBfres*, std::vector<Actor*>> ActorMgr::TransparentActorsDiscard;
 std::unordered_map<std::string, ActorMgr::ActorInformation> ActorMgr::ActorInfo; //Gyml -> ActorInfo
 std::vector<Actor*> ActorMgr::UMiiActors;
 
@@ -25,7 +28,7 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 {
 	if (!Node.HasChild("Gyaml")) return nullptr;
 
-	Actor& BymlActor = ModifyActor == nullptr ? AddActor(Node.GetChild("Gyaml")->GetValue<std::string>(), false) : *ModifyActor;
+	Actor& BymlActor = ModifyActor == nullptr ? AddActorWithoutHash(Node.GetChild("Gyaml")->GetValue<std::string>(), false) : *ModifyActor;
 
 	if (Node.HasChild("Hash")) BymlActor.Hash = Node.GetChild("Hash")->GetValue<uint64_t>();
 	if (Node.HasChild("SRTHash")) BymlActor.SRTHash = Node.GetChild("SRTHash")->GetValue<uint32_t>();
@@ -48,6 +51,7 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 	if (Node.HasChild("IsInWater")) BymlActor.InWater = Node.GetChild("IsInWater")->GetValue<bool>();
 	if (Node.HasChild("TurnActorNearEnemy")) BymlActor.TurnActorNearEnemy = Node.GetChild("TurnActorNearEnemy")->GetValue<bool>();
 	if (Node.HasChild("Name")) BymlActor.Name = Node.GetChild("Name")->GetValue<std::string>();
+	if (Node.HasChild("Version")) BymlActor.Version = Node.GetChild("Version")->GetValue<int32_t>();
 
 	if (Node.HasChild("Links"))
 	{
@@ -84,18 +88,91 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 	{
 		for (BymlFile::Node& DynamicNode : Node.GetChild("Dynamic")->GetChildren())
 		{
-			if (DynamicNode.GetType() != BymlFile::Type::Array)
+			Actor::DynamicData Dynamic;
+			Dynamic.Type = DynamicNode.GetType();
+			
+			Vector3F Vec;
+
+			switch (DynamicNode.GetType())
 			{
-				BymlActor.Dynamic.DynamicString.insert({ DynamicNode.GetKey(), DynamicNode.GetValue<std::string>() });
+			case BymlFile::Type::StringIndex:
+				Dynamic.Data = DynamicNode.GetValue<std::string>();
+				break;
+			case BymlFile::Type::Bool:
+				Dynamic.Data = DynamicNode.GetValue<bool>();
+				break;
+			case BymlFile::Type::Int32:
+				Dynamic.Data = DynamicNode.GetValue<int32_t>();
+				break;
+			case BymlFile::Type::Int64:
+				Dynamic.Data = DynamicNode.GetValue<int64_t>();
+				break;
+			case BymlFile::Type::UInt32:
+				Dynamic.Data = DynamicNode.GetValue<uint32_t>();
+				break;
+			case BymlFile::Type::UInt64:
+				Dynamic.Data = DynamicNode.GetValue<uint64_t>();
+				break;
+			case BymlFile::Type::Float:
+				Dynamic.Data = DynamicNode.GetValue<float>();
+				break;
+			case BymlFile::Type::Array:
+				Vec.SetX(DynamicNode.GetChild(0)->GetValue<float>());
+				Vec.SetY(DynamicNode.GetChild(1)->GetValue<float>());
+				Vec.SetZ(DynamicNode.GetChild(2)->GetValue<float>());
+				Dynamic.Data = Vec;
+				break;
+			default:
+				Logger::Error("ActorMgr", "Invalid dynamic data type");
+				break;
 			}
-			else
+			BymlActor.Dynamic.insert({ DynamicNode.GetKey(), Dynamic });
+		}
+	}
+
+	if (Node.HasChild("ExternalParameter"))
+	{
+		for (BymlFile::Node& ExternalParameterNode : Node.GetChild("ExternalParameter")->GetChildren())
+		{
+			Actor::DynamicData ExternalParameter;
+			ExternalParameter.Type = ExternalParameterNode.GetType();
+
+			Vector3F Vec;
+
+			switch (ExternalParameterNode.GetType())
 			{
-				Vector3F VectorValue;
-				VectorValue.SetX(DynamicNode.GetChild(0)->GetValue<float>());
-				VectorValue.SetY(DynamicNode.GetChild(1)->GetValue<float>());
-				VectorValue.SetZ(DynamicNode.GetChild(2)->GetValue<float>());
-				BymlActor.Dynamic.DynamicVector.insert({ DynamicNode.GetKey(), VectorValue });
+			case BymlFile::Type::StringIndex:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<std::string>();
+				break;
+			case BymlFile::Type::Bool:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<bool>();
+				break;
+			case BymlFile::Type::Int32:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<int32_t>();
+				break;
+			case BymlFile::Type::Int64:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<int64_t>();
+				break;
+			case BymlFile::Type::UInt32:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<uint32_t>();
+				break;
+			case BymlFile::Type::UInt64:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<uint64_t>();
+				break;
+			case BymlFile::Type::Float:
+				ExternalParameter.Data = ExternalParameterNode.GetValue<float>();
+				break;
+			case BymlFile::Type::Array:
+				Vec.SetX(ExternalParameterNode.GetChild(0)->GetValue<float>());
+				Vec.SetY(ExternalParameterNode.GetChild(1)->GetValue<float>());
+				Vec.SetZ(ExternalParameterNode.GetChild(2)->GetValue<float>());
+				ExternalParameter.Data = Vec;
+				break;
+			default:
+				Logger::Error("ActorMgr", "Invalid dynamic data type");
+				break;
 			}
+			BymlActor.ExternalParameters.insert({ ExternalParameterNode.GetKey(), ExternalParameter });
 		}
 	}
 
@@ -221,6 +298,13 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 				for (BymlFile::Node& OwnersNode : ConstraintLinkNode->GetChild("Owners")->GetChildren())
 				{
 					Actor::PhiveData::ConstraintLinkData::OwnerData Owner;
+					if (OwnersNode.HasChild("AliasData"))
+					{
+						for (BymlFile::Node& AliasDataNode : OwnersNode.GetChild("AliasData")->GetChildren())
+						{
+							Owner.AliasData.insert({ AliasDataNode.GetKey(), AliasDataNode.GetValue<std::string>() });
+						}
+					}
 					if (OwnersNode.HasChild("BreakableData"))
 					{
 						for (BymlFile::Node& BreakableDataNode : OwnersNode.GetChild("BreakableData")->GetChildren())
@@ -376,26 +460,31 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 	}
 
 	//Merged actor stuff
-	if (BymlActor.Dynamic.DynamicString.count("BancPath"))
+	if (BymlActor.Dynamic.count("BancPath"))
 	{
-		if (BymlActor.Dynamic.DynamicString["BancPath"].length() == 0)
+		if (BymlActor.Dynamic["BancPath"].Type != BymlFile::Type::StringIndex)
+			goto FinishedMergedActorLoading;
+
+		std::string BancPath = std::get<std::string>(BymlActor.Dynamic["BancPath"].Data);
+
+		if (BancPath.length() == 0)
 		{
-			BymlActor.Dynamic.DynamicString.erase("BancPath");
+			BymlActor.Dynamic.erase("BancPath");
 			goto FinishedMergedActorLoading;
 		}
 
-		Logger::Info("ActorMgr", "Loading merged actor " + BymlActor.Dynamic.DynamicString["BancPath"]);
+		Logger::Info("ActorMgr", "Loading merged actor " + BancPath);
 
-		if (!Util::FileExists(Editor::GetRomFSFile(BymlActor.Dynamic.DynamicString["BancPath"] + ".zs")))
+		if (!Util::FileExists(Editor::GetRomFSFile(BancPath + ".zs")))
 		{
-			Logger::Error("ActorMgr", "Could not load " + BymlActor.Dynamic.DynamicString["BancPath"] + ".zs: File not found");
+			Logger::Error("ActorMgr", "Could not load " + BancPath + ".zs: File not found");
 			goto FinishedMergedActorLoading;
 		}
 
-		BymlFile File(ZStdFile::Decompress(Editor::GetRomFSFile(BymlActor.Dynamic.DynamicString["BancPath"] + ".zs"), ZStdFile::Dictionary::BcettByaml).Data);
+		BymlFile File(ZStdFile::Decompress(Editor::GetRomFSFile(BancPath + ".zs"), ZStdFile::Dictionary::BcettByaml).Data);
 		for (BymlFile::Node& ActorNode : File.GetNode("Actors")->GetChildren())
 		{
-			Actor MergedActor = ActorMgr::CreateBasicActor(ActorNode.GetChild("Gyaml")->GetValue<std::string>());
+			Actor MergedActor = ActorMgr::CreateBasicActor(ActorNode.GetChild("Gyaml")->GetValue<std::string>(), false);
 			ActorMgr::AddActorFromByml(ActorNode, &MergedActor);
 
 			MergedActor.ActorType = Actor::Type::Merged;
@@ -406,6 +495,19 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 			MergedActor.Scale.SetX(MergedActor.Scale.GetX() * BymlActor.Scale.GetX());
 			MergedActor.Scale.SetY(MergedActor.Scale.GetY() * BymlActor.Scale.GetY());
 			MergedActor.Scale.SetZ(MergedActor.Scale.GetZ() * BymlActor.Scale.GetZ());
+
+			/*
+			glm::vec3 LocalRotation(glm::radians(MergedActor.Rotate.GetX()), glm::radians(MergedActor.Rotate.GetY()), glm::radians(MergedActor.Rotate.GetZ()));
+			glm::quat RotationQuaternion = glm::quat(glm::vec3(glm::radians(BymlActor.Rotate.GetX()), glm::radians(BymlActor.Rotate.GetY()), glm::radians(BymlActor.Rotate.GetZ())));
+			glm::quat InitialQuaternion = glm::quat(LocalRotation);
+			glm::quat FinalQuaternion = RotationQuaternion * InitialQuaternion;
+			FinalQuaternion = glm::normalize(FinalQuaternion);
+			glm::vec3 FinalRotation = glm::eulerAngles(FinalQuaternion);
+
+			MergedActor.Rotate.SetX(glm::degrees(FinalRotation.x));
+			MergedActor.Rotate.SetY(glm::degrees(FinalRotation.y));
+			MergedActor.Rotate.SetZ(glm::degrees(FinalRotation.z));
+			*/
 
 			MergedActor.Rotate.SetX(MergedActor.Rotate.GetX() - BymlActor.Rotate.GetX());
 			MergedActor.Rotate.SetY(MergedActor.Rotate.GetY() - BymlActor.Rotate.GetY());
@@ -468,6 +570,42 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 FinishedCaveLoading:
 */
 
+	//Water/Fluid stuff in bphsc
+	for (PhiveStaticCompound& StaticCompound : SceneMgr::mStaticCompounds)
+	{
+		for (std::vector<PhiveStaticCompound::PhiveStaticCompoundWaterBox>::iterator Iter = StaticCompound.mWaterBoxArray.begin(); Iter != StaticCompound.mWaterBoxArray.end(); )
+		{
+			if (Iter->mPositionX == BymlActor.Translate.GetX() && Iter->mPositionY == BymlActor.Translate.GetY() && Iter->mPositionZ == BymlActor.Translate.GetZ()
+				&& Util::CompareFloatsWithTolerance(Util::RadiansToDegrees(Iter->mRotationX), BymlActor.Rotate.GetX(), 0.1f) && Util::CompareFloatsWithTolerance(Util::RadiansToDegrees(Iter->mRotationY), BymlActor.Rotate.GetY(), 0.1f) && Util::CompareFloatsWithTolerance(Util::RadiansToDegrees(Iter->mRotationZ), BymlActor.Rotate.GetZ(), 0.1f))
+			{
+				BymlActor.mBakeFluid = true;
+				BymlActor.mWaterShapeType = Actor::WaterShapeType::Box;
+				BymlActor.mWaterFlowSpeed = Iter->mFlowSpeed;
+				BymlActor.mWaterFluidType = PhiveStaticCompound::InternalFluidTypeToActorFluidType(Iter->mFluidType);
+				BymlActor.mWaterBoxHeight = Iter->mScaleTimesTenY;
+				Iter = StaticCompound.mWaterBoxArray.erase(Iter);
+				goto FinishedStaticCompoundLinking;
+			}
+			Iter++;
+		}
+
+		for (std::vector<PhiveStaticCompound::PhiveStaticCompoundWaterCylinder>::iterator Iter = StaticCompound.mWaterCylinderArray.begin(); Iter != StaticCompound.mWaterCylinderArray.end(); )
+		{
+			if (Iter->mPositionX == BymlActor.Translate.GetX() && Iter->mPositionY == BymlActor.Translate.GetY() && Iter->mPositionZ == BymlActor.Translate.GetZ()
+				&& Util::CompareFloatsWithTolerance(Util::RadiansToDegrees(Iter->mRotationX), BymlActor.Rotate.GetX(), 0.1f) && Util::CompareFloatsWithTolerance(Util::RadiansToDegrees(Iter->mRotationY), BymlActor.Rotate.GetY(), 0.1f) && Util::CompareFloatsWithTolerance(Util::RadiansToDegrees(Iter->mRotationZ), BymlActor.Rotate.GetZ(), 0.1f))
+			{
+				BymlActor.mBakeFluid = true;
+				BymlActor.mWaterShapeType = Actor::WaterShapeType::Cylinder;
+				BymlActor.mWaterFlowSpeed = Iter->mFlowSpeed;
+				BymlActor.mWaterFluidType = PhiveStaticCompound::InternalFluidTypeToActorFluidType(Iter->mFluidType);
+				BymlActor.mWaterBoxHeight = Iter->mScaleTimesTenY;
+				Iter = StaticCompound.mWaterCylinderArray.erase(Iter);
+				goto FinishedStaticCompoundLinking;
+			}
+			Iter++;
+		}
+	}
+FinishedStaticCompoundLinking:
 
 	return &BymlActor;
 }
@@ -573,45 +711,91 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 		ActorNode.AddChild(Bakeable);
 	}
 
-	if (!ExportedActor.Dynamic.DynamicString.empty() || !ExportedActor.Dynamic.DynamicVector.empty())
+	if (!ExportedActor.Dynamic.empty())
 	{
 		BymlFile::Node Dynamic(BymlFile::Type::Dictionary, "Dynamic");
-		for (auto const& [Key, Value] : ExportedActor.Dynamic.DynamicString)
+		for (auto const& [Key, Value] : ExportedActor.Dynamic)
 		{
-			BymlFile::Node DynamicEntry(GetDynamicValueDataType(Value), Key);
-			if (DynamicEntry.GetType() == BymlFile::Type::UInt32) DynamicEntry.GetType() = BymlFile::Type::Int32;
-
-			switch (DynamicEntry.GetType())
+			if (Value.Type != BymlFile::Type::Array)
 			{
-			case BymlFile::Type::StringIndex:
-				DynamicEntry.SetValue<std::string>(Value);
-				break;
-			case BymlFile::Type::Float:
-				DynamicEntry.SetValue<float>(Util::StringToNumber<float>(Value));
-				break;
-			case BymlFile::Type::UInt32:
-				DynamicEntry.SetValue<uint32_t>(Util::StringToNumber<uint32_t>(Value));
-				break;
-			case BymlFile::Type::UInt64:
-				DynamicEntry.SetValue<uint64_t>(Util::StringToNumber<uint64_t>(Value));
-				break;
-			case BymlFile::Type::Int32:
-				DynamicEntry.SetValue<int32_t>(Util::StringToNumber<int32_t>(Value));
-				break;
-			case BymlFile::Type::Int64:
-				DynamicEntry.SetValue<int64_t>(Util::StringToNumber<int64_t>(Value));
-				break;
-			case BymlFile::Type::Bool:
-				DynamicEntry.SetValue<bool>(Value == "true");
-				break;
+				BymlFile::Node DynamicEntry(Value.Type, Key);
+
+				switch (DynamicEntry.GetType())
+				{
+				case BymlFile::Type::StringIndex:
+					DynamicEntry.SetValue<std::string>(std::get<std::string>(Value.Data));
+					break;
+				case BymlFile::Type::Float:
+					DynamicEntry.SetValue<float>(std::get<float>(Value.Data));
+					break;
+				case BymlFile::Type::UInt32:
+					DynamicEntry.SetValue<uint32_t>(std::get<uint32_t>(Value.Data));
+					break;
+				case BymlFile::Type::UInt64:
+					DynamicEntry.SetValue<uint64_t>(std::get<uint64_t>(Value.Data));
+					break;
+				case BymlFile::Type::Int32:
+					DynamicEntry.SetValue<int32_t>(std::get<int32_t>(Value.Data));
+					break;
+				case BymlFile::Type::Int64:
+					DynamicEntry.SetValue<int64_t>(std::get<int64_t>(Value.Data));
+					break;
+				case BymlFile::Type::Bool:
+					DynamicEntry.SetValue<bool>(std::get<bool>(Value.Data));
+					break;
+				}
+				Dynamic.AddChild(DynamicEntry);
 			}
-			Dynamic.AddChild(DynamicEntry);
-		}
-		for (auto const& [Key, Value] : ExportedActor.Dynamic.DynamicVector)
-		{
-			WriteBymlVector(&Dynamic, Key, Value, Vector3F(0, 0, 0), true);
+			else
+			{
+				WriteBymlVector(&Dynamic, Key, std::get<Vector3F>(Value.Data), Vector3F(0, 0, 0), true);
+			}
 		}
 		ActorNode.AddChild(Dynamic);
+	}
+
+	if (!ExportedActor.ExternalParameters.empty())
+	{
+		BymlFile::Node ExternalParameter(BymlFile::Type::Dictionary, "ExternalParameter");
+		for (auto const& [Key, Value] : ExportedActor.ExternalParameters)
+		{
+			if (Value.Type != BymlFile::Type::Array)
+			{
+				BymlFile::Node ExternalParameterEntry(Value.Type, Key);
+
+				switch (ExternalParameterEntry.GetType())
+				{
+				case BymlFile::Type::StringIndex:
+					ExternalParameterEntry.SetValue<std::string>(std::get<std::string>(Value.Data));
+					break;
+				case BymlFile::Type::Float:
+					ExternalParameterEntry.SetValue<float>(std::get<float>(Value.Data));
+					break;
+				case BymlFile::Type::UInt32:
+					ExternalParameterEntry.SetValue<uint32_t>(std::get<uint32_t>(Value.Data));
+					break;
+				case BymlFile::Type::UInt64:
+					ExternalParameterEntry.SetValue<uint64_t>(std::get<uint64_t>(Value.Data));
+					break;
+				case BymlFile::Type::Int32:
+					ExternalParameterEntry.SetValue<int32_t>(std::get<int32_t>(Value.Data));
+					break;
+				case BymlFile::Type::Int64:
+					ExternalParameterEntry.SetValue<int64_t>(std::get<int64_t>(Value.Data));
+					break;
+				case BymlFile::Type::Bool:
+					ExternalParameterEntry.SetValue<bool>(std::get<bool>(Value.Data));
+					break;
+				}
+				ExternalParameter.AddChild(ExternalParameterEntry);
+			}
+			else
+			{
+				WriteBymlVector(&ExternalParameter, Key, std::get<Vector3F>(Value.Data), Vector3F(0, 0, 0), true);
+
+			}
+		}
+		ActorNode.AddChild(ExternalParameter);
 	}
 
 	if (ExportedActor.ExtraCreateRadius != 0.0f)
@@ -717,6 +901,43 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 				for (Actor::PhiveData::ConstraintLinkData::OwnerData& Owner : ExportedActor.Phive.ConstraintLink.Owners)
 				{
 					BymlFile::Node OwnerNode(BymlFile::Type::Dictionary);
+
+					if (!Owner.AliasData.empty())
+					{
+						BymlFile::Node AliasDataNode(BymlFile::Type::Dictionary, "AliasData");
+
+						for (auto const& [Key, Value] : Owner.AliasData)
+						{
+							BymlFile::Node AliasDataEntry(GetDynamicValueDataType(Value), Key);
+							switch (AliasDataEntry.GetType())
+							{
+							case BymlFile::Type::StringIndex:
+								AliasDataEntry.SetValue<std::string>(Value);
+								break;
+							case BymlFile::Type::Float:
+								AliasDataEntry.SetValue<float>(Util::StringToNumber<float>(Value));
+								break;
+							case BymlFile::Type::UInt32:
+								AliasDataEntry.SetValue<uint32_t>(Util::StringToNumber<uint32_t>(Value));
+								break;
+							case BymlFile::Type::UInt64:
+								AliasDataEntry.SetValue<uint64_t>(Util::StringToNumber<uint64_t>(Value));
+								break;
+							case BymlFile::Type::Int32:
+								AliasDataEntry.SetValue<int32_t>(Util::StringToNumber<int32_t>(Value));
+								break;
+							case BymlFile::Type::Int64:
+								AliasDataEntry.SetValue<int64_t>(Util::StringToNumber<int64_t>(Value));
+								break;
+							case BymlFile::Type::Bool:
+								AliasDataEntry.SetValue<bool>(Value == "true");
+								break;
+							}
+							AliasDataNode.AddChild(AliasDataEntry);
+						}
+
+						OwnerNode.AddChild(AliasDataNode);
+					}
 
 					if (!Owner.BreakableData.empty())
 					{
@@ -876,34 +1097,34 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 
 					BymlFile::Node PivotDataNode(BymlFile::Type::Dictionary, "PivotData");
 					//Axis
-					if (Owner.PivotData.Axis != std::numeric_limits<int32_t>::max())
+					if (Owner.PivotData.Axis != INT_MAX)
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "Axis");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.Axis);
 						PivotDataNode.AddChild(PivotDataAxisNode);
 					}
-					if (Owner.PivotData.AxisA != std::numeric_limits<int32_t>::max())
+					if (Owner.PivotData.AxisA != INT_MAX)
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "AxisA");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.AxisA);
 						PivotDataNode.AddChild(PivotDataAxisNode);
 					}
-					if (Owner.PivotData.AxisB != std::numeric_limits<int32_t>::max())
+					if (Owner.PivotData.AxisB != INT_MAX)
 					{
 						BymlFile::Node PivotDataAxisNode(BymlFile::Type::Int32, "AxisB");
 						PivotDataAxisNode.SetValue<int32_t>(Owner.PivotData.AxisB);
 						PivotDataNode.AddChild(PivotDataAxisNode);
 					}
 					//Vectors
-					if (Owner.PivotData.Pivot.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.Pivot.GetZ() != std::numeric_limits<float>::max())
+					if (Owner.PivotData.Pivot.GetX() != FLT_MAX || Owner.PivotData.Pivot.GetY() != FLT_MAX || Owner.PivotData.Pivot.GetZ() != FLT_MAX)
 					{
 						WriteBymlVector(&PivotDataNode, "Pivot", Owner.PivotData.Pivot, Vector3F(0, 0, 0), true);
 					}
-					if (Owner.PivotData.PivotA.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotA.GetZ() != std::numeric_limits<float>::max())
+					if (Owner.PivotData.PivotA.GetX() != FLT_MAX || Owner.PivotData.PivotA.GetY() != FLT_MAX || Owner.PivotData.PivotA.GetZ() != FLT_MAX)
 					{
 						WriteBymlVector(&PivotDataNode, "PivotA", Owner.PivotData.PivotA, Vector3F(0, 0, 0), true);
 					}
-					if (Owner.PivotData.PivotB.GetX() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetY() != std::numeric_limits<float>::max() || Owner.PivotData.PivotB.GetZ() != std::numeric_limits<float>::max())
+					if (Owner.PivotData.PivotB.GetX() != FLT_MAX || Owner.PivotData.PivotB.GetY() != FLT_MAX || Owner.PivotData.PivotB.GetZ() != FLT_MAX)
 					{
 						WriteBymlVector(&PivotDataNode, "PivotB", Owner.PivotData.PivotB, Vector3F(0, 0, 0), true);
 					}
@@ -1249,6 +1470,13 @@ BymlFile::Node ActorMgr::ActorToByml(Actor& ExportedActor)
 		ActorNode.AddChild(TurnActorNearEnemy);
 	}
 
+	if (ExportedActor.Version > 0)
+	{
+		BymlFile::Node Version(BymlFile::Type::Int32, "Version");
+		Version.SetValue<int32_t>(ExportedActor.Version);
+		ActorNode.AddChild(Version);
+	}
+
 	return ActorNode;
 }
 
@@ -1264,11 +1492,20 @@ std::string ActorMgr::GetDefaultModelKey(Actor& Actor)
 	return "Default";
 }
 
+void ActorMgr::PostProcessActor(Actor& SceneActor, bool Physics)
+{
+	SceneActor.Phive.Placement["ID"] = std::to_string(SceneActor.Hash);
+	SceneActor.Bakeable = !Physics && !SceneActor.Gyml.ends_with("_Far");
+}
+
 Actor& ActorMgr::AddActor(Actor Template, bool UpdateOrder)
 {
-	HashMgr::Hash Hash = HashMgr::GetHash(!Template.Phive.Placement.empty());
+	bool Physics = IsPhysicsActor(Template.Gyml);
+	HashMgr::Hash Hash = HashMgr::GetHash();
 	Template.Hash = Hash.Hash;
 	Template.SRTHash = Hash.SRTHash;
+
+	PostProcessActor(Template, Physics);
 
 	Actors.push_back(Template);
 
@@ -1278,104 +1515,245 @@ Actor& ActorMgr::AddActor(Actor Template, bool UpdateOrder)
 	return Actors[Actors.size() - 1];
 }
 
+bool NeedsPhysics(SarcFile& ActorPack, std::string Path)
+{
+	bool Physics = true;
+	if (ActorPack.HasEntry(Path))
+	{
+		BymlFile PhiveControllerFile(ActorPack.GetEntry(Path).Bytes);
+		if (PhiveControllerFile.HasChild("ControllerEntityNamePathAry"))
+		{
+			if (!PhiveControllerFile.GetNode("ControllerEntityNamePathAry")->GetChildren().empty())
+			{
+				std::string Name = PhiveControllerFile.GetNode("ControllerEntityNamePathAry")->GetChild(0)->GetChild("Name")->GetValue<std::string>();
+				return Name != "StaticBody";
+			}
+		}
+		
+		if (PhiveControllerFile.HasChild("$parent"))
+		{
+			std::string ParentControllerPath = PhiveControllerFile.GetNode("$parent")->GetValue<std::string>();
+			Util::ReplaceString(ParentControllerPath, "Work/", "");
+			Util::ReplaceString(ParentControllerPath, ".gyml", ".bgyml");
+			if (ActorPack.HasEntry(ParentControllerPath))
+			{
+				Physics = NeedsPhysics(ActorPack, ParentControllerPath);
+			}
+		}
+	}
+	return Physics;
+}
+
+bool ActorMgr::IsArea(const std::string& Gyml)
+{
+	return Gyml.find("Area") != std::string::npos;
+}
+
+bool ActorMgr::IsPhysicsActor(const std::string& Gyml)
+{
+	if (ActorInfo.contains(Gyml))
+		return ActorInfo[Gyml].NeedsPhysics;
+
+	ZStdFile::Result Result = ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + Gyml + ".pack.zs"), ZStdFile::Dictionary::Pack);
+	if (Result.Data.size() == 0)
+	{
+		Logger::Warning("ActorMgr", "Could not find actor pack for actor " + Gyml + " while checking if it is a physics actor");
+		return false;
+	}
+
+	SarcFile ActorPack(Result.Data);
+	std::string PhysicsParamPath = "";
+	for (SarcFile::Entry& Entry : ActorPack.GetEntries())
+	{
+		if (Entry.Name.starts_with("Phive/RigidBodySensorParam/"))
+		{
+			PhysicsParamPath = Entry.Name;
+			return true;
+		}
+	}
+
+	return false;
+
+	/*
+	bool Physics = !PhysicsParamPath.empty();
+	if (!PhysicsParamPath.empty())
+	{
+		BymlFile PhysicsParamFile(ActorPack.GetEntry(PhysicsParamPath).Bytes);
+		if (PhysicsParamFile.HasChild("ControllerSetPath"))
+		{
+			std::string PhiveControllerPath = PhysicsParamFile.GetNode("ControllerSetPath")->GetValue<std::string>();
+			Util::ReplaceString(PhiveControllerPath, "Work/", "");
+			Util::ReplaceString(PhiveControllerPath, ".gyml", ".bgyml");
+
+			Physics = NeedsPhysics(ActorPack, PhiveControllerPath);
+		}
+	}
+
+	Physics = Physics && !Gyml.ends_with("_Far");
+
+	return Physics;
+	*/
+}
+
+void ActorMgr::ProcessActorPack(std::string Gyml, Actor& NewActor)
+{
+	if (ActorInfo.count(Gyml))
+	{
+		ActorInfo.erase(Gyml);
+	}
+
+	ZStdFile::Result Result = ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + Gyml + ".pack.zs"), ZStdFile::Dictionary::Pack);
+	if (Result.Data.size() == 0)
+	{
+		ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(BfresLibrary::GetModel(GetDefaultModelKey(NewActor))) }});
+		Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
+		return;
+	}
+
+	SarcFile ActorPack(Result.Data);
+
+	std::string UMiiParamPath = "";
+	std::string PhysicsParamPath = "";
+	for (SarcFile::Entry& Entry : ActorPack.GetEntries())
+	{
+		if (Entry.Name.starts_with("Component/UMiiParam/"))
+		{
+			UMiiParamPath = Entry.Name;
+		}
+		if (Entry.Name.starts_with("Component/Physics/"))
+		{
+			PhysicsParamPath = Entry.Name;
+		}
+	}
+
+	bool IsNpc = UMiiParamPath.length() > 0;
+
+	if (IsNpc)
+	{
+		Logger::Info("ActorMgr", "Decoding UMii " + Gyml);
+		ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(BfresLibrary::GetModel(GetDefaultModelKey(NewActor))), true, true, UMii(ActorPack.GetEntry(UMiiParamPath).Bytes) } });
+		//BfresFile* Model = BfresLibrary::GetModel("UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number + "." + "UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number);
+		return;
+	}
+
+	std::string ModelInfoPath = "";
+	for (SarcFile::Entry& Entry : ActorPack.GetEntries())
+	{
+		if (Entry.Name.rfind("Component/ModelInfo/", 0) == 0)
+		{
+			ModelInfoPath = Entry.Name;
+			break;
+		}
+	}
+	if (ModelInfoPath.length() == 0)
+	{
+		ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(BfresLibrary::GetModel(GetDefaultModelKey(NewActor))) } });
+		Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
+		return;
+	}
+
+	BymlFile ModelInfo(ActorPack.GetEntry(ModelInfoPath).Bytes);
+	if (ModelInfo.GetNodes().size() == 0)
+	{
+		ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(BfresLibrary::GetModel(GetDefaultModelKey(NewActor))) } });
+		Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (No ModelInfo found)");
+		return;
+	}
+
+	if (!ModelInfo.HasChild("ModelProjectName") || !ModelInfo.HasChild("FmdbName"))
+	{
+		ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(BfresLibrary::GetModel(GetDefaultModelKey(NewActor))) } });
+		Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (No ModelProjectName or FmdbName found)");
+		return;
+	}
+
+	if (ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>().empty() || ModelInfo.GetNode("FmdbName")->GetValue<std::string>().empty())
+	{
+		ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(BfresLibrary::GetModel(GetDefaultModelKey(NewActor))) } });
+		Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (ModelProjectName or FmdbName were empty)");
+		return;
+	}
+
+	BfresFile* Model = BfresLibrary::GetModel(ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>());
+
+	if (Model->Models.Nodes.empty())
+	{
+		Model = BfresLibrary::GetModel(GetDefaultModelKey(NewActor));
+		BfresLibrary::Models[ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>()] = *Model;
+		Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (Model could not be initialized)");
+	}
+
+	if (Model->Models.GetByIndex(0).Value.Shapes.Nodes.empty())
+	{
+		Model = BfresLibrary::GetModel(GetDefaultModelKey(NewActor));
+		BfresLibrary::Models[ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>()] = *Model;
+	}
+
+	bool Physics = !PhysicsParamPath.empty();
+	if (!PhysicsParamPath.empty())
+	{
+		BymlFile PhysicsParamFile(ActorPack.GetEntry(PhysicsParamPath).Bytes);
+		if (PhysicsParamFile.HasChild("ControllerSetPath"))
+		{
+			std::string PhiveControllerPath = PhysicsParamFile.GetNode("ControllerSetPath")->GetValue<std::string>();
+			Util::ReplaceString(PhiveControllerPath, "Work/", "");
+			Util::ReplaceString(PhiveControllerPath, ".gyml", ".bgyml");
+
+			Physics = NeedsPhysics(ActorPack, PhiveControllerPath);
+		}
+	}
+
+	Physics = Physics && !Gyml.ends_with("_Far");
+
+	ActorInfo.insert({ Gyml, { GLBfresLibrary::GetModel(Model), Physics}});
+}
+
 Actor& ActorMgr::AddActor(std::string Gyml, bool UpdateOrder, bool UseCachedData)
 {
 	Actor NewActor;
 	NewActor.Gyml = Gyml;
 
-	HashMgr::Hash Hash = HashMgr::GetHash(false); //TODO: Check if actor needs physics, search in actor pack
+	//Looking for a model
+	if (!ActorInfo.count(Gyml) || !UseCachedData)
+	{
+		ProcessActorPack(Gyml, NewActor);
+	}
+
+	ActorInfoInterpretation:
+	NewActor.Model = ActorInfo[Gyml].Model;
+	if (ActorInfo[NewActor.Gyml].IsUMii)
+	{
+		NewActor.IsUMii = true;
+		NewActor.UMiiData = ActorInfo[NewActor.Gyml].UMiiData;
+	}
+
+	bool Physics = IsPhysicsActor(Gyml);
+	HashMgr::Hash Hash = HashMgr::GetHash();
 	NewActor.Hash = Hash.Hash;
 	NewActor.SRTHash = Hash.SRTHash;
+
+	PostProcessActor(NewActor, Physics);
+
+	Actors.push_back(NewActor);
+
+	if (UpdateOrder)
+		UpdateModelOrder();
+
+	return Actors[Actors.size() - 1];
+}
+
+Actor& ActorMgr::AddActorWithoutHash(std::string Gyml, bool UpdateOrder, bool UseCachedData)
+{
+	Actor NewActor;
+	NewActor.Gyml = Gyml;
 
 	//Looking for a model
 	if (!ActorInfo.count(Gyml) || !UseCachedData)
 	{
-		if (ActorInfo.count(Gyml))
-		{
-			ActorInfo.erase(Gyml);
-		}
-
-		ZStdFile::Result Result = ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + Gyml + ".pack.zs"), ZStdFile::Dictionary::Pack);
-		if (Result.Data.size() == 0)
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) }});
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		SarcFile ActorPack(Result.Data);
-
-		std::string UMiiParamPath = "";
-		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
-		{
-			if (Entry.Name.starts_with("Component/UMiiParam/"))
-			{
-				UMiiParamPath = Entry.Name;
-				break;
-			}
-		}
-
-		bool IsNpc = UMiiParamPath.length() > 0;
-
-		if (IsNpc)
-		{
-			Logger::Info("ActorMgr", "Decoding UMii " + Gyml);
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)), true, UMii(ActorPack.GetEntry(UMiiParamPath).Bytes) } });
-			//BfresFile* Model = BfresLibrary::GetModel("UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number + "." + "UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number);
-
-			goto ActorInfoInterpretation;
-		}
-
-		std::string ModelInfoPath = "";
-		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
-		{
-			if (Entry.Name.rfind("Component/ModelInfo/", 0) == 0)
-			{
-				ModelInfoPath = Entry.Name;
-				break;
-			}
-		}
-		if (ModelInfoPath.length() == 0)
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		BymlFile ModelInfo(ActorPack.GetEntry(ModelInfoPath).Bytes);
-		if (ModelInfo.GetNodes().size() == 0)
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (No ModelInfo found)");
-			goto ActorInfoInterpretation;
-		}
-
-		if (!ModelInfo.HasChild("ModelProjectName") || !ModelInfo.HasChild("FmdbName"))
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (No ModelProjectName or FmdbName found)");
-			goto ActorInfoInterpretation;
-		}
-
-		if (ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>().empty() || ModelInfo.GetNode("FmdbName")->GetValue<std::string>().empty())
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml + ". (ModelProjectName or FmdbName were empty)");
-			goto ActorInfoInterpretation;
-		}
-
-		BfresFile* Model = BfresLibrary::GetModel(ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>());
-
-		if (Model->GetModels()[0].LODs.empty())
-		{
-			Model = BfresLibrary::GetModel(GetDefaultModelKey(NewActor));
-			BfresLibrary::Models[ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>()] = *Model;
-		}
-
-		ActorInfo.insert({ Gyml, { Model } });
+		ProcessActorPack(Gyml, NewActor);
 	}
 
-	ActorInfoInterpretation:
+ActorInfoInterpretation:
 	NewActor.Model = ActorInfo[Gyml].Model;
 	if (ActorInfo[NewActor.Gyml].IsUMii)
 	{
@@ -1391,71 +1769,29 @@ Actor& ActorMgr::AddActor(std::string Gyml, bool UpdateOrder, bool UseCachedData
 	return Actors[Actors.size() - 1];
 }
 
-Actor ActorMgr::CreateBasicActor(std::string Gyml)
+Actor ActorMgr::CreateBasicActor(std::string Gyml, bool SearchForPhysicsHash)
 {
 	Actor NewActor;
 	NewActor.Gyml = Gyml;
 
-	HashMgr::Hash Hash = HashMgr::GetHash(false); //TODO: Check if actor needs physics, research in actor pack
-	NewActor.Hash = Hash.Hash;
-	NewActor.SRTHash = Hash.SRTHash;
-
 	//Looking for a model
 	if (!ActorInfo.count(Gyml))
 	{
-		ZStdFile::Result Result = ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + Gyml + ".pack.zs"), ZStdFile::Dictionary::Pack);
-		if (Result.Data.size() == 0)
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		SarcFile ActorPack(Result.Data);
-		std::string ModelInfoPath = "";
-		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
-		{
-			if (Entry.Name.rfind("Component/ModelInfo/", 0) == 0)
-			{
-				ModelInfoPath = Entry.Name;
-				break;
-			}
-		}
-		if (ModelInfoPath.length() == 0)
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		BymlFile ModelInfo(ActorPack.GetEntry(ModelInfoPath).Bytes);
-		if (ModelInfo.GetNodes().size() == 0)
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		if (!ModelInfo.HasChild("ModelProjectName") || !ModelInfo.HasChild("FmdbName"))
-		{
-			ActorInfo.insert({ Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(NewActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		BfresFile* Model = BfresLibrary::GetModel(ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>());
-
-		if (Model->GetModels()[0].LODs.empty())
-		{
-			Model = BfresLibrary::GetModel(GetDefaultModelKey(NewActor));
-			BfresLibrary::Models[ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>()] = *Model;
-		}
-
-		ActorInfo.insert({ Gyml, { Model } });
+		ProcessActorPack(Gyml, NewActor);
 	}
 
 ActorInfoInterpretation:
 	NewActor.Model = ActorInfo[Gyml].Model;
+
+	bool Physics = IsPhysicsActor(Gyml) && SearchForPhysicsHash;
+	HashMgr::Hash Hash = HashMgr::GetHash();
+	NewActor.Hash = Hash.Hash;
+	NewActor.SRTHash = Hash.SRTHash;
+
+	if (SearchForPhysicsHash)
+	{
+		PostProcessActor(NewActor, Physics);
+	}
 
 	return NewActor;
 }
@@ -1465,77 +1801,7 @@ void ActorMgr::UpdateModel(Actor* ModelActor)
 	//Looking for a model
 	if (!ActorInfo.count(ModelActor->Gyml))
 	{
-		ZStdFile::Result Result = ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + ModelActor->Gyml + ".pack.zs"), ZStdFile::Dictionary::Pack);
-		if (Result.Data.size() == 0)
-		{
-			ActorInfo.insert({ ModelActor->Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + ModelActor->Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		SarcFile ActorPack(Result.Data);
-
-		std::string UMiiParamPath = "";
-		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
-		{
-			if (Entry.Name.starts_with("Component/UMiiParam/"))
-			{
-				UMiiParamPath = Entry.Name;
-				break;
-			}
-		}
-
-		bool IsNpc = UMiiParamPath.length() > 0;
-
-		if (IsNpc)
-		{
-			Logger::Info("ActorMgr", "Decoding UMii " + ModelActor->Gyml);
-			ActorInfo.insert({ ModelActor->Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor)), true, UMii(ActorPack.GetEntry(UMiiParamPath).Bytes) } });
-			//BfresFile* Model = BfresLibrary::GetModel("UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number + "." + "UMii_" + NPC.Race + "_Body" + NPC.Type + "_" + NPC.SexAge + "_" + NPC.Number);
-
-			goto ActorInfoInterpretation;
-		}
-
-		std::string ModelInfoPath = "";
-		for (SarcFile::Entry& Entry : ActorPack.GetEntries())
-		{
-			if (Entry.Name.rfind("Component/ModelInfo/", 0) == 0)
-			{
-				ModelInfoPath = Entry.Name;
-				break;
-			}
-		}
-		if (ModelInfoPath.length() == 0)
-		{
-			ActorInfo.insert({ ModelActor->Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + ModelActor->Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		BymlFile ModelInfo(ActorPack.GetEntry(ModelInfoPath).Bytes);
-		if (ModelInfo.GetNodes().size() == 0)
-		{
-			ActorInfo.insert({ ModelActor->Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + ModelActor->Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		if (!ModelInfo.HasChild("ModelProjectName") || !ModelInfo.HasChild("FmdbName"))
-		{
-			ActorInfo.insert({ ModelActor->Gyml, { BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor)) } });
-			Logger::Warning("ActorMgr", "Could not find the model for actor " + ModelActor->Gyml);
-			goto ActorInfoInterpretation;
-		}
-
-		BfresFile* Model = BfresLibrary::GetModel(ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>());
-
-		if (Model->GetModels()[0].LODs.empty())
-		{
-			Model = BfresLibrary::GetModel(GetDefaultModelKey(*ModelActor));
-			BfresLibrary::Models[ModelInfo.GetNode("ModelProjectName")->GetValue<std::string>() + "." + ModelInfo.GetNode("FmdbName")->GetValue<std::string>()] = *Model;
-		}
-
-		ActorInfo.insert({ ModelActor->Gyml, { Model } });
+		ProcessActorPack(ModelActor->Gyml, *ModelActor);
 	}
 
 ActorInfoInterpretation:
@@ -1546,6 +1812,8 @@ ActorInfoInterpretation:
 		ModelActor->UMiiData = ActorInfo[ModelActor->Gyml].UMiiData;
 	}
 }
+
+#include <iostream>
 
 void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 {
@@ -1573,13 +1841,24 @@ void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 
 		/*
 		//Rotate
-		Child.Rotate.SetX(Child.Rotate.GetX() + RotateXDifference);
-		Child.Rotate.SetY(Child.Rotate.GetY() + RotateYDifference);
-		Child.Rotate.SetZ(Child.Rotate.GetZ() + RotateZDifference);
 
+		if (RotateXDifference == 0.0f && RotateYDifference == 0.0f && RotateZDifference == 0.0f)
+			continue;
+
+		glm::vec4 LocalRotation(glm::radians(Child.Rotate.GetX()), glm::radians(Child.Rotate.GetY()), glm::radians(Child.Rotate.GetZ()), 1.0f);
+		glm::mat4 RotationMatrix = glm::mat4(1.0f);  // Identity matrix
+
+		RotationMatrix = glm::rotate(RotationMatrix, glm::radians(RotateZDifference), glm::vec3(0.0, 0.0f, 1.0));
+		RotationMatrix = glm::rotate(RotationMatrix, glm::radians(RotateYDifference), glm::vec3(0.0f, 1.0, 0.0));
+		RotationMatrix = glm::rotate(RotationMatrix, glm::radians(RotateXDifference), glm::vec3(1.0, 0.0f, 0.0));
+
+		glm::vec4 RotatedVector = LocalRotation * RotationMatrix;
+
+		Child.Rotate.SetX(glm::degrees(RotatedVector.x));
+		Child.Rotate.SetY(glm::degrees(RotatedVector.y));
+		Child.Rotate.SetZ(glm::degrees(RotatedVector.z));
 		
-		Vector3F RadianRotate(Util::DegreesToRadians(RotateXDifference), Util::DegreesToRadians(RotateYDifference), Util::DegreesToRadians(RotateZDifference));
-	
+		Vector3F RadianRotate(Util::DegreesToRadians(-OldActor.Rotate.GetX()), Util::DegreesToRadians(-OldActor.Rotate.GetY()), Util::DegreesToRadians(-OldActor.Rotate.GetZ()));
 
 		float NewX = Parent->Translate.GetX() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
 			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) - std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
@@ -1590,6 +1869,24 @@ void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) - std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
 
 		float NewZ = Parent->Translate.GetZ() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (-std::sinf(RadianRotate.GetY()))) +
+			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::cosf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()))) +
+			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::cosf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX())));
+
+		Child.Translate.SetX(NewX);
+		Child.Translate.SetY(NewY);
+		Child.Translate.SetZ(NewZ);
+
+		RadianRotate = Vector3F(Util::DegreesToRadians(Parent->Rotate.GetX()), Util::DegreesToRadians(Parent->Rotate.GetY()), Util::DegreesToRadians(Parent->Rotate.GetZ()));
+
+		NewX = Parent->Translate.GetX() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) - std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) + std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+		NewY = Parent->Translate.GetY() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (std::sinf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetY()))) +
+			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()) + std::cosf(RadianRotate.GetZ()) * std::cosf(RadianRotate.GetX()))) +
+			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::sinf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX()) - std::cosf(RadianRotate.GetZ()) * std::sinf(RadianRotate.GetX())));
+
+		NewZ = Parent->Translate.GetZ() + ((Child.Translate.GetX() - Parent->Translate.GetX()) * (-std::sinf(RadianRotate.GetY()))) +
 			((Child.Translate.GetY() - Parent->Translate.GetY()) * (std::cosf(RadianRotate.GetY()) * std::sinf(RadianRotate.GetX()))) +
 			((Child.Translate.GetZ() - Parent->Translate.GetZ()) * (std::cosf(RadianRotate.GetY()) * std::cosf(RadianRotate.GetX())));
 
@@ -1618,10 +1915,15 @@ void ActorMgr::UpdateMergedActorContent(Actor* Parent, Actor OldActor)
 	}
 }
 
+bool ActorMgr::IsSingleRenderPassActor(const std::string& Gyml)
+{
+	return Gyml.find("DgnObj_SkyAntiZonau_A_02") != std::string::npos;
+}
+
 void ActorMgr::UpdateModelOrder()
 {
+	TransparentActorsDiscard.clear();
 	OpaqueActors.clear();
-	TransparentActors.clear();
 	UMiiActors.clear();
 
 	std::vector<Actor*> MergedActorContents;
@@ -1640,7 +1942,7 @@ void ActorMgr::UpdateModelOrder()
 			MergedActorContents.push_back(&Child);
 		}
 
-		if (CurrentActor.Model->GetModels()[0].LODs[0].TransparentObjects.empty())
+		if (CurrentActor.Model->mTransparentObjects.empty())
 		{
 			if (OpaqueActors.count(CurrentActor.Model))
 			{
@@ -1653,14 +1955,14 @@ void ActorMgr::UpdateModelOrder()
 		}
 		else
 		{
-			if (TransparentActors.count(CurrentActor.Model))
+			if (TransparentActorsDiscard.count(CurrentActor.Model))
 			{
-				TransparentActors[CurrentActor.Model].push_back(&CurrentActor);
+				TransparentActorsDiscard[CurrentActor.Model].push_back(&CurrentActor);
 				continue;
 			}
 			std::vector<Actor*> ActorVec;
 			ActorVec.push_back(&CurrentActor);
-			TransparentActors.insert({ CurrentActor.Model, ActorVec });
+			TransparentActorsDiscard.insert({ CurrentActor.Model, ActorVec });
 		}
 	}
 
@@ -1672,7 +1974,7 @@ void ActorMgr::UpdateModelOrder()
 			continue;
 		}
 
-		if (CurrentActor->Model->GetModels()[0].LODs[0].TransparentObjects.empty())
+		if (CurrentActor->Model->mTransparentObjects.empty())
 		{
 			if (OpaqueActors.count(CurrentActor->Model))
 			{
@@ -1685,14 +1987,14 @@ void ActorMgr::UpdateModelOrder()
 		}
 		else
 		{
-			if (TransparentActors.count(CurrentActor->Model))
+			if (TransparentActorsDiscard.count(CurrentActor->Model))
 			{
-				TransparentActors[CurrentActor->Model].push_back(CurrentActor);
+				TransparentActorsDiscard[CurrentActor->Model].push_back(CurrentActor);
 				continue;
 			}
 			std::vector<Actor*> ActorVec;
 			ActorVec.push_back(CurrentActor);
-			TransparentActors.insert({ CurrentActor->Model, ActorVec });
+			TransparentActorsDiscard.insert({ CurrentActor->Model, ActorVec });
 		}
 	}
 
@@ -1701,10 +2003,16 @@ void ActorMgr::UpdateModelOrder()
 
 Actor* ActorMgr::GetActor(uint64_t Hash, uint32_t SRTHash)
 {
-	for (Actor& Actor : Actors)
+	for (Actor& SceneActor : Actors)
 	{
-		if (Actor.Hash == Hash && Actor.SRTHash == SRTHash)
-			return &Actor;
+		if (SceneActor.Hash == Hash && SceneActor.SRTHash == SRTHash)
+			return &SceneActor;
+
+		for (Actor& ChildActor : SceneActor.MergedActorContent)
+		{
+			if (ChildActor.Hash == Hash && ChildActor.SRTHash == SRTHash)
+				return &ChildActor;
+		}
 	}
 	return nullptr;
 }
@@ -1731,6 +2039,8 @@ void ActorMgr::DeleteActor(uint64_t Hash, uint32_t SRTHash)
 			break;
 		}
 	}
+
+	HashMgr::FreeHash(Hash);
 
 	if (DelActor == nullptr)
 	{

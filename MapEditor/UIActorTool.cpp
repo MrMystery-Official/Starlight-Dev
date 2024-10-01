@@ -13,9 +13,11 @@
 #include <iostream>
 
 bool UIActorTool::Open = true;
+bool UIActorTool::Focused = false;
 std::string UIActorTool::ActorPackFilter = "";
 UIActorTool::ActorPackStruct UIActorTool::ActorPack;
 std::vector<std::string> UIActorTool::ActorList;
+std::vector<std::string> UIActorTool::ActorListLowerCase;
 
 void DisplayBymlNode(BymlFile::Node* Node, int& Id)
 {
@@ -121,12 +123,19 @@ void ReplaceStringInBymlNodes(BymlFile::Node* Node, std::string Search, std::str
 void UIActorTool::UpdateActorList()
 {
 	ActorList.clear();
+	ActorListLowerCase.clear();
 	for (const auto& DirEntry : std::filesystem::directory_iterator(Editor::GetRomFSFile("Pack/Actor", false)))
 	{
 		if (!DirEntry.is_regular_file()) continue;
 		if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
 
-		ActorList.push_back(DirEntry.path().filename().string());
+		std::string Name = DirEntry.path().filename().string();
+		Name = Name.substr(0, Name.length() - 8);
+		ActorList.push_back(Name);
+
+		std::transform(Name.begin(), Name.end(), Name.begin(),
+			[](unsigned char c) { return std::tolower(c); });
+		ActorListLowerCase.push_back(Name);
 	}
 
 	if (Util::FileExists(Editor::GetWorkingDirFile("Save/Pack/Actor")))
@@ -137,7 +146,13 @@ void UIActorTool::UpdateActorList()
 			if (!DirEntry.path().filename().string().ends_with(".pack.zs")) continue;
 			if (std::find(ActorList.begin(), ActorList.end(), DirEntry.path().filename().string()) != ActorList.end()) continue;
 
-			ActorList.push_back(DirEntry.path().filename().string());
+			std::string Name = DirEntry.path().filename().string();
+			Name = Name.substr(0, Name.length() - 8);
+			ActorList.push_back(Name);
+
+			std::transform(Name.begin(), Name.end(), Name.begin(),
+				[](unsigned char c) { return std::tolower(c); });
+			ActorListLowerCase.push_back(Name);
 		}
 	}
 }
@@ -146,8 +161,11 @@ void UIActorTool::DrawActorToolWindow()
 {
 	if (!Open) return;
 
-	if (ImGui::Begin("Actor Tool", &Open))
+	Focused = ImGui::Begin("Actor Tool", &Open);
+
+	if (Focused)
 	{
+		Focused = true;
 		ImGui::PushItemWidth((ImGui::GetWindowWidth() - ImGui::GetStyle().ItemSpacing.x) * 0.75f);
 		ImGui::InputTextWithHint("##ActorPackFilter", "Search...", &ActorPackFilter);
 		ImGui::PopItemWidth();
@@ -194,23 +212,26 @@ void UIActorTool::DrawActorToolWindow()
 		ImGui::PushItemWidth(ImGui::GetWindowWidth() - ImGui::GetStyle().FramePadding.x);
 		if (ImGui::BeginListBox("##ActorPackFiles"))
 		{
-			auto DisplayActorFile = [](std::string Name) {
-				if (ActorPackFilter.length() > 0)
+			std::string ActorPackFilterLower = ActorPackFilter;
+			std::transform(ActorPackFilterLower.begin(), ActorPackFilterLower.end(), ActorPackFilterLower.begin(),
+				[](unsigned char c) { return std::tolower(c); });
+
+			auto DisplayActorFile = [&ActorPackFilterLower](const std::string& Name, const std::string& LowerName) {
+				if (ActorPackFilterLower.length() > 0)
 				{
-					if (Name.find(ActorPackFilter) == std::string::npos)
+					if (LowerName.find(ActorPackFilterLower) == std::string::npos)
 						return;
 				}
 
-				Name = Name.substr(0, Name.length() - 8);
 				if(ImGui::Selectable(Name.c_str()))
 				{
 					ActorPackFilter = Name;
 				}
 			};
 
-			for (std::string ActorName : ActorList)
+			for (size_t i = 0; i < ActorList.size(); i++)
 			{
-				DisplayActorFile(ActorName);
+				DisplayActorFile(ActorList[i], ActorListLowerCase[i]);
 			}
 
 			ImGui::EndListBox();
@@ -232,6 +253,7 @@ void UIActorTool::DrawActorToolWindow()
 			{
 				if (ActorPack.Name.length() > 1)
 				{
+					//Rename native files
 					for (SarcFile::Entry& Entry : ActorPack.Pack.GetEntries())
 					{
 						if (ActorPack.Bymls.count(Entry.Name))
@@ -248,6 +270,65 @@ void UIActorTool::DrawActorToolWindow()
 						}
 
 						Util::ReplaceString(Entry.Name, ActorPack.OriginalName, ActorPack.Name);
+					}
+					uint32_t Count = 0;
+					//Rename shared files
+					for (SarcFile::Entry& Entry : ActorPack.Pack.GetEntries())
+					{
+						if (Entry.Name.find(ActorPack.Name) == std::string::npos)
+						{
+							std::string Extension = Entry.Name.substr(Entry.Name.rfind('.') + 1);
+							std::string UnprefixedName = ActorPack.Name + "_" + std::to_string(Count) + Entry.Name.substr(Entry.Name.find('.'));
+							std::string UnprefixedOldName = Entry.Name.substr(Entry.Name.find_last_of("/") + 1);
+							UnprefixedName = UnprefixedName.substr(0, UnprefixedName.find_last_of('.'));
+							UnprefixedOldName = UnprefixedOldName.substr(0, UnprefixedOldName.find_last_of('.'));
+							std::string NewName = Entry.Name.substr(0, Entry.Name.find_last_of('/') + 1) + UnprefixedName;
+
+							std::size_t CategoryStart = UnprefixedOldName.find("__");
+
+							if (CategoryStart != std::string::npos)
+							{
+								CategoryStart += 2;
+								std::size_t DotStart = UnprefixedOldName.find('.', CategoryStart);
+								if (DotStart != std::string::npos)
+								{
+									std::string Category = UnprefixedOldName.substr(CategoryStart, DotStart - CategoryStart);
+									UnprefixedName = ActorPack.Name + "_" + std::to_string(Count) + "__" + Category + Entry.Name.substr(Entry.Name.find('.'));
+									UnprefixedName = UnprefixedName.substr(0, UnprefixedName.find_last_of('.'));
+									NewName = Entry.Name.substr(0, Entry.Name.find_last_of('/') + 1) + UnprefixedName;
+								}
+							}
+							NewName += "." + Extension;
+
+							if (ActorPack.Bymls.count(Entry.Name))
+							{
+								auto NodeHandler = ActorPack.Bymls.extract(Entry.Name);
+								NodeHandler.key() = NewName;
+
+								for (BymlFile::Node& Node : NodeHandler.mapped().GetNodes())
+								{
+									ReplaceStringInBymlNodes(&Node, UnprefixedOldName, UnprefixedName);
+								}
+
+								ActorPack.Bymls.insert(std::move(NodeHandler));
+							}
+							//Fix references
+							for (SarcFile::Entry& RefEntry : ActorPack.Pack.GetEntries())
+							{
+								if (ActorPack.Bymls.count(RefEntry.Name))
+								{
+									auto NodeHandler = ActorPack.Bymls.extract(RefEntry.Name);
+									for (BymlFile::Node& Node : NodeHandler.mapped().GetNodes())
+									{
+										ReplaceStringInBymlNodes(&Node, UnprefixedOldName, UnprefixedName);
+									}
+
+									ActorPack.Bymls.insert(std::move(NodeHandler));
+								}
+							}
+							Entry.Name = NewName;
+							Count++;
+						}
 					}
 					ActorPack.OriginalName = ActorPack.Name;
 				}
@@ -287,7 +368,6 @@ void UIActorTool::DrawActorToolWindow()
 #endif
 				}
 			}
-#ifdef ADVANCED_MODE
 			ImGui::NewLine();
 
 			ImGui::SeparatorText("AINB");
@@ -313,21 +393,21 @@ void UIActorTool::DrawActorToolWindow()
 					UIAINBEditor::SaveCallback = []()
 						{
 							std::cout << UIAINBEditor::AINB.EditorFileName << std::endl;
-							ActorPack.ChangedAINBs.insert({ UIAINBEditor::AINB.EditorFileName, UIAINBEditor::AINB.ToBinary()});
-							std::cout << "WRITING AINB\n";
+							ActorPack.AINBs[UIAINBEditor::AINB.EditorFileName] = UIAINBEditor::AINB.ToBinary();
 						};
 					ImGui::SetWindowFocus("AINB Editor");
 				}
 				ImGui::SameLine();
+#ifdef ADVANCED_MODE
 				if (ImGui::Button(("Delete##" + Iter->first).c_str()))
 				{
 					ActorPack.DeletedFiles.push_back(Iter->first);
 					ActorPack.AINBs.erase(Iter);
 				}
+#endif
 			}
 
 			ImGui::Columns();
-#endif
 		}
 	}
 	ImGui::End();
@@ -335,6 +415,8 @@ void UIActorTool::DrawActorToolWindow()
 
 void UIActorTool::Save(std::string Path)
 {
+	if (!Focused) return;
+
 	if (ActorPack.Pack.Loaded)
 	{
 		for (SarcFile::Entry& Entry : ActorPack.Pack.GetEntries())
@@ -361,12 +443,10 @@ void UIActorTool::Save(std::string Path)
 				
 				Entry.Bytes = ActorPack.Bymls[Entry.Name].ToBinary(BymlFile::TableGeneration::Auto);
 			}
-#ifdef ADVANCED_MODE
-			if (ActorPack.ChangedAINBs.count(Entry.Name))
+			if (ActorPack.AINBs.count(Entry.Name))
 			{
-				Entry.Bytes = ActorPack.ChangedAINBs[Entry.Name];
+				Entry.Bytes = ActorPack.AINBs[Entry.Name];
 			}
-#endif
 		}
 
 		for (std::vector<SarcFile::Entry>::iterator Iter = ActorPack.Pack.GetEntries().begin(); Iter != ActorPack.Pack.GetEntries().end(); )

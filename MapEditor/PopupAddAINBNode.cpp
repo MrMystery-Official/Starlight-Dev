@@ -6,17 +6,28 @@
 #include "UIAINBEditor.h"
 
 bool PopupAddAINBNode::IsOpen = false;
-bool PopupAddAINBNode::ShowUnallowedNodes = true;
+bool PopupAddAINBNode::ShowUnallowedNodes = false;
 std::string PopupAddAINBNode::Name = "";
 void (*PopupAddAINBNode::Func)(std::string) = nullptr;
 AINBNodeDefMgr::NodeDef::CategoryEnum PopupAddAINBNode::AINBCategory = AINBNodeDefMgr::NodeDef::CategoryEnum::Logic;
+
+float PopupAddAINBNode::SizeX = 680.0f;
+float PopupAddAINBNode::SizeY = 221.0f;
+const float PopupAddAINBNode::OriginalSizeX = 680.0f;
+const float PopupAddAINBNode::OriginalSizeY = 221.0f;
+
+void PopupAddAINBNode::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
 
 void PopupAddAINBNode::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(680, 221));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Add AINB node");
 		if (ImGui::BeginPopupModal("Add AINB node", NULL, ImGuiWindowFlags_NoResize))
 		{

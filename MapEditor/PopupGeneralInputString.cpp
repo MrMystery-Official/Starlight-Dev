@@ -11,12 +11,23 @@ void (*PopupGeneralInputString::Func)(std::string) = nullptr;
 std::string PopupGeneralInputString::PopupTitle = "";
 std::string PopupGeneralInputString::ConfirmButtonText = "";
 
+float PopupGeneralInputString::SizeX = 334.0f;
+float PopupGeneralInputString::SizeY = 88.0f;
+const float PopupGeneralInputString::OriginalSizeX = 334.0f;
+const float PopupGeneralInputString::OriginalSizeY = 88.0f;
+
+void PopupGeneralInputString::UpdateSize(float Scale)
+{
+	SizeX = OriginalSizeX * Scale;
+	SizeY = OriginalSizeY * Scale;
+}
+
 void PopupGeneralInputString::Render()
 {
 	if (IsOpen)
 	{
 		UIMapView::RenderSettings.AllowSelectingActor = false;
-		ImGui::SetNextWindowSize(ImVec2(334, 88));
+		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup(PopupTitle.c_str());
 		if (ImGui::BeginPopupModal(PopupTitle.c_str()))
 		{
