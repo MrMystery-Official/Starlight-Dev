@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 MapEditor/WorkingDir/
 *.pack
+*.asm
