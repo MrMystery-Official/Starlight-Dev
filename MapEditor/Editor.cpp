@@ -104,17 +104,22 @@ void Editor::InitializeDefaultModels()
 {
 	BfresFile DefaultModel("Default", Util::ReadFile("Assets/Models/TexturedCube.bfres"), "Assets/Models");
 	BfresFile AreaModel("Area", Util::ReadFile("Assets/Models/TexturedArea.bfres"), "Assets/Models");
+	BfresFile SphereModel("Sphere", Util::ReadFile("Assets/Models/TexturedSphere.bfres"), "Assets/Models");
 	DefaultModel.mDefaultModel = true;
 	AreaModel.mDefaultModel = true;
+	SphereModel.mDefaultModel = true;
 
 	BfresLibrary::Models.insert({ "Default", DefaultModel });
 	BfresLibrary::Models.insert({ "Area", AreaModel });
+	BfresLibrary::Models.insert({ "Sphere", SphereModel });
 
 	BfresFile* DefaultModelPtr = &BfresLibrary::Models["Default"];
 	BfresFile* AreaModelPtr = &BfresLibrary::Models["Area"];
+	BfresFile* SphereModelPtr = &BfresLibrary::Models["Sphere"];
 
 	GLBfresLibrary::mModels.insert({ DefaultModelPtr, GLBfres(DefaultModelPtr, GL_NEAREST) });
 	GLBfresLibrary::mModels.insert({ AreaModelPtr, GLBfres(AreaModelPtr, GL_NEAREST) });
+	GLBfresLibrary::mModels.insert({ SphereModelPtr, GLBfres(SphereModelPtr, GL_NEAREST) });
 }
 
 void Editor::InitializeWithEdtc()

@@ -5,17 +5,22 @@
 #include "UIMapView.h"
 #include "Logger.h"
 #include "StarImGui.h"
+#include "DynamicPropertyMgr.h"
+#include <algorithm>
 
 bool PopupAddDynamicData::IsOpen = false;
 std::string PopupAddDynamicData::Key = "";
 int PopupAddDynamicData::DataType = 0;
 std::variant<std::string, bool, int32_t, int64_t, uint32_t, uint64_t, float, Vector3F> PopupAddDynamicData::Value = "";
 void (*PopupAddDynamicData::Func)(std::string, Actor::DynamicData) = nullptr;
+std::string PopupAddDynamicData::ActorName = "";
+bool PopupAddDynamicData::ActorNameValid = true;
+bool PopupAddDynamicData::ShowActorSpecific = false;
 
-float PopupAddDynamicData::SizeX = 334.0f;
-float PopupAddDynamicData::SizeY = 126.0f;
-const float PopupAddDynamicData::OriginalSizeX = 334.0f;
-const float PopupAddDynamicData::OriginalSizeY = 126.0f;
+float PopupAddDynamicData::SizeX = 417.0f;
+float PopupAddDynamicData::SizeY = 258.0f;
+const float PopupAddDynamicData::OriginalSizeX = 417.0f;
+const float PopupAddDynamicData::OriginalSizeY = 258.0f;
 
 void PopupAddDynamicData::UpdateSize(float Scale)
 {
@@ -30,7 +35,8 @@ void PopupAddDynamicData::Render()
 		UIMapView::RenderSettings.AllowSelectingActor = false;
 		ImGui::SetNextWindowSize(ImVec2(SizeX, SizeY));
 		ImGui::OpenPopup("Add dynamic data");
-		if (ImGui::BeginPopupModal("Add dynamic data", NULL, ImGuiWindowFlags_NoResize))
+		//NULL, ImGuiWindowFlags_NoResize
+		if (ImGui::BeginPopupModal("Add dynamic data"))
 		{
 			const char* DataTypes[]{ "String", "Bool", "S32", "S64", "U32", "U64", "Float", "Vec3f"};
 			if (ImGui::Combo("Data type", &DataType, DataTypes, IM_ARRAYSIZE(DataTypes)))
@@ -68,6 +74,81 @@ void PopupAddDynamicData::Render()
 			}
 
 			ImGui::InputText("Key", &Key);
+			ImGui::PushItemWidth(ImGui::GetWindowWidth() - ImGui::GetStyle().FramePadding.x);
+			if (ImGui::BeginListBox("##DynamicPropertyList"))
+			{
+				std::string ActorPackFilterLower = Key;
+				std::transform(ActorPackFilterLower.begin(), ActorPackFilterLower.end(), ActorPackFilterLower.begin(),
+					[](unsigned char c) { return std::tolower(c); });
+
+				auto DisplayActorFile = [&ActorPackFilterLower](const std::string& Name, const std::string& LowerName) {
+					if (ActorPackFilterLower.length() > 0)
+					{
+						if (LowerName.find(ActorPackFilterLower) == std::string::npos)
+							return;
+					}
+
+					if (ImGui::Selectable(Name.c_str()))
+					{
+						Key = Name;
+						DataType = DynamicPropertyMgr::mProperties[Name].first;
+
+						switch (DataType)
+						{
+						case 0:
+							Value = "";
+							break;
+						case 1:
+							Value = true;
+							break;
+						case 2:
+							Value = (int32_t)0;
+							break;
+						case 3:
+							Value = (int64_t)0;
+							break;
+						case 4:
+							Value = (uint32_t)0;
+							break;
+						case 5:
+							Value = (uint64_t)0;
+							break;
+						case 6:
+							Value = (float)0;
+							break;
+						case 7:
+							Value = Vector3F(0, 0, 0);
+							break;
+						default:
+							Logger::Error("PopupAddDynamicData", "Invalid dynamic data type");
+							break;
+						}
+					}
+					};
+
+				if (ShowActorSpecific)
+				{
+					for (DynamicPropertyMgr::MultiCaseString& Str : DynamicPropertyMgr::mActorProperties[ActorName])
+					{
+						DisplayActorFile(Str.mString, Str.mLowerCaseString);
+					}
+				}
+				else
+				{
+					for (auto& [Key, Val] : DynamicPropertyMgr::mProperties)
+					{
+						DisplayActorFile(Key, Val.second.mLowerCaseString);
+					}
+				}
+
+				ImGui::EndListBox();
+			}
+
+			if (!ActorNameValid)
+				ImGui::BeginDisabled();
+			ImGui::Checkbox("Only show actor specific properties", &ShowActorSpecific);
+			if (!ActorNameValid)
+				ImGui::EndDisabled();
 
 			switch (DataType)
 			{
@@ -144,6 +225,8 @@ void PopupAddDynamicData::Render()
 				Key = "";
 				Value = "";
 				DataType = 0;
+				ActorName = "";
+				ActorNameValid = true;
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Return"))
@@ -153,19 +236,28 @@ void PopupAddDynamicData::Render()
 				Key = "";
 				Value = "";
 				DataType = 0;
+				ActorName = "";
+				ActorNameValid = true;
 			}
 		}
-		//ImGui::SameLine();
-		//ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
+		ImGui::SameLine();
+		ImGui::Text(std::string("Size: " + std::to_string(ImGui::GetWindowSize().x) + "x" + std::to_string(ImGui::GetWindowSize().y)).c_str());
 		ImGui::EndPopup();
 	}
 }
 
-void PopupAddDynamicData::Open(void (*Callback)(std::string, Actor::DynamicData))
+void PopupAddDynamicData::Open(std::string Name, void (*Callback)(std::string, Actor::DynamicData))
 {
 	Func = Callback;
 	Key = "";
 	Value = "";
 	DataType = 0;
 	IsOpen = true;
+	ActorName = Name;
+	ActorNameValid = DynamicPropertyMgr::mActorProperties.contains(Name);
+
+	if (!ActorNameValid)
+		ShowActorSpecific = false;
+	else
+		ShowActorSpecific = true;
 }

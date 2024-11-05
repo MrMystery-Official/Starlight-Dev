@@ -10,6 +10,7 @@
 #include "Util.h"
 #include "UIMapView.h"
 #include "GameDataListMgr.h"
+#include "RailMgr.h"
 
 SceneMgr::Type SceneMgr::SceneType = SceneMgr::Type::SmallDungeon;
 Mesh SceneMgr::NavigationMeshModel;
@@ -330,6 +331,7 @@ void SceneMgr::LoadScene(SceneMgr::Type Type, std::string Identifier)
 	GameDataListMgr::LoadActorGameData();
 	ActorMgr::UpdateModelOrder();
 	HashMgr::Initialize();
+	RailMgr::LoadRailsForCurrentScene();
 
 	if (!ActorMgr::GetActors().empty())
 	{
@@ -457,5 +459,6 @@ void SceneMgr::Reload()
 	GameDataListMgr::LoadActorGameData();
 	ActorMgr::UpdateModelOrder();
 	HashMgr::Initialize();
+	RailMgr::LoadRailsForCurrentScene();
 	Logger::Info("SceneMgr", "Scene reload completed");
 }

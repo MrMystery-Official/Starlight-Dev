@@ -11,6 +11,7 @@
 #include "Logger.h"
 #include "HashMgr.h"
 #include "SceneMgr.h"
+#include "RailMgr.h"
 
 void Exporter::CreateExportOnlyFiles(std::string Path)
 {
@@ -319,6 +320,29 @@ void Exporter::Export(std::string Path, Exporter::Operation Op)
 	Util::CreateDir(Path + "/" + Editor::BancDir);
 	UIAINBEditor::Save();
 	UIActorTool::Save(Path);
+
+	//Rail stuff
+	{
+		BymlFile& StaticByml = Editor::StaticActorsByml;
+
+		BymlFile::Node* RailsNode = StaticByml.GetNode("Rails");
+
+		if (RailsNode)
+		{
+			RailsNode->GetChildren().clear();
+		}
+		else
+		{
+			BymlFile::Node Root(BymlFile::Type::Array, "Rails");
+			StaticByml.GetNodes().push_back(Root);
+			RailsNode = StaticByml.GetNode("Rails");
+		}
+
+		for (RailMgr::Rail& Rail : RailMgr::mRails)
+		{
+			RailsNode->AddChild(RailMgr::RailToNode(Rail));
+		}
+	}
 
 	//Static compound stuff
 #ifdef STARLIGHT_SHARED

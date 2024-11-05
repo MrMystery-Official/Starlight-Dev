@@ -15,42 +15,72 @@ HGHTFile::HGHTFile(std::string Path)
 
 HGHTFile::HGHTFile(std::vector<unsigned char> Bytes)
 {
+	auto ResizeSingleSection = [](std::vector<unsigned char>& Section)
+		{
+			std::vector<unsigned char> New(128 * 128);
+			BinaryVectorReader Reader(Section);
+			Reader.Seek(130, BinaryVectorReader::Position::Begin);
+			
+			for (int i = 0; i < 128; i++)
+			{
+				Reader.Seek(1, BinaryVectorReader::Position::Current);
+				Reader.ReadStruct(New.data() + i * 128, 128);
+				Reader.Seek(1, BinaryVectorReader::Position::Current);
+			}
+
+			return New;
+		};
+
 	BinaryVectorReader Reader(Bytes);
 	std::vector<unsigned char> HeightData;
 	HeightData.resize(130 * 130);
+	//Reader.Seek(33800, BinaryVectorReader::Position::Begin);
 	for (int i = 0; i < 130; i++)
 	{
 		Reader.ReadStruct(HeightData.data() + i * 130, 130);
 		Reader.Seek(130, BinaryVectorReader::Position::Current);
 	}
 
-	std::vector<unsigned char> OffsetData;
-	OffsetData.resize(130 * 130);
+	std::vector<unsigned char> BaseHeightData;
+	BaseHeightData.resize(130 * 130);
 	for (int i = 0; i < 130; i++)
 	{
-		Reader.ReadStruct(OffsetData.data() + i * 130, 130);
+		Reader.ReadStruct(BaseHeightData.data() + i * 130, 130);
 		Reader.Seek(130, BinaryVectorReader::Position::Current);
 	}
 
+	/*
 	mHeights.resize(130 * 130);
 	for (size_t i = 0; i < mHeights.size(); i++)
 	{
-		mHeights[i] = (static_cast<uint16_t>(OffsetData[i]) << 8) | static_cast<uint16_t>(HeightData[i]);
+		mHeights[i] = (float)HeightData[i];
 	}
+	*/
 
-	std::vector<unsigned char> NormalizedImageData;
-	NormalizedImageData.resize(130 * 130);
-	uint16_t MinValue = *std::min_element(mHeights.begin(), mHeights.end());
-	uint16_t MaxValue = *std::max_element(mHeights.begin(), mHeights.end());
-	for (size_t i = 0; i < NormalizedImageData.size(); i++) {
-		NormalizedImageData[i] = static_cast<uint8_t>(
-			((mHeights[i] - MinValue) * 255) / (MaxValue - MinValue)
-			);
-	}
-
-	stbi_write_png(Editor::GetWorkingDirFile("HeightMap_Overlay16.png").c_str(), 130, 130, 1, NormalizedImageData.data(), 130);
-	
 	std::cout << "READ\n";
+
+	std::vector<unsigned char> ResizedHeightData = ResizeSingleSection(HeightData);
+	std::vector<unsigned char> ResizedBaseData = ResizeSingleSection(BaseHeightData);
+
+	std::vector<uint16_t> Sum(ResizedHeightData.size());
+
+	for (size_t i = 0; i < Sum.size(); ++i)
+	{
+		int16_t New = (signed char)ResizedBaseData[i] - 0x77;
+		Sum[i] = static_cast<uint16_t>(ResizedHeightData[i]) + New;
+	}
+
+	// Step 2: Find the maximum value in the uint16 vector
+	uint16_t maxVal = *std::max_element(Sum.begin(), Sum.end());
+
+	// Step 3: Normalize the values and store them in a new vector of unsigned chars
+	std::vector<unsigned char> normalizedVec(Sum.size());
+	for (size_t i = 0; i < Sum.size(); ++i) {
+		// Normalize to range [0, 255] and cast to unsigned char
+		normalizedVec[i] = static_cast<unsigned char>((static_cast<float>(Sum[i]) / maxVal) * 255);
+	}
+
+	stbi_write_png(Editor::GetWorkingDirFile("HeightMap_Merge.png").c_str(), 128, 128, 1, normalizedVec.data(), 128);
 }
 
 void HGHTFile::InitMesh()

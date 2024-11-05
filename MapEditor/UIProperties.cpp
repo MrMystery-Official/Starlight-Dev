@@ -397,7 +397,7 @@ void UIProperties::DrawPropertiesWindow()
 			{
 				if (ImGui::Button("Add##Dynamic", ImVec2(ImGui::GetWindowWidth() - ImGui::GetStyle().FramePadding.x, 0)))
 				{
-					PopupAddDynamicData::Open([](std::string Key, Actor::DynamicData Dynamic)
+					PopupAddDynamicData::Open(UIOutliner::SelectedActor->Gyml, [](std::string Key, Actor::DynamicData Dynamic)
 						{
 							UIOutliner::SelectedActor->Dynamic.insert({ Key, Dynamic });
 						});

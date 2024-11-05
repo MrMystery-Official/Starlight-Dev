@@ -21,6 +21,7 @@ namespace UIMapView
 		bool RenderNPCs = true;
 		bool AllowSelectingActor = true;
 		bool RenderNavMesh = false;
+		bool CullFaces = true;
 	};
 
 	struct ActorPainterActorEntry
@@ -61,6 +62,15 @@ namespace UIMapView
 	extern glm::vec3 mActorPainterRotMax;
 	extern std::vector<ActorPainterActorEntry> mActorPainterActorEntries;
 
+	extern std::vector<Mesh> mDebugMeshes;
+
+	glm::vec3 GetRayFromMouse(double mouseX, double mouseY, const glm::mat4& projectionMatrix, const glm::mat4& viewMatrix, int screenWidth, int screenHeight);
+	bool RayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, glm::vec3 VertexA, glm::vec3 VertexB, glm::vec3 VertexC, float& t);
+	glm::vec3 FindTerrainIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDir, Actor* TerrainActor);
+	std::pair<glm::vec3, glm::vec3> FindTerrainIntersectionAndNormalVec(const glm::vec3& rayOrigin, const glm::vec3& rayDir, Actor* TerrainActor);
+	float CalculateModelYOffset(Actor& Actor);
+	glm::vec3 NormalToEuler(const glm::vec3& normal);
+
 	void GLFWKeyCallback(GLFWwindow* Window, int Key, int Scancode, int Action, int Mods);
 	void ProcessActorPainter(double XPos, double YPos, int ScreenWidth, int ScreenHeight);
 	void Initialize(GLFWwindow* pWindow);
@@ -71,6 +81,7 @@ namespace UIMapView
 	void DrawActor(Actor& Actor, Shader* Shader);
 	void SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos);
 	void DrawMapViewWindow();
+	void DrawRails();
 	bool IsInCameraMovement();
 	void GLFWScrollCallback(GLFWwindow* window, double xOffset, double yOffset);
 };

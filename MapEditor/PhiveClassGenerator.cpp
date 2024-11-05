@@ -1,258 +1,360 @@
 #include "PhiveClassGenerator.h"
 
 #include "Util.h"
+#include "Logger.h"
 #include <iostream>
 #include <fstream>
 
-std::map<std::string, std::vector<std::string>> PhiveClassGenerator::Classes;
-std::map<std::string, std::vector<std::string>> PhiveClassGenerator::ClassDependencies;
-uint32_t PhiveClassGenerator::PointerArrayCount = 0;
+std::unordered_map<std::string, PhiveClassGenerator::HavokClassRepresentation> PhiveClassGenerator::mClasses;
+std::unordered_map<std::string, std::vector<std::string>> PhiveClassGenerator::mCode;
+std::unordered_map<std::string, std::vector<std::string>> PhiveClassGenerator::mClassDependencies;
 
-std::string PhiveClassGenerator::ConvertClassName(std::string Name)
+PhiveClassGenerator::HavokClassKind PhiveClassGenerator::StringToKind(const std::string& Name)
 {
+	if (Name == "Array")
+		return HavokClassKind::ARRAY;
+	
+	if (Name == "Record")
+		return HavokClassKind::RECORD;
+
+	if (Name == "Float")
+		return HavokClassKind::FLOAT;
+
+	if (Name == "Int")
+		return HavokClassKind::INT;
+
+	if (Name == "String")
+		return HavokClassKind::STRING;
+
+	if (Name == "Pointer")
+		return HavokClassKind::POINTER;
+
+	if (Name == "Bool")
+		return HavokClassKind::BOOL;
+
+	Logger::Error("PhiveClassGenerator", "Unknown kind: " + Name);
+
+	return HavokClassKind::RECORD;
+}
+
+void PhiveClassGenerator::GenerateClassRepresentation(json& Data)
+{
+	auto SetPtrByAddress = [](HavokClassRepresentation** Ptr, const std::string& AddrName, json& Class)
+		{
+			if (!Class[AddrName].is_null())
+			{
+				std::string Addr = Class[AddrName].get<std::string>();
+				if (mClasses.contains(Addr))
+				{
+					*Ptr = &mClasses[Addr];
+					return;
+				}
+			}
+			*Ptr = nullptr;
+		};
+
+	for (auto Class : Data)
+	{
+		if ((!Class["Size"].is_null() && Class["Size"].get<int>() == 0) || (!Class["Kind"].is_null() && Class["Kind"].get<std::string>() == "Opaque"))
+			continue;
+
+		HavokClassRepresentation& Rep = mClasses[Class["Address"].get<std::string>()];
+		Rep.mName = Class["Name"].get<std::string>();
+		Rep.mAddress = Class["Address"].get<std::string>();
+		Rep.mSize = Class["Size"].is_null() ? -1 : Class["Size"].get<int>();
+		Rep.mAlignment = Class["Alignment"].is_null() ? -1 : Class["Alignment"].get<int>();
+		
+		Rep.mKind = Class["Kind"].is_null() ? HavokClassKind::NONE : StringToKind(Class["Kind"].get<std::string>());
+
+		Rep.mIsPrimitiveType = Rep.mKind != HavokClassKind::RECORD && Rep.mKind != HavokClassKind::ARRAY && Rep.mKind != HavokClassKind::POINTER && Rep.mKind != HavokClassKind::STRING && Rep.mKind != HavokClassKind::NONE;
+	}
+
+	for (auto Class : Data)
+	{
+		if ((!Class["Size"].is_null() && Class["Size"].get<int>() == 0) || (!Class["Kind"].is_null() && Class["Kind"].get<std::string>() == "Opaque"))
+			continue;
+
+		HavokClassRepresentation& Rep = mClasses[Class["Address"].get<std::string>()];
+
+		SetPtrByAddress(&Rep.mSubType, "SubTypeAddress", Class);
+		SetPtrByAddress(&Rep.mParent, "ParentAddress", Class);
+		
+		if (!Class["Declarations"].is_null())
+		{
+			for (auto JsonDeclaration : Class["Declarations"])
+			{
+				HavokClassRepresentation::Declaration Decl;
+				Decl.mDeclaredName = JsonDeclaration["DeclaredName"].get<std::string>();
+				SetPtrByAddress(&Decl.mParent, "ParentAddress", JsonDeclaration);
+				Rep.mDeclarations.push_back(Decl);
+			}
+		}
+
+		if (!Class["Template"].is_null())
+		{
+			for (auto JsonTemplate : Class["Template"])
+			{
+				if (JsonTemplate["Name"].is_null())
+					continue;
+
+				HavokClassRepresentation::Template Temp;
+				Temp.mName = JsonTemplate["Name"].get<std::string>();
+
+				if (Temp.mName == "tAllocator")
+					continue;
+
+				if (!JsonTemplate["Address"].is_null())
+				{
+					SetPtrByAddress(&Temp.mType, "Address", JsonTemplate);
+				}
+				else if(!JsonTemplate["Value"].is_null())
+				{
+					Temp.mValue = JsonTemplate["Value"].get<int>();
+				}
+				else
+				{
+					continue;
+				}
+
+				Rep.mTemplates.push_back(Temp);
+			}
+		}
+	}
+}
+
+std::string PhiveClassGenerator::GenerateClassName(HavokClassRepresentation& Rep, std::vector<std::string>& Depends, bool Field, std::string* PreClass)
+{
+	if (Rep.mIsPrimitiveType)
+		return Rep.mName;
+
+	if (!Field && *PreClass == "" && !Rep.mTemplates.empty())
+	{
+		*PreClass = "template<";
+		for (HavokClassRepresentation::Template& Template : Rep.mTemplates)
+		{
+			std::string Name = Template.mName;
+			Name.erase(0, 1);
+			*PreClass += "class " + Name + ", ";
+		}
+		PreClass->pop_back();
+		PreClass->pop_back();
+		*PreClass += ">\n";
+	}
+
+	std::string Name = Rep.mName;
 	Util::ReplaceString(Name, "::", "__");
+	if (Rep.mName != "hkArray" && 
+		Rep.mName != "hkRefPtr")
+	{
+		Name += "_" + Rep.mAddress;
+	}
+	if (!Rep.mTemplates.empty() && Field)
+	{
+		Name += "<";
+
+		for (HavokClassRepresentation::Template& Template : Rep.mTemplates)
+		{
+			if (Template.mType == nullptr)
+				continue;
+
+			Name += GenerateClassName(*Template.mType, Depends);
+			if (!Template.mType->mIsPrimitiveType)
+			{
+				Depends.push_back(Template.mType->mAddress);
+			}
+		}
+
+		Name += ">";
+	}
 	return Name;
 }
 
-std::string PhiveClassGenerator::GetPointerArrayName()
+void PhiveClassGenerator::GenerateClassCode(const std::string& Address)
 {
-	return std::to_string(PointerArrayCount++);
-}
-
-void PhiveClassGenerator::GenerateClass(json& Data, std::string Name)
-{
-	if (Classes.count(Name))
+	if (!mClasses.contains(Address))
 		return;
 
-	std::vector<std::string> ClassQuery;
-	for (auto Class : Data)
+	std::vector<std::string> Code;
+	std::string PreClass = "";
+	std::vector<std::string> Depends;
+
+	HavokClassRepresentation& Rep = mClasses[Address];
+
+	if (Rep.mName == "hkArray" || Rep.mName == "hkRefPtr")
+		return;
+
+	uint32_t RemainingSize = Rep.mSize;
+
+	unsigned int Size = Rep.mSize;
+	if (Rep.mParent != nullptr)
+		Size -= Rep.mParent->mSize;
+
+	Code.push_back("struct " + GenerateClassName(Rep, Depends, false, &PreClass) + " : public PhiveBinaryVectorReader::hkReadable, public PhiveBinaryVectorWriter::hkWriteable");
+
+	//Parent processing - Begin
+	if (Rep.mParent != nullptr && !Rep.mParent->mIsPrimitiveType)
 	{
-		if (Class["Name"] != Name)
+		Code.push_back(", public " + GenerateClassName(*Rep.mParent, Depends));
+		Depends.push_back(Rep.mParent->mAddress);
+		RemainingSize -= Rep.mParent->mSize;
+	}
+	Code.push_back(" {\n");
+	//Parent processing - End
+
+	//Information processing - Begin
+	if(Rep.mSize > 0){
+		Code.push_back("	const unsigned int m_internal_totalSize = " + std::to_string(Rep.mSize) + ";\n");
+		Code.push_back("	const unsigned int m_internal_size = " + std::to_string(Size) + ";\n\n");
+	}
+	//Information processing - End
+
+	//Primitive base processing - Begin
+	bool HasPrimitiveBase = false;
+	if (Rep.mParent != nullptr && Rep.mParent->mIsPrimitiveType)
+	{
+		Code.push_back("	" + GenerateClassName(*Rep.mParent, Depends) + " m_internal_primitiveBase;\n");
+		HasPrimitiveBase = true;
+	}
+	//Primitive base processing - End
+
+	//Declarations processing - Begin
+	for (HavokClassRepresentation::Declaration& Decl : Rep.mDeclarations)
+	{
+		if (Decl.mParent == nullptr)
 			continue;
 
-		std::vector<std::string> FullCode;
+		Code.push_back("	" + GenerateClassName(*Decl.mParent, Depends) + " m_" + Decl.mDeclaredName + ";\n");
+		if(!Decl.mParent->mIsPrimitiveType)
+			Depends.push_back(Decl.mParent->mAddress);
 
-		std::vector<std::string> ReadCode;
-		std::vector<std::string> WriteCode;
-		std::vector<std::string> WriteArrayCode;
-
-		if (!Class["Alignment"].is_null())
-		{
-			ReadCode.push_back("Reader.Align(" + std::to_string(Class["Alignment"].get<int>()) + ");");
-			WriteCode.push_back("Writer.Align(" + std::to_string(Class["Alignment"].get<int>()) + ");");
-		}
-
-		FullCode.push_back("struct " + ConvertClassName(Class["Name"].get<std::string>()));
-		if (!Class["Parent"].is_null())
-		{
-			if (Class["Parent"].get<std::string>().starts_with("hk"))
-			{
-				FullCode.push_back(" : public " + ConvertClassName(Class["Parent"].get<std::string>()));
-				ReadCode.push_back(ConvertClassName(Class["Parent"].get<std::string>()) + "::Read(Reader);");
-				WriteCode.push_back(ConvertClassName(Class["Parent"].get<std::string>()) + "::Write(Writer);");
-
-				ClassQuery.push_back(Class["Parent"].get<std::string>());
-				FullCode.push_back(" {\n");
-			}
-			else
-			{
-				FullCode.push_back(" : public PhiveBinaryVectorReader::hkReadable, public PhiveBinaryVectorWriter::hkWriteable {\n");
-				FullCode.push_back("	" + Class["Parent"].get<std::string>() + " m_primitiveBase;\n");
-				ReadCode.push_back("Reader.ReadStruct(&m_primitiveBase, sizeof(m_primitiveBase));");
-				WriteCode.push_back("Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&m_primitiveBase), sizeof(m_primitiveBase));");
-			}
-		}
-		else
-		{
-			FullCode.push_back(" : public PhiveBinaryVectorReader::hkReadable, public PhiveBinaryVectorWriter::hkWriteable {\n");
-		}
-
-		if (Class["Kind"] == "Array" && !Name.starts_with("hkFpMath"))
-		{
-			FullCode.push_back("	" + ConvertClassName(Class["SubType"].get<std::string>()) + " m_subTypeArray[" + std::to_string(Class["Size"].get<int>()) + "/sizeof(" + ConvertClassName(Class["SubType"].get<std::string>()) + ")];\n");
-			ReadCode.push_back("Reader.ReadStruct(&m_subTypeArray[0], sizeof(m_subTypeArray));");
-			WriteCode.push_back("Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&m_subTypeArray[0]), sizeof(m_subTypeArray));");
-			if (Class["SubType"].get<std::string>().starts_with("hk"))
-			{
-				ClassQuery.push_back(Class["SubType"].get<std::string>());
-			}
-		}
-
-		if (Class["Kind"] == "Pointer")
-		{
-			FullCode.insert(FullCode.begin(), "template <typename T>\n");
-		}
-
-		for (auto Declaration : Class["Declarations"])
-		{
-			std::string FieldName = "m_" + Declaration["DeclaredName"].get<std::string>();
-
-			std::string Type = ConvertClassName(Declaration["Parent"].get<std::string>());
-
-			std::string SubClassName = "";
-			std::string SubTypeAddress = "";
-			int SubClassSize = 0;
-			bool IsParentArray = false;
-			bool IsParentPointer = false;
-
-			for (auto SubClass : Data)
-			{
-				if (SubClass["Address"] == Declaration["ParentAddress"])
-				{
-					if (SubClass["Kind"] == "Array")
-					{
-						IsParentArray = true;
-					}
-					else if (SubClass["Kind"] == "Pointer")
-					{
-						IsParentPointer = true;
-					}
-
-					if(!SubClass["SubType"].is_null())
-						SubClassName = SubClass["SubType"].get<std::string>();
-
-					if (!SubClass["Size"].is_null())
-						SubClassSize = SubClass["Size"].get<int>();
-
-					break;
-				}
-			}
-
-			if(Type == "T*")
-			{
-				Type = "T";
-			} 
-			else if (Type == "T[N]")
-			{
-				Type = "T";
-				FieldName += "[N]";
-				FullCode.insert(FullCode.begin(), "template <typename T, int N>\n");
-			}
-			else if (IsParentPointer)
-			{
-				Type = Declaration["Parent"].get<std::string>() + "<" + ConvertClassName(SubClassName) + ">";
-				if (SubClassName.starts_with("hk"))
-				{
-					ClassQuery.push_back(SubClassName);
-					ClassQuery.push_back(Declaration["Parent"].get<std::string>());
-				}
-			}
-			else if (Type == "hkArray" || Type == "hkRelArray")
-			{
-				if (ConvertClassName(SubClassName) != "hkRefPtr")
-				{
-					Type = "std::vector<" + ConvertClassName(SubClassName) + ">";
-				}
-				else
-				{
-
-
-					Type = "std::vector<" + ConvertClassName(SubClassName) + "<" +  + ">>";
-				}
-				if (SubClassName.starts_with("hk"))
-				{
-					ClassQuery.push_back(SubClassName);
-				}
-			}
-			else
-			{
-				if (Type.starts_with("hk") && Type != "T*")
-				{
-					ClassQuery.push_back(Declaration["Parent"].get<std::string>());
-				}
-			}
-
-			FullCode.push_back("	" + Type + " " + FieldName + ";\n");
-			if (ConvertClassName(Declaration["Parent"].get<std::string>()).starts_with("hk"))
-			{
-				if (Declaration["Parent"].get<std::string>() == "hkArray" || Declaration["Parent"].get<std::string>() == "hkRelArray")
-				{
-					ReadCode.push_back("Reader.ReadHkArray<" + ConvertClassName(SubClassName) + ">(&" + FieldName + ", sizeof(" + ConvertClassName(SubClassName) + "), \"" + ConvertClassName(SubClassName) + "\");");
-					WriteCode.push_back("Writer.QueryHkArrayWrite(\"" + GetPointerArrayName() + "\");");
-					WriteArrayCode.push_back("Writer.WriteHkArray<" + ConvertClassName(SubClassName) + ">(&" + FieldName + ", sizeof(" + ConvertClassName(SubClassName) + "), \"" + ConvertClassName(SubClassName) + "\", \"" + std::to_string(PointerArrayCount-1) + "\");");
-				}
-				else if (IsParentArray)
-				{
-					ReadCode.push_back("Reader.ReadStruct(&" + FieldName + ", sizeof(" + FieldName + "));");
-					WriteCode.push_back("Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&" + FieldName + "), sizeof(" + FieldName + "));");
-				}
-				else if (IsParentPointer)
-				{
-					ReadCode.push_back(FieldName + ".Read(Reader);");
-					WriteCode.push_back("Writer.QueryHkPointerWrite(\"" + GetPointerArrayName() + "\");");
-					WriteArrayCode.push_back("Writer.WriteHkPointer<" + ConvertClassName(SubClassName) + ">(&" + FieldName + ".m_ptr, sizeof(" + ConvertClassName(SubClassName) + "), \"" + std::to_string(PointerArrayCount-1) + "\");");
-				}
-				else
-				{
-					ReadCode.push_back(FieldName + ".Read(Reader);");
-					WriteCode.push_back(FieldName + ".Write(Writer);");
-				}
-			}
-			else
-			{
-				if (Declaration["Parent"].get<std::string>() == "T*")
-				{
-					ReadCode.push_back("Reader.ReadHkPointer<T>(&" + FieldName + ", sizeof(T));");
-					WriteCode.push_back("Writer.QueryHkPointerWrite(\"" + GetPointerArrayName() + "\");");
-					WriteArrayCode.push_back("Writer.WriteHkPointer<T>(&" + FieldName + ", sizeof(T), \"" + std::to_string(PointerArrayCount-1) + "\");");
-				}
-				else if (Declaration["Parent"].get<std::string>() == "T[N]")
-				{
-					ReadCode.push_back("Reader.ReadStruct(&m_" + Declaration["DeclaredName"].get<std::string>() + "[0], sizeof(m_" + Declaration["DeclaredName"].get<std::string>() + "));");
-					WriteCode.push_back("Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&m_" + Declaration["DeclaredName"].get<std::string>() + "[0]), sizeof(m_" + Declaration["DeclaredName"].get<std::string>() + "));");
-				}
-				else
-				{
-					ReadCode.push_back("Reader.ReadStruct(&" + FieldName + ", sizeof(" + FieldName + "));");
-					WriteCode.push_back("Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&" + FieldName + "), sizeof(" + FieldName + "));");
-				}
-			}
-		}
-
-		FullCode.push_back("\n	virtual void Read(PhiveBinaryVectorReader& Reader) override {\n");
-		for (const std::string& Line : ReadCode)
-		{
-			FullCode.push_back("		" + Line + "\n");
-		}
-		FullCode.push_back("	}\n");
-
-		FullCode.push_back("\n	virtual void Write(PhiveBinaryVectorWriter& Writer) override {\n");
-		for (const std::string& Line : WriteCode)
-		{
-			FullCode.push_back("		" + Line + "\n");
-		}
-		FullCode.push_back("		\n");
-		for (const std::string& Line : WriteArrayCode)
-		{
-			FullCode.push_back("		" + Line + "\n");
-		}
-		FullCode.push_back("	}\n");
-
-		FullCode.push_back("};\n");
-
-		Classes.insert({ Class["Name"].get<std::string>(), FullCode });
-
-		break;
+		RemainingSize -= Decl.mParent->mSize;
 	}
-	std::vector<std::string> ProcessedClassQuery;
+	//Declarations processing - End
 
-	for (const std::string& Class : ClassQuery)
+	//SubType processing - Begin
+	if (Rep.mSubType != nullptr && RemainingSize >= Rep.mSubType->mSize)
 	{
-		if (std::find(ProcessedClassQuery.begin(), ProcessedClassQuery.end(), Class) == ProcessedClassQuery.end())
-			ProcessedClassQuery.push_back(Class);
+		Code.push_back("	" + GenerateClassName(*Rep.mSubType, Depends) + " m_internal_subTypeData[" + std::to_string((RemainingSize / Rep.mSubType->mSize)) + "];\n");
+		if (!Rep.mSubType->mIsPrimitiveType)
+			Depends.push_back(Rep.mSubType->mAddress);
+	}
+	//SubType processing - End
+
+	Code.push_back("\n");
+
+	//Read processing - Begin
+	{
+		Code.push_back("	virtual void Read(PhiveBinaryVectorReader& Reader) override {\n");
+
+		if (Rep.mParent != nullptr && !HasPrimitiveBase)
+			Code.push_back("		" + GenerateClassName(*Rep.mParent, Depends) + "::Read(Reader);\n");
+
+		if(Rep.mAlignment > 0)
+			Code.push_back("		Reader.Align(" + std::to_string(Rep.mAlignment) + ");\n");
+		else if(HasPrimitiveBase)
+			Code.push_back("		Reader.Align(" + std::to_string(Rep.mParent->mAlignment) + ");\n");
+
+		if (HasPrimitiveBase)
+			Code.push_back("		Reader.ReadStruct(&m_internal_primitiveBase, sizeof(m_internal_primitiveBase));\n");
+
+		for (HavokClassRepresentation::Declaration& Decl : Rep.mDeclarations)
+		{
+			if (Decl.mParent == nullptr)
+				continue;
+
+			if (Decl.mParent->mIsPrimitiveType)
+			{
+				if (Decl.mParent->mAlignment > 0)
+					Code.push_back("		Reader.Align(" + std::to_string(Decl.mParent->mAlignment) + ");\n");
+
+				Code.push_back("		Reader.ReadStruct(&m_" + Decl.mDeclaredName + ", sizeof(m_" + Decl.mDeclaredName + "));\n");
+			}
+			else
+			{
+				Code.push_back("		m_" + Decl.mDeclaredName + ".Read(Reader);\n");
+			}
+		}
+
+		if (Rep.mSubType != nullptr && RemainingSize >= Rep.mSubType->mSize)
+			Code.push_back("		Reader.ReadStruct(&m_internal_subTypeData[0], sizeof(m_internal_subTypeData));\n");
+
+		Code.push_back("	}\n");
+	}
+	//Read processing - End
+
+	//Write processing - Begin
+	{
+		Code.push_back("	virtual void Write(PhiveBinaryVectorWriter& Writer, unsigned int Offset) override {\n");
+		
+		Code.push_back("		unsigned int Position = Writer.GetPosition();\n");
+
+		if (Rep.mParent != nullptr && !HasPrimitiveBase)
+			Code.push_back("		" + GenerateClassName(*Rep.mParent, Depends) + "::Write(Writer, 0);\n");
+
+		if (Rep.mAlignment > 0)
+			Code.push_back("		Writer.Align(" + std::to_string(Rep.mAlignment) + ");\n");
+		else if (HasPrimitiveBase)
+			Code.push_back("		Writer.Align(" + std::to_string(Rep.mParent->mAlignment) + ");\n");
+
+		if (HasPrimitiveBase)
+			Code.push_back("		Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&m_internal_primitiveBase), sizeof(m_internal_primitiveBase));\n");
+
+		for (size_t i = 0; i < Rep.mDeclarations.size(); i++)
+		{
+			HavokClassRepresentation::Declaration& Decl = Rep.mDeclarations[i];
+			if (Decl.mParent == nullptr)
+				continue;
+
+			if (Decl.mParent->mIsPrimitiveType)
+			{
+				if (Decl.mParent->mAlignment > 0)
+					Code.push_back("		Writer.Align(" + std::to_string(Decl.mParent->mAlignment) + ");\n");
+				Code.push_back("		Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&m_" + Decl.mDeclaredName + "), sizeof(m_" + Decl.mDeclaredName + "));\n");
+			}
+			else
+			{
+				Code.push_back("		m_" + Decl.mDeclaredName + ".Write(Writer, Position + m_internal_size - Writer.GetPosition());\n");
+			}
+		}
+
+		if (Rep.mSubType != nullptr && RemainingSize >= Rep.mSubType->mSize)
+			Code.push_back("		Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&m_internal_subTypeData[0]), sizeof(m_internal_subTypeData));\n");
+
+		Code.push_back("	}\n");
+	}
+	//Write processing - End
+
+	Code.push_back("};\n");
+
+	std::sort(Depends.begin(), Depends.end());
+	Depends.erase(std::unique(Depends.begin(), Depends.end()), Depends.end());
+
+	for (auto Iter = Depends.begin(); Iter != Depends.end(); )
+	{
+		if (*Iter == "hkArray" || *Iter == "hkRefPtr")
+		{
+			Iter = Depends.erase(Iter);
+			continue;
+		}
+
+		Iter++;
 	}
 
-	ClassDependencies.insert({ Name, ProcessedClassQuery });
+	if(PreClass != "")
+		Code.insert(Code.begin(), PreClass);
 
-	for (std::string Class : ProcessedClassQuery)
+	mCode.insert({ Rep.mAddress, Code });
+	mClassDependencies.insert({ Rep.mAddress, Depends });
+
+	for (std::string& Depend : Depends)
 	{
-		GenerateClass(Data, Class);
+		GenerateClassCode(Depend);
 	}
 }
 
-void PhiveClassGenerator::SortClassDependencies(std::string Name, std::vector<std::pair<std::string, std::vector<std::string>>>& Sorted)
+void PhiveClassGenerator::SortClassDependencies(std::string Addr, std::vector<std::pair<std::string, std::vector<std::string>>>& Sorted)
 {
-	for (const std::string& Dependency : ClassDependencies[Name])
+	for (const std::string& Dependency : mClassDependencies[Addr])
 	{
 		SortClassDependencies(Dependency, Sorted);
 
@@ -267,20 +369,20 @@ void PhiveClassGenerator::SortClassDependencies(std::string Name, std::vector<st
 		}
 
 		if (!Contains)
-			Sorted.push_back({ Dependency, Classes[Dependency] });
+			Sorted.push_back({ Dependency, mCode[Dependency] });
 	}
 
 	bool Contains = false;
 	for (auto& [Key, Val] : Sorted)
 	{
-		if (Key == Name)
+		if (Key == Addr)
 		{
 			Contains = true;
 			break;
 		}
 	}
-	if(!Contains)
-		Sorted.push_back({ Name, Classes[Name] });
+	if (!Contains)
+		Sorted.push_back({ Addr, mCode[Addr] });
 }
 
 void PhiveClassGenerator::Generate(std::string Path, std::vector<std::string> Goals)
@@ -288,16 +390,16 @@ void PhiveClassGenerator::Generate(std::string Path, std::vector<std::string> Go
 	std::ifstream File(Path);
 	json Data = json::parse(File);
 
-	Classes.clear();
-	ClassDependencies.clear();
-	for (std::string Goal : Goals)
+	GenerateClassRepresentation(Data);
+
+	for (const std::string& Goal : Goals)
 	{
-		GenerateClass(Data, Goal);
+		GenerateClassCode(Goal);
 	}
 
 	std::vector<std::pair<std::string, std::vector<std::string>>> SortedClasses;
 
-	for (std::string Goal : Goals)
+	for (std::string& Goal : Goals)
 	{
 		SortClassDependencies(Goal, SortedClasses);
 	}
@@ -306,18 +408,6 @@ void PhiveClassGenerator::Generate(std::string Path, std::vector<std::string> Go
 	{
 		for (const std::string& Line : Val)
 		{
-			/*
-			if (Line.starts_with("struct hkcdCompressedAabbCodecs__Aabb4BytesCodec : public hkcdCompressedAabbCodecs__CompressedAabbCodec"))
-			{
-				std::cout << "struct hkcdCompressedAabbCodecs__Aabb4BytesCodec : public hkcdCompressedAabbCodecs__CompressedAabbCodec<uint8_t, 3> {\n";
-				continue;
-			}
-			if (Line == "    hkFpMath__Detail__MultiWordUint m_storage;")
-			{
-				std::cout << "    hkFpMath__Detail__MultiWordUint<unsigned long long, 4> m_storage;\n";
-				continue;
-			}
-			*/
 			std::cout << Line;
 		}
 		std::cout << "\n\n";

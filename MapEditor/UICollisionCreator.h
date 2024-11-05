@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include "Bfres.h"
-#include "SplatoonShapeToTotK.h"
+#include "PhiveMaterialData.h"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include "FramebufferMgr.h"
@@ -15,8 +15,15 @@ namespace UICollisionCreator
 {
 	struct Material
 	{
-		bool Generate = true;
-		SplatoonShapeToTotK::MaterialSettings Settings;
+		bool mGenerate = true;
+		PhiveMaterialData::Material mMaterial;
+	};
+
+	struct ModMaterialInfo
+	{
+		int mId;
+		uint64_t mFlags;
+		uint64_t mCollisionFlags;
 	};
 
 	extern bool Open;
@@ -47,7 +54,14 @@ namespace UICollisionCreator
 	extern std::vector<bool> SubModelHovered;
 	extern std::vector<const char*> MasterMaterialNames;
 
+	extern int32_t mFlagSubModelIndex;
+	extern bool mMaterialPopUpOpen;
+	extern float mMaterialPopUpW;
+	extern ImVec2 mMaterialPopUpPos;
+
 	extern bool FocusedModelView;
+
+	void DrawMaterialFlagsPopUp();
 
 	void MouseWheelCallback(GLFWwindow* window, double xOffset, double yOffset);
 	void UpdateMouseCursorRotation();

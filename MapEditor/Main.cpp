@@ -17,7 +17,6 @@
 #include "UIActorTool.h"
 #include "PreferencesConfig.h"
 #include "PhiveSocketConnector.h"
-#include "SplatoonShapeToTotK.h"
 #include "PhiveShape2.h"
 #include "SceneCreator.h"
 #include "PhiveNavMesh.h"
@@ -26,6 +25,7 @@
 #include "UIEventEditor.h"
 #include "HGHT.h"
 #include "EventNodeDefMgr.h"
+#include "DynamicPropertyMgr.h"
 
 #include <fstream>
 
@@ -104,6 +104,12 @@ int main()
 	Util::CreateDir(Editor::GetWorkingDirFile("Cache"));
 	Util::CreateDir(Editor::GetWorkingDirFile("EditorModels"));
 
+	//PhiveClassGenerator::Generate("H:/Paul/switchemulator/Zelda TotK/MapEditorV4/NavMeshWorkspace/havok_type_info.json", { "71041c2d00" });
+	//return 0;
+
+	//HGHTFile HeightMap("/switchemulator/Zelda TotK/MapEditorV4/TerrainWorkspace/5700001C8C.hght");
+	//return 0;
+
 	UI::Initialize();
 	//BfresLibrary::Initialize();
 	
@@ -114,6 +120,9 @@ int main()
 	UIAINBEditor::Initialize();
 	UIEventEditor::Initialize();
 	AINBNodeDefMgr::Initialize();
+	DynamicPropertyMgr::Initialize();
+	PhiveSocketConnector::Initialize();
+	//DynamicPropertyMgr::Generate();
 	//AINBNodeDefMgr::Generate();
 	//EventNodeDefMgr::Initialize();
 	//EventNodeDefMgr::Generate();
@@ -378,8 +387,6 @@ int main()
 	//Util::CreateDir(Editor::GetWorkingDirFile("Save/Phive/NavMesh"));
 	//Util::WriteFile(Editor::GetWorkingDirFile("Save/Phive/NavMesh/Dungeon152.Nin_NX_NVN.bphnm.zs"), ZStdFile::Compress(NavMeshData, ZStdFile::Dictionary::Base).Data);
 
-	PhiveSocketConnector::Initialize();
-	
 	/*
 	std::vector<uint32_t> ActorCount;
 
@@ -418,7 +425,7 @@ int main()
 		std::cout << "Dungeon" << Identifier << ": " << ActorCount[i] << std::endl;
 	}
 	*/
-	
+
 	/*
 	std::vector<uint64_t> Hashes;
 
@@ -460,8 +467,6 @@ int main()
 	ZStdFile::Compress(NavMesh.ToBinary(), ZStdFile::Dictionary::Base).WriteToFile(Editor::GetWorkingDirFile("Save/Phive/NavMesh/Dungeon136.Nin_NX_NVN.bphnm.zs"));
 	*/
 
-	//PhiveClassGenerator::Generate("/switchemulator/Zelda TotK/MapEditorV4/NavMeshWorkspace/havok_type_info.json", { "hclClothContainer" });
-
 	/*
 	PhiveStaticCompound StaticCompound(ZStdFile::Decompress(Editor::GetRomFSFile("Phive/StaticCompoundBody/SmallDungeon/Dungeon152.Nin_NX_NVN.bphsc.zs", true), ZStdFile::Dictionary::Base).Data);
 	StaticCompound.mActorHashMap.clear();
@@ -471,7 +476,111 @@ int main()
 
 	//BFEVFLFile Event(ZStdFile::Decompress("/switchemulator/Zelda TotK/TrialsOfTheChosenHero/Events/SwordTrial_CameraFocus.bfevfl.zs", ZStdFile::Dictionary::Base).Data);
 
-	//HGHTFile HeightMap("switchemulator/Zelda TotK/MapEditorV4/TerrainWorkspace/5700001C8C.hght");
+/*
+	ActorMgr::AddActor("CaveEntrance_0f2134c2");
+
+	PhiveShape2 Shape(ZStdFile::Decompress(Editor::GetRomFSFile("Phive/Shape/Dcc/CaveEntrance_0f2134c2.Nin_NX_NVN.bphsh.zs"), ZStdFile::Dictionary::Base).Data);
+	//PhiveShape2 Shape(ZStdFile::Decompress(Editor::GetRomFSFile("Phive/Shape/Dcc/DgnObj_Small_BoxFloor_4x4_A__Physical.Nin_NX_NVN.bphsh.zs"), ZStdFile::Dictionary::Base).Data);
+	{
+
+		for (PhiveShape2::hknpMeshShapeGeometrySection& GeometrySection : Shape.GetMeshShape().m_GeometrySections.m_Elements)
+		{
+			Shape.DecodeTreeNode(GeometrySection, GeometrySection.m_SectionBvh.m_Elements[0], glm::vec3(1.0f / GeometrySection.m_BitScale8Inv[0],
+				1.0f / GeometrySection.m_BitScale8Inv[1],
+				1.0f / GeometrySection.m_BitScale8Inv[2]));
+		}
+	}
+	*/
+
+	/*
+	PhiveShape2 Shape(Util::ReadFile(Editor::GetWorkingDirFile("PotCollisionGeneratedByTotK_Materials.bphsh")));
+	{
+		for (PhiveShape2::hknpMeshShapeGeometrySection& GeometrySection : Shape.GetMeshShape().m_GeometrySections.m_Elements)
+		{
+			glm::vec3 BitScale = glm::vec3(1.0f / GeometrySection.m_BitScale8Inv[0],
+				1.0f / GeometrySection.m_BitScale8Inv[1],
+				1.0f / GeometrySection.m_BitScale8Inv[2]);
+
+			std::vector<PhiveShape2::QuadBVHNode> Nodes;
+			for (PhiveShape2::hknpAabb8TreeNode& TreeNode : GeometrySection.m_SectionBvh.m_Elements)
+			{
+				Nodes.resize(Nodes.size() + 1);
+				for (int i = 0; i < 4; i++)
+				{
+					//std::cout << "Reverse MinX: " << ((BVHTreeNodeMinX + (float)GeometrySection.m_BitOffset[0]) / BitScale.x) << ", MaxX:" << ((BVHTreeNodeMaxX + (float)GeometrySection.m_BitOffset[0]) / BitScale.x) << std::endl;;
+
+					Nodes.back().mMin[i] = glm::vec3(((TreeNode.m_TransposedFourAabbs8.m_MinX[i] + (float)GeometrySection.m_BitOffset[0]) / BitScale.x),
+						((TreeNode.m_TransposedFourAabbs8.m_MinY[i] + (float)GeometrySection.m_BitOffset[1]) / BitScale.y),
+						((TreeNode.m_TransposedFourAabbs8.m_MinZ[i] + (float)GeometrySection.m_BitOffset[2]) / BitScale.z));
+
+					Nodes.back().mMax[i] = glm::vec3(((TreeNode.m_TransposedFourAabbs8.m_MaxX[i] + (float)GeometrySection.m_BitOffset[0]) / BitScale.x),
+						((TreeNode.m_TransposedFourAabbs8.m_MaxY[i] + (float)GeometrySection.m_BitOffset[1]) / BitScale.y),
+						((TreeNode.m_TransposedFourAabbs8.m_MaxZ[i] + (float)GeometrySection.m_BitOffset[2]) / BitScale.z));
+				}
+				Nodes.back().mIsLeaf = TreeNode.m_Data[2] > TreeNode.m_Data[3];
+			}
+
+			for (size_t i = 0; i < GeometrySection.m_SectionBvh.m_Elements.size(); i++)
+			{
+				if (!Nodes[i].mIsLeaf)
+				{
+					for (int j = 0; j < 4; j++)
+					{
+						if (Nodes[i].mMax[j].x > Nodes[i].mMin[j].x && Nodes[i].mMax[j].y > Nodes[i].mMin[j].y && Nodes[i].mMax[j].z > Nodes[i].mMin[j].z)
+							Nodes[i].mChildren[j] = &Nodes[GeometrySection.m_SectionBvh.m_Elements[i].m_Data[j]];
+					}
+				}
+				else
+				{
+					for (int j = 0; j < 4; j++)
+					{
+						Nodes[i].mPrimitiveIndices[j] = GeometrySection.m_SectionBvh.m_Elements[i].m_Data[j];
+					}
+				}
+			}
+			std::cout << "BUILT BVH, INJECTING...\n";
+			GeometrySection.InjectBVH(Nodes);
+		}
+		Util::WriteFile(Editor::GetWorkingDirFile("BVHInjection.bphsh"), Shape.ToBinary());
+	}*/
+	
+	//Shape.GetMeshShape().m_GeometrySections.m_Elements[0].m_InteriorPrimitiveBitField.m_Elements.clear();
+	//Util::WriteFile(Editor::GetWorkingDirFile("PhiveShapeRegen.bphsh"), Shape.ToBinary());
+
+	{
+		GLBfres* Model = GLBfresLibrary::GetModel(BfresLibrary::GetModel("DgnObj_Small_Warpin_B.DgnObj_Small_Warpin_B_02"));
+		std::vector<glm::vec3> Vertices;
+		std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>> Indices;
+		uint32_t IndexOffset = 0;
+
+		for (size_t SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
+		{
+			std::vector<glm::vec4> Positions = Model->mBfres->Models.GetByIndex(0).Value.Shapes.GetByIndex(SubModelIndex).Value.Vertices;
+			uint32_t Offset = Vertices.size();
+			Vertices.resize(Vertices.size() + Positions.size());
+
+			for (size_t i = 0; i < Positions.size(); i++)
+			{
+				Vertices[Offset + i] = glm::vec3(Positions[i].x, Positions[i].y, Positions[i].z);
+			}
+
+			std::vector<uint32_t> Triangles = Model->mBfres->Models.GetByIndex(0).Value.Shapes.GetByIndex(SubModelIndex).Value.Meshes[0].GetIndices();
+			Offset = Indices.size();
+			Indices.resize(Indices.size() + (Triangles.size() / 3));
+			for (size_t i = 0; i < Triangles.size() / 3; i++)
+			{
+				Indices[Offset + i] = std::make_pair(std::make_tuple(Triangles[i * 3] + IndexOffset, Triangles[i * 3 + 1] + IndexOffset, Triangles[i * 3 + 2] + IndexOffset), 0);
+			}
+
+			IndexOffset += Positions.size();
+		}
+
+		PhiveShape2 Shape(Util::ReadFile(Editor::GetWorkingDirFile("PotCollisionGeneratedByTotK_Materials.bphsh")));
+		Shape.InjectModel(Vertices, Indices);
+		std::vector<unsigned char> Bytes = Shape.ToBinary();
+		Util::WriteFile(Editor::GetWorkingDirFile("LocalGenerator.bphsh"), Bytes);
+		ZStdFile::Compress(Bytes, ZStdFile::Dictionary::Base).WriteToFile(Editor::GetWorkingDirFile("Save/Phive/Shape/Dcc/CollisionTest_DgnObj_Small_BoxFloor_A_07__Physical_Col.Nin_NX_NVN.bphsh.zs"));
+	}
 
 	while (!UI::ShouldWindowClose())
 	{

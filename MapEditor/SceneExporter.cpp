@@ -11,11 +11,11 @@ SceneExporter::Settings SceneExporter::mSettings;
 
 void SceneExporter::ExportScene()
 {
-	std::vector<std::vector<glm::vec3>> Vertices;
+	std::vector<std::vector<glm::vec3>> Vertices; //Vertex & UV
 	std::vector<std::vector<uint32_t>> Indices;
-	std::vector<std::string> Names;
+	std::vector<Actor*> Actors;
 
-	auto GenereateNavMeshModel = [&Names, &Vertices, &Indices](Actor& SceneActor)
+	auto GenereateNavMeshModel = [&Actors, &Vertices, &Indices](Actor& SceneActor)
 		{
 			if (SceneActor.Model->mBfres->mDefaultModel)
 				return;
@@ -34,16 +34,6 @@ void SceneExporter::ExportScene()
 			Vertices.resize(Vertices.size() + 1);
 			Indices.resize(Indices.size() + 1);
 
-			glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
-
-			GLMModel = glm::translate(GLMModel, glm::vec3(SceneActor.Translate.GetX(), SceneActor.Translate.GetY(), SceneActor.Translate.GetZ()));
-
-			GLMModel = glm::rotate(GLMModel, glm::radians(SceneActor.Rotate.GetZ()), glm::vec3(0.0, 0.0f, 1.0));
-			GLMModel = glm::rotate(GLMModel, glm::radians(SceneActor.Rotate.GetY()), glm::vec3(0.0f, 1.0, 0.0));
-			GLMModel = glm::rotate(GLMModel, glm::radians(SceneActor.Rotate.GetX()), glm::vec3(1.0, 0.0f, 0.0));
-
-			GLMModel = glm::scale(GLMModel, glm::vec3(SceneActor.Scale.GetX(), SceneActor.Scale.GetY(), SceneActor.Scale.GetZ()));
-
 			BfresFile::Model& Model = SceneActor.Model->mBfres->Models.GetByIndex(0).Value;
 
 			for (auto& [Key, Val] : Model.Shapes.Nodes)
@@ -51,9 +41,7 @@ void SceneExporter::ExportScene()
 				uint32_t IndexOffset = Vertices.back().size();
 				for (glm::vec4 Pos : Val.Value.Vertices)
 				{
-					glm::vec4 Vertex(Pos.x, Pos.y, Pos.z, 1.0f);
-					Vertex = GLMModel * Vertex;
-					Vertices.back().push_back(glm::vec3(Vertex.x, Vertex.y, Vertex.z));
+					Vertices.back().push_back(glm::vec3(Pos.x, Pos.y, Pos.z));
 				}
 				for (uint32_t Index : Val.Value.Meshes[0].GetIndices())
 				{
@@ -61,7 +49,7 @@ void SceneExporter::ExportScene()
 				}
 			}
 
-			Names.push_back(SceneActor.Gyml);
+			Actors.push_back(&SceneActor);
 		};
 
 	int32_t Index = -1;
@@ -76,20 +64,18 @@ void SceneExporter::ExportScene()
 		}
 	}
 
-	glm::vec3 SmallestVertex(
+	glm::vec3 SmallestPos(
 		std::numeric_limits<float>::max(),
 		std::numeric_limits<float>::max(),
 		std::numeric_limits<float>::max()
 	);
 
 	// Iterate through each vector and compare
-	for (std::vector<glm::vec3>& Vec : Vertices) {
-		for (glm::vec3 Vertex : Vec)
-		{
-			if (Vertex.x < SmallestVertex.x) SmallestVertex.x = Vertex.x;
-			if (Vertex.y < SmallestVertex.y) SmallestVertex.y = Vertex.y;
-			if (Vertex.z < SmallestVertex.z) SmallestVertex.z = Vertex.z;
-		}
+	for (uint32_t i = 0; i < Vertices.size(); i++) {
+
+		if (Actors[i]->Translate.GetX() < SmallestPos.x) SmallestPos.x = Actors[i]->Translate.GetX();
+		if (Actors[i]->Translate.GetY() < SmallestPos.y) SmallestPos.y = Actors[i]->Translate.GetY();
+		if (Actors[i]->Translate.GetZ() < SmallestPos.z) SmallestPos.z = Actors[i]->Translate.GetZ();
 	}
 
 	uint32_t ModelCount = 0;
@@ -99,11 +85,16 @@ void SceneExporter::ExportScene()
 	{
 		Writer.WriteInteger(Vec.size(), sizeof(uint32_t));
 		Writer.WriteInteger(Indices[ModelCount].size() / 3, sizeof(uint32_t));
+		float Pos[] = { 
+			Actors[ModelCount]->Translate.GetX() - SmallestPos.x, 
+			Actors[ModelCount]->Translate.GetY() - SmallestPos.y, 
+			Actors[ModelCount]->Translate.GetZ() - SmallestPos.z
+		};
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(Pos), sizeof(float) * 3);
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(Actors[ModelCount]->Rotate.GetRawData()), sizeof(float) * 3);
+		Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(Actors[ModelCount]->Scale.GetRawData()), sizeof(float) * 3);
 		for (glm::vec3& Vertex : Vec)
 		{
-			if(mSettings.mAlignToZero)
-				Vertex -= SmallestVertex;
-
 			Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&Vertex.x), sizeof(float) * 3);
 		}
 		for (size_t i = 0; i < Indices[ModelCount].size() / 3; i++)
@@ -112,8 +103,8 @@ void SceneExporter::ExportScene()
 			Writer.WriteInteger(Indices[ModelCount][i * 3 + 1], sizeof(uint32_t));
 			Writer.WriteInteger(Indices[ModelCount][i * 3 + 2], sizeof(uint32_t));
 		}
-		Writer.WriteInteger(Names[ModelCount].length(), sizeof(uint32_t));
-		Writer.WriteRawUnsafeFixed(Names[ModelCount].c_str(), Names[ModelCount].length());
+		Writer.WriteInteger(Actors[ModelCount]->Gyml.length(), sizeof(uint32_t));
+		Writer.WriteRawUnsafeFixed(Actors[ModelCount]->Gyml.c_str(), Actors[ModelCount]->Gyml.length());
 		ModelCount++;
 	}
 

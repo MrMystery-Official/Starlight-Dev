@@ -67,6 +67,8 @@ glm::vec3 UIMapView::mActorPainterRotMin(0.0f, 0.0f, 0.0f);
 glm::vec3 UIMapView::mActorPainterRotMax(5.0f, 90.0f, 5.0f);
 std::vector<UIMapView::ActorPainterActorEntry> UIMapView::mActorPainterActorEntries;
 
+std::vector<Mesh> UIMapView::mDebugMeshes;
+
 void UIMapView::GLFWKeyCallback(GLFWwindow* Window, int Key, int Scancode, int Action, int Mods)
 {
 	if (ImGui::GetIO().WantTextInput || CameraView.IsInCameraMovement() || Action != GLFW_PRESS)
@@ -117,7 +119,7 @@ void UIMapView::GLFWKeyCallback(GLFWwindow* Window, int Key, int Scancode, int A
 	}
 }
 
-glm::vec3 getRayFromMouse(double mouseX, double mouseY, const glm::mat4& projectionMatrix, const glm::mat4& viewMatrix, int screenWidth, int screenHeight) {
+glm::vec3 UIMapView::GetRayFromMouse(double mouseX, double mouseY, const glm::mat4& projectionMatrix, const glm::mat4& viewMatrix, int screenWidth, int screenHeight) {
 	// Convert mouse coordinates to normalized device coordinates
 	float x = (2.0f * mouseX) / screenWidth - 1.0f;
 	float y = 1.0f - (2.0f * mouseY) / screenHeight;
@@ -132,7 +134,7 @@ glm::vec3 getRayFromMouse(double mouseX, double mouseY, const glm::mat4& project
 	return glm::normalize(rayWorld);
 }
 
-bool rayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, glm::vec3 VertexA, glm::vec3 VertexB, glm::vec3 VertexC, float& t) {
+bool UIMapView::RayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, glm::vec3 VertexA, glm::vec3 VertexB, glm::vec3 VertexC, float& t) {
 	const float EPSILON = 0.0000001f;
 	glm::vec3 edge1 = VertexB - VertexA;
 	glm::vec3 edge2 = VertexC - VertexA;
@@ -156,7 +158,7 @@ bool rayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, g
 	return t > EPSILON;
 }
 
-glm::vec3 findTerrainIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDir, Actor* TerrainActor) {
+glm::vec3 UIMapView::FindTerrainIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDir, Actor* TerrainActor) {
 	float closestT = std::numeric_limits<float>::max();
 	glm::vec3 intersection;
 	bool found = false;
@@ -170,7 +172,7 @@ glm::vec3 findTerrainIntersection(const glm::vec3& rayOrigin, const glm::vec3& r
 			glm::vec4 VertexA = Val.Value.Vertices[Indices[i * 3]] + glm::vec4(TerrainActor->Translate.GetX(), TerrainActor->Translate.GetY(), TerrainActor->Translate.GetZ(), 0.0f);
 			glm::vec4 VertexB = Val.Value.Vertices[Indices[i * 3 + 1]] + glm::vec4(TerrainActor->Translate.GetX(), TerrainActor->Translate.GetY(), TerrainActor->Translate.GetZ(), 0.0f);
 			glm::vec4 VertexC = Val.Value.Vertices[Indices[i * 3 + 2]] + glm::vec4(TerrainActor->Translate.GetX(), TerrainActor->Translate.GetY(), TerrainActor->Translate.GetZ(), 0.0f);
-			if (rayTriangleIntersect(rayOrigin, rayDir, glm::vec3(VertexA.x, VertexA.y, VertexA.z), glm::vec3(VertexB.x, VertexB.y, VertexB.z), glm::vec3(VertexC.x, VertexC.y, VertexC.z), t))
+			if (RayTriangleIntersect(rayOrigin, rayDir, glm::vec3(VertexA.x, VertexA.y, VertexA.z), glm::vec3(VertexB.x, VertexB.y, VertexB.z), glm::vec3(VertexC.x, VertexC.y, VertexC.z), t))
 			{
 				if (t < closestT) {
 					closestT = t;
@@ -184,7 +186,7 @@ glm::vec3 findTerrainIntersection(const glm::vec3& rayOrigin, const glm::vec3& r
 	return found ? intersection : glm::vec3(0.0f);
 }
 
-std::pair<glm::vec3, glm::vec3> findTerrainIntersectionAndNormalVec(const glm::vec3& rayOrigin, const glm::vec3& rayDir, Actor* TerrainActor) {
+std::pair<glm::vec3, glm::vec3> UIMapView::FindTerrainIntersectionAndNormalVec(const glm::vec3& rayOrigin, const glm::vec3& rayDir, Actor* TerrainActor) {
 	float closestT = std::numeric_limits<float>::max();
 	glm::vec3 intersection;
 	glm::vec3 normal;
@@ -204,7 +206,7 @@ std::pair<glm::vec3, glm::vec3> findTerrainIntersectionAndNormalVec(const glm::v
 			glm::vec3 NewVertexB(VertexB.x, VertexB.y, VertexB.z);
 			glm::vec3 NewVertexC(VertexC.x, VertexC.y, VertexC.z);
 			
-			if (rayTriangleIntersect(rayOrigin, rayDir, NewVertexA, NewVertexB, NewVertexC, t))
+			if (RayTriangleIntersect(rayOrigin, rayDir, NewVertexA, NewVertexB, NewVertexC, t))
 			{
 				if (t < closestT) {
 					closestT = t;
@@ -219,7 +221,7 @@ std::pair<glm::vec3, glm::vec3> findTerrainIntersectionAndNormalVec(const glm::v
 	return found ? std::make_pair(intersection, glm::normalize(normal)) : std::make_pair(glm::vec3(0.0f), glm::vec3(0.0f));
 }
 
-float CalculateModelYOffset(Actor& Actor)
+float UIMapView::CalculateModelYOffset(Actor& Actor)
 {
 	float SmallestY = std::numeric_limits<float>::max();
 	for (auto& [Key, Val] : Actor.Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes)
@@ -234,7 +236,7 @@ float CalculateModelYOffset(Actor& Actor)
 	return SmallestY;
 }
 
-glm::vec3 normalToEuler(const glm::vec3& normal) {
+glm::vec3 UIMapView::NormalToEuler(const glm::vec3& normal) {
 	// Ensure the normal is normalized
 	glm::vec3 n = glm::normalize(normal);
 
@@ -260,9 +262,9 @@ void UIMapView::ProcessActorPainter(double XPos, double YPos, int ScreenWidth, i
 	if (mActorPainterTerrain == nullptr || CameraView.IsInCameraMovement() || ImGui::IsAnyItemHovered())
 		return;
 
-	glm::vec3 rayDir = getRayFromMouse(XPos, YPos, CameraView.Projection, CameraView.View, ScreenWidth, ScreenHeight);
+	glm::vec3 rayDir = GetRayFromMouse(XPos, YPos, CameraView.Projection, CameraView.View, ScreenWidth, ScreenHeight);
 	//std::cout << rayDir.x << ", " << rayDir.y << ", " << rayDir.z << std::endl;
-	glm::vec3 intersection = findTerrainIntersection(CameraView.Position, rayDir, mActorPainterTerrain);
+	glm::vec3 intersection = FindTerrainIntersection(CameraView.Position, rayDir, mActorPainterTerrain);
 
 	if (intersection != glm::vec3(0.0f)) {
 		// Intersection found, use the coordinates
@@ -270,13 +272,12 @@ void UIMapView::ProcessActorPainter(double XPos, double YPos, int ScreenWidth, i
 
 		InstancedShader->Activate();
 
-		std::vector<glm::mat4> InstanceMatrix;
+		std::vector<glm::mat4> InstanceMatrix(1);
 
-		glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+		glm::mat4& GLMModel = InstanceMatrix[0];
+		GLMModel = glm::mat4(1.0f); // Identity matrix
 
 		GLMModel = glm::translate(GLMModel, intersection);
-
-		InstanceMatrix.push_back(GLMModel);
 
 		GLBfresLibrary::GetModel(BfresLibrary::GetModel("Default"))->Draw(InstanceMatrix, InstancedShader);
 
@@ -294,7 +295,7 @@ void UIMapView::ProcessActorPainter(double XPos, double YPos, int ScreenWidth, i
 
 				Pos.y += 100.0f;
 
-				std::pair<glm::vec3, glm::vec3> ActorTerrainIntersection = findTerrainIntersectionAndNormalVec(Pos, rayDir, mActorPainterTerrain);
+				std::pair<glm::vec3, glm::vec3> ActorTerrainIntersection = FindTerrainIntersectionAndNormalVec(Pos, rayDir, mActorPainterTerrain);
 
 				if (ActorTerrainIntersection.first != glm::vec3(0.0f))
 				{
@@ -330,7 +331,7 @@ void UIMapView::ProcessActorPainter(double XPos, double YPos, int ScreenWidth, i
 					NewActor.Scale.SetY(mActorPainterScaleMin.y + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (mActorPainterScaleMax.y - mActorPainterScaleMin.y))));
 					NewActor.Scale.SetZ(mActorPainterScaleMin.z + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (mActorPainterScaleMax.z - mActorPainterScaleMin.z))));
 
-					glm::vec3 TerrainNormalRot = normalToEuler(ActorTerrainIntersection.second);
+					glm::vec3 TerrainNormalRot = NormalToEuler(ActorTerrainIntersection.second);
 
 					NewActor.Rotate.SetX(TerrainNormalRot.x + mActorPainterRotMin.x + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (mActorPainterRotMax.x - mActorPainterRotMin.x))));
 					NewActor.Rotate.SetY(TerrainNormalRot.y + mActorPainterRotMin.y + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (mActorPainterRotMax.y - mActorPainterRotMin.y))));
@@ -551,9 +552,10 @@ void UIMapView::DrawActorPainterMenu(float w, ImVec2 Pos)
 
 void UIMapView::DrawActor(Actor& Actor, Shader* Shader)
 {
-	std::vector<glm::mat4> InstanceMatrix;
+	std::vector<glm::mat4> InstanceMatrix(1);
 
-	glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+	glm::mat4& GLMModel = InstanceMatrix[0];
+	GLMModel = glm::mat4(1.0f); // Identity matrix
 
 	GLMModel = glm::translate(GLMModel, glm::vec3(Actor.Translate.GetX(), Actor.Translate.GetY(), Actor.Translate.GetZ()));
 
@@ -563,8 +565,6 @@ void UIMapView::DrawActor(Actor& Actor, Shader* Shader)
 
 	GLMModel = glm::scale(GLMModel, glm::vec3(Actor.Scale.GetX(), Actor.Scale.GetY(), Actor.Scale.GetZ()));
 
-	InstanceMatrix.push_back(GLMModel);
-
 	Actor.Model->Draw(InstanceMatrix, Shader);
 }
 
@@ -573,7 +573,7 @@ void UIMapView::DrawInstancedActor(GLBfres* Model, std::vector<Actor*>& ActorPtr
 	std::vector<glm::mat4> InstanceMatrices(ActorPtrs.size());
 
 	int Shrinking = 0;
-	for (int i = 0; i < ActorPtrs.size(); i++)
+	for (size_t i = 0; i < ActorPtrs.size(); i++)
 	{
 		if ((ActorPtrs[i]->MergedActorParent == UIOutliner::SelectedActor && UIOutliner::SelectedActor != nullptr) || ActorPtrs[i] == UIOutliner::SelectedActor || !Frustum::SphereInFrustum(ActorPtrs[i]->Translate.GetX(), ActorPtrs[i]->Translate.GetY(), ActorPtrs[i]->Translate.GetZ(), ActorPtrs[i]->Model->mBfres->Models.GetByIndex(0).Value.BoundingBoxSphereRadius * std::fmax(std::fmax(ActorPtrs[i]->Scale.GetX(), ActorPtrs[i]->Scale.GetY()), ActorPtrs[i]->Scale.GetZ())))
 		{
@@ -591,7 +591,7 @@ void UIMapView::DrawInstancedActor(GLBfres* Model, std::vector<Actor*>& ActorPtr
 
 		InstanceMatrices[i - Shrinking] = glm::scale(InstanceMatrices[i - Shrinking], glm::vec3(ActorPtrs[i]->Scale.GetX(), ActorPtrs[i]->Scale.GetY(), ActorPtrs[i]->Scale.GetZ()));
 	}
-
+	
 	if (Shrinking > 0)
 		InstanceMatrices.resize(InstanceMatrices.size() - Shrinking);
 
@@ -634,7 +634,10 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 
 			if (!CurrentActor.IsUMii)
 			{
-				glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+				std::vector<glm::mat4> InstanceMatrix(1);
+
+				glm::mat4& GLMModel = InstanceMatrix[0];
+				GLMModel = glm::mat4(1.0f); // Identity matrix
 
 				GLMModel = glm::translate(GLMModel, glm::vec3(CurrentActor.Translate.GetX(), CurrentActor.Translate.GetY(), CurrentActor.Translate.GetZ()));
 
@@ -644,8 +647,6 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 
 				GLMModel = glm::scale(GLMModel, glm::vec3(CurrentActor.Scale.GetX(), CurrentActor.Scale.GetY(), CurrentActor.Scale.GetZ()));
 
-				std::vector<glm::mat4> InstanceMatrix;
-				InstanceMatrix.push_back(GLMModel);
 				CurrentActor.Model->Draw(InstanceMatrix, PickingShader);
 			}
 			else
@@ -672,7 +673,10 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 				int G = (MergedActorIndex & 0x0000FF00) >> 8;
 				int B = (MergedActorIndex & 0x00FF0000) >> 16;
 
-				glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+				std::vector<glm::mat4> InstanceMatrix(1);
+
+				glm::mat4& GLMModel = InstanceMatrix[0];
+				GLMModel = glm::mat4(1.0f); // Identity matrix
 
 				GLMModel = glm::translate(GLMModel, glm::vec3(MergedActor.Translate.GetX(), MergedActor.Translate.GetY(), MergedActor.Translate.GetZ()));
 
@@ -684,8 +688,6 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 
 				glUniform4f(glGetUniformLocation(PickingShader->ID, "PickingColor"), R / 255.0f, G / 255.0f, B / 255.0f, 1.0f);
 
-				std::vector<glm::mat4> InstanceMatrix;
-				InstanceMatrix.push_back(GLMModel);
 				MergedActor.Model->Draw(InstanceMatrix, PickingShader);
 
 				MergedActorIds.insert({ MergedActorIndex, &MergedActor });
@@ -721,6 +723,11 @@ void UIMapView::SelectActorByClicking(ImVec2 SceneWindowSize, ImVec2 MousePos)
 
 		glReadBuffer(GL_NONE);
 	}
+}
+
+void UIMapView::DrawRails()
+{
+
 }
 
 void UIMapView::DrawMapViewWindow()
@@ -840,6 +847,21 @@ void UIMapView::DrawMapViewWindow()
 	if (mEnableActorPainter)
 	{
 		ProcessActorPainter(MousePos.x, MousePos.y, ScreenSize.x, ScreenSize.y);
+	}
+
+	if (!mDebugMeshes.empty())
+	{
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		NavMeshShader->Activate();
+		CameraView.Matrix(NavMeshShader, "camMatrix");
+
+		for (Mesh& DebugMesh : mDebugMeshes)
+		{
+			glm::mat4 GLMModel = glm::mat4(1.0f);
+			glUniformMatrix4fv(glGetUniformLocation(NavMeshShader->ID, "modelMatrix"), 1, GL_FALSE, glm::value_ptr(GLMModel));
+			DebugMesh.DrawRaw();
+		}
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	}
 
 	/*

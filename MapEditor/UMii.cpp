@@ -101,8 +101,11 @@ void UMii::Draw(Vector3F Translate, Vector3F Rotate, Vector3F Scale, Shader* Sha
 			Element.Model = BfresLibrary::GetModel("Default");
 		}
 		*/
+		
+		std::vector<glm::mat4> Instances(1);
 
-		glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+		glm::mat4& GLMModel = Instances[0];
+		GLMModel = glm::mat4(1.0f); // Identity matrix
 
 		GLMModel = glm::translate(GLMModel, glm::vec3(Translate.GetX(), Translate.GetY(), Translate.GetZ()));
 
@@ -111,9 +114,6 @@ void UMii::Draw(Vector3F Translate, Vector3F Rotate, Vector3F Scale, Shader* Sha
 		GLMModel = glm::rotate(GLMModel, glm::radians(Rotate.GetX()), glm::vec3(1.0, 0.0f, 0.0));
 
 		GLMModel = glm::scale(GLMModel, glm::vec3(Scale.GetX(), Scale.GetY(), Scale.GetZ()));
-
-		std::vector<glm::mat4> Instances;
-		Instances.push_back(GLMModel);
 
 		Element.Model->Draw(Instances, Shader);
 	}

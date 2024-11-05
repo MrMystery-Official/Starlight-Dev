@@ -67,6 +67,9 @@ void UITools::DrawToolsWindow()
 			if (SceneMgr::SceneType != SceneMgr::Type::SmallDungeon && SceneMgr::SceneType != SceneMgr::Type::LargeDungeon && SceneMgr::SceneType != SceneMgr::Type::NormalStage)
 				ImGui::EndDisabled();
 
+			if (ImGui::Checkbox("Cull faces", &UIMapView::RenderSettings.CullFaces))
+				GLBfres::mDrawFunc = UIMapView::RenderSettings.CullFaces ? GLBfres::DrawCulled : GLBfres::DrawNotCulled;
+
 			ImGui::Unindent();
 		}
 		if (SceneMgr::SceneType == SceneMgr::Type::SmallDungeon && !Editor::Identifier.empty())

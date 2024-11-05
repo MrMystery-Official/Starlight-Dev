@@ -80,7 +80,7 @@ void Camera::Inputs(float FramesPerSecond, ImVec2 WindowPos)
 		{
 			Position += NewSpeed * glm::normalize(glm::cross(Orientation, Up));
 		}
-		if (glfwGetKey(pWindow, GLFW_KEY_E) == GLFW_PRESS)
+		if (glfwGetKey(pWindow, GLFW_KEY_SPACE) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_E) == GLFW_PRESS)
 		{
 			Position += NewSpeed * Up;
 		}
@@ -116,6 +116,14 @@ void Camera::Inputs(float FramesPerSecond, ImVec2 WindowPos)
 			if (glfwGetKey(pWindow, GLFW_KEY_D) == GLFW_PRESS)
 			{
 				Position += NewSpeed * glm::normalize(glm::cross(Orientation, Up));
+			}
+			if (glfwGetKey(pWindow, GLFW_KEY_SPACE) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_E) == GLFW_PRESS)
+			{
+				Position += NewSpeed * Up;
+			}
+			if (glfwGetKey(pWindow, GLFW_KEY_Q) == GLFW_PRESS)
+			{
+				Position += NewSpeed * -Up;
 			}
 
 			// Handles mouse inputs

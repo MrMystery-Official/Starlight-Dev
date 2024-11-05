@@ -4,6 +4,7 @@
 #include "GLFormatHelper.h"
 #include "Util.h"
 #include "Editor.h"
+#include "UIMapView.h"
 
 std::unordered_map<BfresFile::BfresAttribFormat, GLBfres::FormatInfo> GLBfres::mFormatList =
 {
@@ -49,6 +50,8 @@ std::unordered_map<std::string, uint32_t> GLBfres::mAttributeLocations =
 	{"_u0", 3},
 	{"_instanceMatrix", 4},
 };
+
+void (*GLBfres::mDrawFunc)(GLBfres*, std::vector<glm::mat4>&, Shader*) = GLBfres::DrawCulled;
 
 void GLBfres::LoadFallbackTexture(GLMaterial& Material)
 {
@@ -251,46 +254,78 @@ GLBfres::GLBfres(BfresFile* Bfres, GLenum TextureFilter) : mBfres(Bfres)
 
 void GLBfres::Draw(std::vector<glm::mat4>& ModelMatrices, Shader* Shader)
 {
-	mInstanceMatrix.SetData<glm::mat4>(ModelMatrices);
+	mDrawFunc(this, ModelMatrices, Shader);
+}
 
-	for (uint16_t i : mOpaqueObjects)
+void GLBfres::DrawCulled(GLBfres* Parent, std::vector<glm::mat4>& ModelMatrices, Shader* Shader)
+{
+	Parent->mInstanceMatrix.SetData<glm::mat4>(ModelMatrices);
+
+	for (uint16_t i : Parent->mOpaqueObjects)
 	{
-		mShapeVAOs[i].Enable(Shader);
-		mShapeVAOs[i].Use();
+		Parent->mShapeVAOs[i].Enable(Shader);
+		Parent->mShapeVAOs[i].Use();
 
-		mMaterials[i].mAlbedoTexture->Bind();
+		Parent->mMaterials[i].mAlbedoTexture->Bind();
 
-		if (mMaterials[i].mRenderStateDisplayFace != GL_NONE)
+		if (Parent->mMaterials[i].mRenderStateDisplayFace != GL_NONE)
 		{
 			glEnable(GL_CULL_FACE);
-			glCullFace(mMaterials[i].mRenderStateDisplayFace);
+			glCullFace(Parent->mMaterials[i].mRenderStateDisplayFace);
 		}
 		else
 		{
 			glDisable(GL_CULL_FACE);
 		}
 
-		glDrawElementsInstanced(GL_TRIANGLES, mIndexBuffers[i].second, mMaterials[i].mIndexFormat, 0, ModelMatrices.size());
+		glDrawElementsInstanced(GL_TRIANGLES, Parent->mIndexBuffers[i].second, Parent->mMaterials[i].mIndexFormat, 0, ModelMatrices.size());
 	}
 
-	for (uint16_t i : mTransparentObjects)
+	for (uint16_t i : Parent->mTransparentObjects)
 	{
-		mShapeVAOs[i].Enable(Shader);
-		mShapeVAOs[i].Use();
+		Parent->mShapeVAOs[i].Enable(Shader);
+		Parent->mShapeVAOs[i].Use();
 
-		mMaterials[i].mAlbedoTexture->Bind();
+		Parent->mMaterials[i].mAlbedoTexture->Bind();
 
-		if (mMaterials[i].mRenderStateDisplayFace != GL_NONE)
+		if (Parent->mMaterials[i].mRenderStateDisplayFace != GL_NONE)
 		{
 			glEnable(GL_CULL_FACE);
-			glCullFace(mMaterials[i].mRenderStateDisplayFace);
+			glCullFace(Parent->mMaterials[i].mRenderStateDisplayFace);
 		}
 		else
 		{
 			glDisable(GL_CULL_FACE);
 		}
 
-		glDrawElementsInstanced(GL_TRIANGLES, mIndexBuffers[i].second, mMaterials[i].mIndexFormat, 0, ModelMatrices.size());
+		glDrawElementsInstanced(GL_TRIANGLES, Parent->mIndexBuffers[i].second, Parent->mMaterials[i].mIndexFormat, 0, ModelMatrices.size());
+	}
+}
+
+void GLBfres::DrawNotCulled(GLBfres* Parent, std::vector<glm::mat4>& ModelMatrices, Shader* Shader)
+{
+	Parent->mInstanceMatrix.SetData<glm::mat4>(ModelMatrices);
+
+	glDisable(GL_CULL_FACE);
+
+	for (uint16_t i : Parent->mOpaqueObjects)
+	{
+		Parent->mShapeVAOs[i].Enable(Shader);
+		Parent->mShapeVAOs[i].Use();
+
+		Parent->mMaterials[i].mAlbedoTexture->Bind();
+
+		glDrawElementsInstanced(GL_TRIANGLES, Parent->mIndexBuffers[i].second, Parent->mMaterials[i].mIndexFormat, 0, ModelMatrices.size());
+	}
+
+	for (uint16_t i : Parent->mTransparentObjects)
+	{
+		Parent->mShapeVAOs[i].Enable(Shader);
+		Parent->mShapeVAOs[i].Use();
+
+		Parent->mMaterials[i].mAlbedoTexture->Bind();
+
+		glDrawElementsInstanced(GL_TRIANGLES, Parent->mIndexBuffers[i].second, Parent->mMaterials[i].mIndexFormat, 0, ModelMatrices.size());
 	}
 }
 

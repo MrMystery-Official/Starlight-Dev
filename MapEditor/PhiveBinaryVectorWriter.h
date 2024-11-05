@@ -13,7 +13,8 @@ public:
 
 	struct hkWriteable
 	{
-		virtual void Write(PhiveBinaryVectorWriter& Writer) = 0;
+		virtual void Write(PhiveBinaryVectorWriter& Writer) {};
+		virtual void Write(PhiveBinaryVectorWriter& Writer, unsigned int Offset) {};
 	};
 
 	std::map<std::string, uint32_t> mArrayOffsets;

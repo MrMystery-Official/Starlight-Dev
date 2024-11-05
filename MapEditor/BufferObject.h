@@ -20,7 +20,7 @@ public:
 	void SetData(std::vector<unsigned char> Data, GLuint BufferUsage = GL_STATIC_DRAW);
 
 	template<typename T>
-	void SetData(std::vector<T> Data, GLuint BufferUsage = GL_STATIC_DRAW)
+	void SetData(std::vector<T>& Data, GLuint BufferUsage = GL_STATIC_DRAW)
 	{
 		m_DataCount = Data.size();
 		m_DataStride = sizeof(T);

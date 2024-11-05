@@ -6,6 +6,8 @@
 #include <unordered_set>
 #include <array>
 #include "Logger.h"
+#include "UIMapView.h"
+#include "BVNode.h"
 
 std::pair<uint8_t, uint32_t> PhiveShape2::ReadBitFieldFlagsSize(uint32_t Input)
 {
@@ -615,21 +617,21 @@ void PhiveShape2::hkcdSimdTree::Write(BinaryVectorWriter& Writer, int32_t Offset
 
 void PhiveShape2::hknpTransposedFourAabbs8::Read(BinaryVectorReader& Reader)
 {
-	m_MinX = Reader.ReadUInt32();
-	m_MaxX = Reader.ReadUInt32();
-	m_MinY = Reader.ReadUInt32();
-	m_MaxY = Reader.ReadUInt32();
-	m_MinZ = Reader.ReadUInt32();
-	m_MaxZ = Reader.ReadUInt32();
+	Reader.ReadStruct(&m_MinX[0], sizeof(uint8_t) * 4);
+	Reader.ReadStruct(&m_MaxX[0], sizeof(uint8_t) * 4);
+	Reader.ReadStruct(&m_MinY[0], sizeof(uint8_t) * 4);
+	Reader.ReadStruct(&m_MaxY[0], sizeof(uint8_t) * 4);
+	Reader.ReadStruct(&m_MinZ[0], sizeof(uint8_t) * 4);
+	Reader.ReadStruct(&m_MaxZ[0], sizeof(uint8_t) * 4);
 }
 void PhiveShape2::hknpTransposedFourAabbs8::Write(BinaryVectorWriter& Writer, int32_t Offset)
 {
-	Writer.WriteInteger(m_MinX, sizeof(uint32_t));
-	Writer.WriteInteger(m_MaxX, sizeof(uint32_t));
-	Writer.WriteInteger(m_MinY, sizeof(uint32_t));
-	Writer.WriteInteger(m_MaxY, sizeof(uint32_t));
-	Writer.WriteInteger(m_MinZ, sizeof(uint32_t));
-	Writer.WriteInteger(m_MaxZ, sizeof(uint32_t));
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(m_MinX), sizeof(uint8_t) * 4);
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(m_MaxX), sizeof(uint8_t) * 4);
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(m_MinY), sizeof(uint8_t) * 4);
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(m_MaxY), sizeof(uint8_t) * 4);
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(m_MinZ), sizeof(uint8_t) * 4);
+	Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(m_MaxZ), sizeof(uint8_t) * 4);
 	std::cout << "WROTE hknpTransposedFourAabbs8\n";
 }
 
@@ -688,6 +690,57 @@ void PhiveShape2::hknpMeshShapeGeometrySectionInteriorPrimitiveBitField::Write(B
 	Writer.WriteInteger(m_BitField, sizeof(uint8_t));
 }
 
+void PhiveShape2::hknpMeshShapeGeometrySection::InjectBVH(std::vector<PhiveShape2::QuadBVHNode>& Nodes, glm::vec3 Min, glm::vec3 Max)
+{
+	m_SectionBvh.m_Elements.clear();
+	//Encoding bounding boxes
+	for (PhiveShape2::QuadBVHNode& Node : Nodes)
+	{
+		m_SectionBvh.m_Elements.resize(m_SectionBvh.m_Elements.size() + 1);
+		hknpAabb8TreeNode& TreeNode = m_SectionBvh.m_Elements.back();
+
+		std::vector<uint32_t> PrimitiveOrChild(4);
+		PrimitiveOrChild[0] = Node.mIsLeaf ? Node.mPrimitiveIndices[0] : (Node.mChildrenIndices[0] != 0xFFFF ? Node.mChildrenIndices[0] : 0);
+		PrimitiveOrChild[1] = Node.mIsLeaf ? Node.mPrimitiveIndices[1] : (Node.mChildrenIndices[1] != 0xFFFF ? Node.mChildrenIndices[1] : 0);
+		PrimitiveOrChild[2] = Node.mIsLeaf ? Node.mPrimitiveIndices[2] : (Node.mChildrenIndices[2] != 0xFFFF ? Node.mChildrenIndices[2] : 0);
+		PrimitiveOrChild[3] = Node.mIsLeaf ? Node.mPrimitiveIndices[3] : (Node.mChildrenIndices[3] != 0xFFFF ? Node.mChildrenIndices[3] : 0);
+
+		std::vector<std::pair<uint32_t, uint32_t>> IndexToPrimitive;
+		IndexToPrimitive.push_back({ 0, PrimitiveOrChild[0] });
+		IndexToPrimitive.push_back({ 1, PrimitiveOrChild[1] });
+		IndexToPrimitive.push_back({ 2, PrimitiveOrChild[2] });
+		IndexToPrimitive.push_back({ 3, PrimitiveOrChild[3] });
+
+		std::sort(IndexToPrimitive.begin(), IndexToPrimitive.end(), [](auto& left, auto& right) {
+			return left.second < right.second;
+			});
+
+		//If leaf, make sure data[2] is bigger than data[3]
+		if (Node.mIsLeaf)
+		{
+			if (IndexToPrimitive[3].second > IndexToPrimitive[2].second)
+			{
+				std::pair<uint32_t, uint32_t> Tmp = IndexToPrimitive[2];
+				IndexToPrimitive[2] = IndexToPrimitive[3];
+				IndexToPrimitive[3] = Tmp;
+			}
+		}
+
+		for (size_t i = 0; i < IndexToPrimitive.size(); i++)
+		{
+			TreeNode.m_TransposedFourAabbs8.m_MinX[i] = (uint8_t)(std::round((Node.mMin[IndexToPrimitive[i].first].x - Min.x) / (Max.x - Min.x) * 255.0f));
+			TreeNode.m_TransposedFourAabbs8.m_MaxX[i] = (uint8_t)(std::round((Node.mMax[IndexToPrimitive[i].first].x - Min.x) / (Max.x - Min.x) * 255.0f));
+
+			TreeNode.m_TransposedFourAabbs8.m_MinY[i] = (uint8_t)(std::round((Node.mMin[IndexToPrimitive[i].first].y - Min.y) / (Max.y - Min.y) * 255.0f));
+			TreeNode.m_TransposedFourAabbs8.m_MaxY[i] = (uint8_t)(std::round((Node.mMax[IndexToPrimitive[i].first].y - Min.y) / (Max.y - Min.y) * 255.0f));
+
+			TreeNode.m_TransposedFourAabbs8.m_MinZ[i] = (uint8_t)(std::round((Node.mMin[IndexToPrimitive[i].first].z - Min.z) / (Max.z - Min.z) * 255.0f));
+			TreeNode.m_TransposedFourAabbs8.m_MaxZ[i] = (uint8_t)(std::round((Node.mMax[IndexToPrimitive[i].first].z - Min.z) / (Max.z - Min.z) * 255.0f));
+
+			TreeNode.m_Data[i] = IndexToPrimitive[i].second;
+		}
+	}
+}
 void PhiveShape2::hknpMeshShapeGeometrySection::Read(BinaryVectorReader& Reader)
 {
 	m_SectionBvh.Read(Reader);
@@ -883,15 +936,21 @@ void PhiveShape2::ReadPhiveMaterials(BinaryVectorReader& Reader)
 	
 	for (uint32_t i = 0; i < MaterialCount; i++)
 	{
-		PhiveMaterial Material;
+		PhiveMaterialData::Material Material;
 
 		Reader.Seek(m_PhiveShapeHeader.m_TableOffset0 + i * 16, BinaryVectorReader::Position::Begin);
-		Material.Material = m_MaterialList[Reader.ReadUInt32()];
-		Material.SubMaterialIndex = Reader.ReadUInt32();
-		Material.MaterialFlags = Reader.ReadUInt64();
+		Material.mMaterialId = Reader.ReadUInt32();
+		Material.mUnknown0 = Reader.ReadUInt32();
+		uint64_t Flags = Reader.ReadUInt64();
+		for (size_t j = 0; j < PhiveMaterialData::mMaterialFlagMasks.size(); j++)
+		{
+			Material.mFlags[j] = (Flags & PhiveMaterialData::mMaterialFlagMasks[j]) == PhiveMaterialData::mMaterialFlagMasks[j];
+		}
 		
 		Reader.Seek(m_PhiveShapeHeader.m_TableOffset1 + i * 8, BinaryVectorReader::Position::Begin);
-		Material.CollisionFlags = Reader.ReadUInt64();
+		uint64_t CollisionFlags = Reader.ReadUInt64();
+
+		Material.mCollisionFlags[0] = true; //HitAll - 0xFFFFFFFF
 		
 		m_Materials[i] = Material;
 	}
@@ -1071,36 +1130,53 @@ std::pair<uint32_t, uint32_t> PhiveShape2::WriteMaterials(BinaryVectorWriter& Wr
 {
 	std::pair<uint32_t, uint32_t> Offsets;
 
-	auto GetMaterialIndex = [this](const std::string& Buffer)
-		{
-			auto Iter = std::find(m_MaterialList.begin(), m_MaterialList.end(), Buffer);
-			if (Iter != m_MaterialList.end())
-				return (int32_t)(Iter - m_MaterialList.begin());
-
-			return -1;
-		};
-
 	Offsets.first = Writer.GetPosition();
 
-	for (const PhiveMaterial Material : m_Materials)
+	for (size_t i = 0; i < m_Materials.size(); i++)
 	{
-		int32_t MaterialIndex = GetMaterialIndex(Material.Material);
-		if (MaterialIndex == -1)
+		Writer.WriteInteger(m_Materials[i].mMaterialId, sizeof(uint32_t));
+		Writer.WriteInteger(m_Materials[i].mUnknown0, sizeof(uint32_t));
+
+		uint64_t Flags = 0;
+
+		for (size_t j = 0; j < PhiveMaterialData::mMaterialFlagNames.size(); j++)
 		{
-			Logger::Error("PhiveShape", "Invalid material: " + Material.Material);
-			continue;
+			if (!m_Materials[i].mFlags[j])
+				continue;
+
+			Flags |= PhiveMaterialData::mMaterialFlagMasks[j];
 		}
-		Writer.WriteInteger(MaterialIndex, sizeof(uint32_t));
-		Writer.WriteInteger(Material.SubMaterialIndex, sizeof(uint32_t));
-		Writer.WriteInteger(Material.MaterialFlags, sizeof(uint64_t));
+
+		Writer.WriteInteger(Flags, sizeof(uint64_t));
 	}
 
 	Offsets.second = Writer.GetPosition();
 
-	for (const PhiveMaterial Material : m_Materials)
+	for (size_t i = 0; i < m_Materials.size(); i++)
 	{
-		Writer.WriteInteger(Material.CollisionFlags, sizeof(uint64_t));
+		uint64_t Filters = 0;
+		//Generating base
+		for (size_t j = 0; j < PhiveMaterialData::mMaterialFilterNames.size(); j++)
+		{
+			if (!m_Materials[i].mCollisionFlags[j])
+				continue;
+
+			if (PhiveMaterialData::mMaterialFilterIsBase[j])
+				Filters |= PhiveMaterialData::mMaterialFilterMasks[j];
+		}
+		//Applying filters
+		for (size_t j = 0; j < PhiveMaterialData::mMaterialFilterNames.size(); j++)
+		{
+			if (!m_Materials[i].mCollisionFlags[j])
+				continue;
+
+			if (!PhiveMaterialData::mMaterialFilterIsBase[j])
+				Filters &= PhiveMaterialData::mMaterialFilterMasks[j];
+		}
+		Writer.WriteInteger(0xFFFFFFFF, sizeof(uint32_t));
+		Writer.WriteInteger(Filters, sizeof(uint32_t));
 	}
+
 	Writer.Align(16);
 
 	return Offsets;
@@ -1144,6 +1220,9 @@ uint32_t PhiveShape2::WriteItemData(BinaryVectorWriter& Writer)
 	//SectionBvh
 	for (hknpMeshShapeGeometrySection& GeometrySection : m_HavokMeshShape.m_GeometrySections.m_Elements)
 	{
+		if (GeometrySection.m_SectionBvh.m_Elements.empty())
+			continue;
+
 		WriteItem(0x2D, 0x20, GeometrySection.m_SectionBvh.m_Elements[0].m_Offset - 0x50, GeometrySection.m_SectionBvh.m_Elements.size());
 	}
 
@@ -1162,6 +1241,9 @@ uint32_t PhiveShape2::WriteItemData(BinaryVectorWriter& Writer)
 	//InteriorPrimitiveBitField
 	for (hknpMeshShapeGeometrySection& GeometrySection : m_HavokMeshShape.m_GeometrySections.m_Elements)
 	{
+		if (GeometrySection.m_InteriorPrimitiveBitField.m_Elements.empty())
+			continue;
+
 		WriteItem(0x16, 0x20, GeometrySection.m_InteriorPrimitiveBitField.m_Elements[0].m_Offset - 0x50, GeometrySection.m_InteriorPrimitiveBitField.m_Elements.size());
 	}
 
@@ -1356,89 +1438,546 @@ std::vector<unsigned int> PhiveShape2::ToIndices()
 	return Indices;
 }
 
-void PhiveShape2::InjectModel(std::vector<float> Vertices, std::vector<unsigned char> Indices)
+void PhiveShape2::DecodeTreeNode(hknpMeshShapeGeometrySection& GeometrySection, hknpAabb8TreeNode& TreeNode, glm::vec3 ParentMin, glm::vec3 ParentMax)
 {
-	std::vector<hknpMeshShapeGeometrySectionPrimitive> Quads;
+	bool IsLeaf = TreeNode.m_Data[2] > TreeNode.m_Data[3];
 
-	for (size_t i = 0; i < Indices.size() / 3; i++)
-	{
-		hknpMeshShapeGeometrySectionPrimitive Primitive;
-		Primitive.m_IdA = Indices[i * 3];
-		Primitive.m_IdB = Indices[i * 3 + 1];
-		Primitive.m_IdC = Indices[i * 3 + 2];
-		Primitive.m_IdD = Indices[i * 3];
-		Quads.push_back(Primitive);
-	}
+	glm::vec3 Min[4];
+	glm::vec3 Max[4];
 
-	std::vector<std::vector<hknpMeshShapeGeometrySectionPrimitive>> PrimitiveSections;
-	PrimitiveSections.resize(1);
-	uint32_t PrimitiveCount = 0;
-	for (size_t i = 0; i < Quads.size(); i++)
+	for (int i = 0; i < 4; i++)
 	{
-		PrimitiveSections.back().push_back(Quads[i]);
-		PrimitiveCount++;
-		if (PrimitiveCount == 255)
+		//std::cout << "Reverse MinX: " << ((BVHTreeNodeMinX + (float)GeometrySection.m_BitOffset[0]) / BitScale.x) << ", MaxX:" << ((BVHTreeNodeMaxX + (float)GeometrySection.m_BitOffset[0]) / BitScale.x) << std::endl;;
+
+		Min[i] = glm::vec3(ParentMin.x + (TreeNode.m_TransposedFourAabbs8.m_MinX[i] / 255.0f) * (ParentMax.x - ParentMin.x),
+			ParentMin.y + (TreeNode.m_TransposedFourAabbs8.m_MinY[i] / 255.0f) * (ParentMax.y - ParentMin.y),
+			ParentMin.z + (TreeNode.m_TransposedFourAabbs8.m_MinZ[i] / 255.0f) * (ParentMax.z - ParentMin.z));
+
+		Max[i] = glm::vec3(ParentMin.x + (TreeNode.m_TransposedFourAabbs8.m_MaxX[i] / 255.0f) * (ParentMax.x - ParentMin.x),
+			ParentMin.y + (TreeNode.m_TransposedFourAabbs8.m_MaxY[i] / 255.0f) * (ParentMax.y - ParentMin.y),
+			ParentMin.z + (TreeNode.m_TransposedFourAabbs8.m_MaxZ[i] / 255.0f) * (ParentMax.z - ParentMin.z));
+
+		if (IsLeaf)
 		{
-			PrimitiveCount = 0;
-			PrimitiveSections.resize(PrimitiveSections.size() + 1);
-		}
-	}
+			std::vector<float> Vertices = {
+				Min[i].x, Min[i].y, Min[i].z, // 0: bottom-front-left
+				Max[i].x, Min[i].y, Min[i].z, // 1: bottom-front-right
+				Max[i].x, Min[i].y, Max[i].z, // 2: bottom-back-right
+				Min[i].x, Min[i].y, Max[i].z, // 3: bottom-back-left
+				Min[i].x, Max[i].y, Min[i].z, // 4: top-front-left
+				Max[i].x, Max[i].y, Min[i].z, // 5: top-front-right
+				Max[i].x, Max[i].y, Max[i].z, // 6: top-back-right
+				Min[i].x, Max[i].y, Max[i].z  // 7: top-back-left
+			};
+			std::vector<uint32_t> Indices = {
+				0, 1, 2,
+				0, 1, 3,
 
-	std::vector<std::vector<hknpMeshShapeGeometrySectionVertex16_3>> VertexBufferSections;
-	VertexBufferSections.resize(PrimitiveSections.size());
-	for (size_t i = 0; i < PrimitiveSections.size(); i++)
-	{
-		std::vector<uint32_t> WrittenVertices;
-	
-		auto IsVertexWritten = [&WrittenVertices](uint32_t Index)
-			{
-				return std::find(WrittenVertices.begin(), WrittenVertices.end(), Index) != WrittenVertices.end();
+				0, 1, 5,
+				0, 1, 4,
+
+				2, 3, 6,
+				2, 3, 7,
+
+				0, 3, 4,
+				0, 3, 7,
+
+				1, 2, 5,
+				1, 2, 6,
+
+				4, 5, 6,
+				4, 5, 7
 			};
 
-		for (const hknpMeshShapeGeometrySectionPrimitive& Primitive : PrimitiveSections[i])
-		{
-			auto WriteVertex = [&IsVertexWritten, &WrittenVertices, &VertexBufferSections, &Vertices, &i](uint32_t VertexId)
-				{
-					if (!IsVertexWritten(VertexId))
-					{
-						hknpMeshShapeGeometrySectionVertex16_3 Vertex;
-						Vertex.m_X = Vertices[VertexId * 3];
-						Vertex.m_Y = Vertices[VertexId * 3 + 1];
-						Vertex.m_Z = Vertices[VertexId * 3 + 2];
-						VertexBufferSections[i].push_back(Vertex);
-						WrittenVertices.push_back(VertexId);
-					}
-				};
-			WriteVertex(Primitive.m_IdA);
-			WriteVertex(Primitive.m_IdB);
-			WriteVertex(Primitive.m_IdC);
-			WriteVertex(Primitive.m_IdD);
+			UIMapView::mDebugMeshes.emplace_back(Vertices, Indices);
 		}
 	}
 
-	m_HavokMeshShape.m_GeometrySections.m_Elements.resize(VertexBufferSections.size());
-	for (size_t i = 0; i < VertexBufferSections.size(); i++)
+	if (!IsLeaf)
 	{
-		int16_t VertexOffsets[3] = { 0 };
-		float VertexOffsetFactor[3] = { 0 };
-
-		float SmallestVertex[3] = {VertexBufferSections[i][0].m_X, VertexBufferSections[i][0].m_Y, VertexBufferSections[i][0].m_Z};
-		for (const hknpMeshShapeGeometrySectionVertex16_3& Vertex : VertexBufferSections[i])
+		for (int i = 0; i < 4; i++)
 		{
-			SmallestVertex[0] = std::fmin(SmallestVertex[0], Vertex.m_X);
-			SmallestVertex[1] = std::fmin(SmallestVertex[1], Vertex.m_Y);
-			SmallestVertex[2] = std::fmin(SmallestVertex[2], Vertex.m_Z);
+			if(Max[i].x > Min[i].x && Max[i].y > Min[i].y && Max[i].z > Min[i].z)
+				DecodeTreeNode(GeometrySection, GeometrySection.m_SectionBvh.m_Elements[TreeNode.m_Data[i]], ParentMin, ParentMax);
 		}
-
-		for (hknpMeshShapeGeometrySectionVertex16_3& Vertex : VertexBufferSections[i])
-		{
-			Vertex.m_X += SmallestVertex[0] * -1.0f;
-			Vertex.m_Y += SmallestVertex[1] * -1.0f;
-			Vertex.m_Z += SmallestVertex[2] * -1.0f;
-		}
-
-
 	}
+}
+
+//NOTE: Materials need to be set up BEFORE injecting a new model, otherwise the shape tag table will be invalid and the user will be stuck at the loading screen
+void PhiveShape2::InjectModel(std::vector<glm::vec3> Vertices, std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>> Indices)
+{
+	float MaxVertexError = 1e-3f;
+
+	//VertexConversionUtil Setup
+	{
+		const float Step = std::pow(2.0f, (int)(*reinterpret_cast<uint32_t*>(&MaxVertexError) >> 23) - 126);
+		
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16Inv[0] = Step;
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16Inv[1] = Step;
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16Inv[2] = Step;
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16Inv[3] = Step;
+
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[0] = 1.0f / Step;
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[1] = 1.0f / Step;
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[2] = 1.0f / Step;
+		m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[3] = 1.0f / Step;
+	}
+
+	//Material setup
+	m_Materials.clear();
+	PhiveMaterialData::Material Material;
+	Material.mMaterialId = 0x07;
+	Material.mCollisionFlags[0] = true;
+	m_Materials.push_back(Material);
+
+	//Each of those are their own models. Furthermore, the vertex count does not exceed 255
+	uint32_t IndexOffset = 0;
+	std::vector<std::vector<glm::vec3>> VertexGroups;
+	std::vector<std::vector<std::tuple<uint32_t, uint32_t, uint32_t>>> IndexGroups;
+	VertexGroups.resize(1);
+	IndexGroups.resize(1);
+
+	auto WriteVertex = [](std::vector<glm::vec3>& VertexGroup, glm::vec3 Vertex)
+		{
+			for (size_t i = 0; i < VertexGroup.size(); i++)
+			{
+				if (VertexGroup[i] == Vertex)
+				{
+					return i;
+				}
+			}
+
+			VertexGroup.push_back(Vertex);
+			return VertexGroup.size() - 1;
+		};
+
+	for (auto& Face : Indices)
+	{
+		if (VertexGroups.back().size() > 252)
+		{
+			VertexGroups.resize(VertexGroups.size() + 1);
+			IndexGroups.resize(IndexGroups.size() + 1);
+		}
+
+		uint32_t IdA = WriteVertex(VertexGroups.back(), Vertices[std::get<0>(Face.first)]);
+		uint32_t IdB = WriteVertex(VertexGroups.back(), Vertices[std::get<1>(Face.first)]);
+		uint32_t IdC = WriteVertex(VertexGroups.back(), Vertices[std::get<2>(Face.first)]);
+
+		IndexGroups.back().push_back(std::make_tuple(IdA, IdB, IdC));
+	}
+
+	//TopLevelTree setup
+	uint32_t TopLevelTreeCount = 1 + std::ceil(VertexGroups.size() / 4.0f);
+	m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements.clear();
+	m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements.resize(TopLevelTreeCount);
+
+	//Setup nodes
+	{
+		//First node
+		const uint32_t DefaultNum = 0x7F7FFFEE;
+		const float DefaultFloat = *((float*)&DefaultNum);
+
+		auto PrepareNode = [this, DefaultFloat](uint32_t Index)
+			{
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_Reserve0 = 0;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_Reserve1 = 0;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_Reserve2 = 0;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_IsLeaf = 0;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_IsActive = 0;
+
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinX[0] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinX[1] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinX[2] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinX[3] = DefaultFloat;
+
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxX[0] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxX[1] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxX[2] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxX[3] = DefaultFloat;
+
+
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinY[0] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinY[1] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinY[2] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinY[3] = DefaultFloat;
+
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxY[0] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxY[1] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxY[2] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxY[3] = DefaultFloat;
+
+
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinZ[0] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinZ[1] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinZ[2] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MinZ[3] = DefaultFloat;
+
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxZ[0] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxZ[1] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxZ[2] = DefaultFloat;
+				m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[Index].m_FourAabb.m_MaxZ[3] = DefaultFloat;
+			};
+	
+		for (int i = 0; i < TopLevelTreeCount; i++)
+		{
+			PrepareNode(i);
+		}
+
+		//PrepareNode(2);
+		/*
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1].m_Data[0] = 2;
+		
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2].m_Data[0] = DefaultNum;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2].m_Data[1] = DefaultNum;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2].m_Data[2] = DefaultNum;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2].m_Data[3] = DefaultNum;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2].m_IsLeaf = 1;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2].m_IsActive = 10;
+		*/
+
+		for (int i = 1; i < TopLevelTreeCount; i++)
+		{
+			m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[i].m_IsLeaf = 1;
+			m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[i].m_IsActive = 0;
+		}
+
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements.resize(2);
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements[0].m_MeshPrimitiveKey = 0;
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements[0].m_ShapeTag = 0;
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements[0].m_Reserve0 = 0;
+		
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements[1].m_MeshPrimitiveKey = (VertexGroups.size() << 9) | (0xFF << 1) | 0;
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements[1].m_ShapeTag = 0xFFFF;
+		m_HavokMeshShape.m_ShapeTagTable.m_Elements[1].m_Reserve0 = 0;
+	}
+
+	//A shape has a max vertex count of 255. One material per geometry section
+	m_HavokMeshShape.m_GeometrySections.m_Elements.clear();
+	m_HavokMeshShape.m_GeometrySections.m_Elements.resize(VertexGroups.size());
+
+	std::vector<std::pair<glm::vec3, glm::vec3>> VertexGroupDomains(VertexGroups.size());
+	std::vector<std::pair<glm::vec3, glm::vec3>> VertexGroupOriginalDomains(VertexGroups.size());
+
+	//GeometrySection setup
+	for (size_t i = 0; i < VertexGroups.size(); i++)
+	{
+		hknpMeshShapeGeometrySection& GeometrySection = m_HavokMeshShape.m_GeometrySections.m_Elements[i];
+
+		glm::vec3 MinVertex(std::numeric_limits<float>::max());
+		glm::vec3 MaxVertex(std::numeric_limits<float>::lowest());
+
+		for (const auto& Vertex : VertexGroups[i]) {
+			// Update min and max for each component
+			MinVertex.x = std::min(MinVertex.x, Vertex.x);
+			MinVertex.y = std::min(MinVertex.y, Vertex.y);
+			MinVertex.z = std::min(MinVertex.z, Vertex.z);
+
+			MaxVertex.x = std::max(MaxVertex.x, Vertex.x);
+			MaxVertex.y = std::max(MaxVertex.y, Vertex.y);
+			MaxVertex.z = std::max(MaxVertex.z, Vertex.z);
+		}
+
+		VertexGroupOriginalDomains[i] = std::make_pair(MinVertex, MaxVertex);
+		VertexGroupDomains[i] = std::make_pair(MinVertex, MaxVertex);
+		VertexGroupDomains[i].first -= glm::vec3(MaxVertexError, MaxVertexError, MaxVertexError);
+		VertexGroupDomains[i].second += glm::vec3(MaxVertexError, MaxVertexError, MaxVertexError);
+
+		auto GetExpandedDomainSpan = [](std::pair<glm::vec3, glm::vec3>& Domain)
+			{
+				const float F32Epsilon = std::numeric_limits<float>::epsilon();
+
+				if (Domain.second.x - Domain.first.x == 0.0f)
+				{
+					Domain.first.x -= F32Epsilon;
+					Domain.second.x += F32Epsilon;
+				}
+				if (Domain.second.y - Domain.first.y == 0.0f)
+				{
+					Domain.first.y -= F32Epsilon;
+					Domain.second.y += F32Epsilon;
+				}
+				if (Domain.second.z - Domain.first.z == 0.0f)
+				{
+					Domain.first.z -= F32Epsilon;
+					Domain.second.z += F32Epsilon;
+				}
+				
+				glm::vec3 AbsoluteMin = Domain.first / glm::vec3(std::numeric_limits<uint8_t>::max());
+				AbsoluteMin.x = std::abs(AbsoluteMin.x);
+				AbsoluteMin.y = std::abs(AbsoluteMin.y);
+				AbsoluteMin.z = std::abs(AbsoluteMin.z);
+
+				glm::vec3 Expand = (Domain.second - Domain.first) / glm::vec3(std::numeric_limits<uint8_t>::max());
+				Expand.x = std::max(Expand.x, AbsoluteMin.x);
+				Expand.y = std::max(Expand.y, AbsoluteMin.y);
+				Expand.z = std::max(Expand.z, AbsoluteMin.z);
+
+				Domain.second += Expand;
+				Domain.first += Expand;
+
+				glm::vec3 Span = (Domain.second - Domain.first);
+				return glm::vec4(Span.x, Span.y, Span.z, 1.0f);
+			};
+
+		std::pair<glm::vec3, glm::vec3> ExpandedDomain = VertexGroupDomains[i];
+		glm::vec4 Span = GetExpandedDomainSpan(ExpandedDomain);
+		
+		glm::vec4 BitScale = glm::vec4(std::numeric_limits<uint8_t>::max()) / Span;
+		glm::vec4 RangeMin = glm::vec4(ExpandedDomain.first.x, ExpandedDomain.first.y, ExpandedDomain.first.z, 1.0f) * BitScale;
+		RangeMin.x = (int)std::round(RangeMin.x);
+		RangeMin.y = (int)std::round(RangeMin.y);
+		RangeMin.z = (int)std::round(RangeMin.z);
+		RangeMin.w = (int)std::round(RangeMin.w);
+
+		GeometrySection.m_BitOffset[0] = RangeMin.x;
+		GeometrySection.m_BitOffset[1] = RangeMin.y;
+		GeometrySection.m_BitOffset[2] = RangeMin.z;
+
+		GeometrySection.m_BitScale8Inv[0] = 1.0f / BitScale.x;
+		GeometrySection.m_BitScale8Inv[1] = 1.0f / BitScale.y;
+		GeometrySection.m_BitScale8Inv[2] = 1.0f / BitScale.z;
+
+		RangeMin = glm::vec4(VertexGroupOriginalDomains[i].first.x * m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[0],
+			VertexGroupOriginalDomains[i].first.y * m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[1],
+			VertexGroupOriginalDomains[i].first.z * m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[2],
+			1.0f);
+		RangeMin.x = (int)std::round(RangeMin.x);
+		RangeMin.y = (int)std::round(RangeMin.y);
+		RangeMin.z = (int)std::round(RangeMin.z);
+		RangeMin.w = (int)std::round(RangeMin.w);
+
+		GeometrySection.m_SectionOffset[0] = (uint32_t)RangeMin.x;
+		GeometrySection.m_SectionOffset[1] = (uint32_t)RangeMin.y;
+		GeometrySection.m_SectionOffset[2] = (uint32_t)RangeMin.z;
+
+		GeometrySection.m_Reserve0 = 0;
+
+		/*
+		uint32_t BVHTreeNodeMinX = (uint32_t)((float)BitScale.x * MinVertex.x) - GeometrySection.m_BitOffset[0];
+		uint32_t BVHTreeNodeMaxX = (uint32_t)((float)BitScale.x * MaxVertex.x) - GeometrySection.m_BitOffset[0];
+
+		std::cout << "Reverse MinX: " << ((BVHTreeNodeMinX + (float)GeometrySection.m_BitOffset[0]) / BitScale.x) << ", MaxX:" << ((BVHTreeNodeMaxX + (float)GeometrySection.m_BitOffset[0]) / BitScale.x) << std::endl;;
+
+		std::cout << "asd\n";
+		*/
+	}
+
+	//GeometrySection model injection
+	for (size_t i = 0; i < VertexGroups.size(); i++)
+	{
+		hknpMeshShapeGeometrySection& GeometrySection = m_HavokMeshShape.m_GeometrySections.m_Elements[i];
+
+		//Quantize vertices
+		{
+			GeometrySection.m_VertexBuffer.m_Elements.reserve(VertexGroups[i].size() + 1);
+			GeometrySection.m_VertexBuffer.m_Elements.resize(VertexGroups[i].size());
+			for (size_t j = 0; j < VertexGroups[i].size(); j++)
+			{
+				glm::vec3 ScaledFloatValue = glm::vec3((VertexGroups[i][j].x - VertexGroupOriginalDomains[i].first.x) * m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[0],
+					(VertexGroups[i][j].y - VertexGroupOriginalDomains[i].first.y) * m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[1],
+					(VertexGroups[i][j].z - VertexGroupOriginalDomains[i].first.z) * m_HavokMeshShape.m_VertexConversionUtil.m_BitScale16[2]);
+
+				uint32_t NewVertexX = ScaledFloatValue.x;
+				uint32_t NewVertexY = ScaledFloatValue.y;
+				uint32_t NewVertexZ = ScaledFloatValue.z;
+
+				hknpMeshShapeGeometrySectionVertex16_3& Vertex = GeometrySection.m_VertexBuffer.m_Elements[j];
+				Vertex.m_X = *reinterpret_cast<uint16_t*>(&NewVertexX);
+				Vertex.m_Y = *reinterpret_cast<uint16_t*>(&NewVertexY);
+				Vertex.m_Z = *reinterpret_cast<uint16_t*>(&NewVertexZ);
+			}
+		}
+
+		//Writing triangles quadish
+		for (auto& Face : IndexGroups[i])
+		{
+			hknpMeshShapeGeometrySectionPrimitive Primitive;
+			Primitive.m_IdA = std::get<0>(Face);
+			Primitive.m_IdB = std::get<1>(Face);
+			Primitive.m_IdC = std::get<2>(Face);
+			Primitive.m_IdD = std::get<2>(Face);
+			GeometrySection.m_Primitives.m_Elements.push_back(Primitive);
+		}
+
+		//Setting up top level tree
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_FourAabb.m_MinX[i % 4] = VertexGroupOriginalDomains[i].first.x;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_FourAabb.m_MinY[i % 4] = VertexGroupOriginalDomains[i].first.y;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_FourAabb.m_MinZ[i % 4] = VertexGroupOriginalDomains[i].first.z;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_FourAabb.m_MaxX[i % 4] = VertexGroupOriginalDomains[i].second.x;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_FourAabb.m_MaxY[i % 4] = VertexGroupOriginalDomains[i].second.y;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_FourAabb.m_MaxZ[i % 4] = VertexGroupOriginalDomains[i].second.z;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[1 + ((int)(i / 4))].m_Data[i % 4] = i;
+		/*
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_FourAabb.m_MinX[i % 4] = VertexGroupOriginalDomains[i].first.x;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_FourAabb.m_MinY[i % 4] = VertexGroupOriginalDomains[i].first.y;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_FourAabb.m_MinZ[i % 4] = VertexGroupOriginalDomains[i].first.z;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_FourAabb.m_MaxX[i % 4] = VertexGroupOriginalDomains[i].second.x;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_FourAabb.m_MaxY[i % 4] = VertexGroupOriginalDomains[i].second.y;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_FourAabb.m_MaxZ[i % 4] = VertexGroupOriginalDomains[i].second.z;
+		m_HavokMeshShape.m_TopLevelTree.m_Nodes.m_Elements[2 + ((int)(i / 4))].m_Data[i % 4] = 0;
+		*/
+
+		//Generating BVH
+		{
+			std::vector<uint32_t> ConvertedIndices;
+			for (auto& Face : IndexGroups[i])
+			{
+				ConvertedIndices.push_back(std::get<0>(Face));
+				ConvertedIndices.push_back(std::get<1>(Face));
+				ConvertedIndices.push_back(std::get<2>(Face));
+			}
+			std::vector<BVNode> BNodes = BVNode::BuildBVHForMesh(VertexGroups[i], ConvertedIndices, ConvertedIndices.size());
+
+			std::vector<BVNode*> BNodeLeafs;
+			for (BVNode& Node : BNodes)
+			{
+				if (Node.mIsLeaf)
+				{
+					BNodeLeafs.push_back(&Node);
+				}
+			}
+
+			std::vector<QuadBVHNode> BVHNodes;
+
+			//Adding leafs
+			uint32_t PrimitiveIndex = 0;
+			for (size_t j = 0; j < std::ceil(BNodeLeafs.size() / 4.0f); j++)
+			{
+				QuadBVHNode Node;
+				Node.mIsLeaf = true;
+
+				for (int k = 0; k < 4; k++)
+				{
+					if (BNodeLeafs.size() > PrimitiveIndex)
+					{
+						Node.mMin[k] = BNodeLeafs[PrimitiveIndex]->mMin;
+						Node.mMax[k] = BNodeLeafs[PrimitiveIndex]->mMax;
+						Node.mPrimitiveIndices[k] = BNodeLeafs[PrimitiveIndex]->mPrimitive;
+						PrimitiveIndex++;
+					}
+					else
+					{
+						Node.mMax[k] = VertexGroupOriginalDomains[i].first;
+						Node.mMin[k] = VertexGroupOriginalDomains[i].second;
+						Node.mPrimitiveIndices[k] = 0;
+					}
+				}
+
+				BVHNodes.push_back(Node);
+			}
+
+			//Adding connectors
+			uint32_t NodesToConnect = BVHNodes.size();
+			uint32_t NodesToConnectBaseIndex = 0;
+			uint32_t ConnectedNodes = 0;
+			while (true)
+			{
+				for (size_t j = 0; j < std::ceil(NodesToConnect / 4.0f); j++)
+				{
+					QuadBVHNode QuadNode;
+					QuadNode.mIsLeaf = false;
+
+					for (int k = 0; k < 4; k++)
+					{
+						if (NodesToConnectBaseIndex < (NodesToConnect + ConnectedNodes))
+						{
+							QuadNode.mChildrenIndices[k] = NodesToConnectBaseIndex++;
+
+							glm::vec3 MinChild(std::numeric_limits<float>::max());
+							glm::vec3 MaxChild(std::numeric_limits<float>::lowest());
+							for (int x = 0; x < 4; x++)
+							{
+								if (BVHNodes[QuadNode.mChildrenIndices[k]].mMax[x].x > BVHNodes[QuadNode.mChildrenIndices[k]].mMin[x].x &&
+									BVHNodes[QuadNode.mChildrenIndices[k]].mMax[x].y > BVHNodes[QuadNode.mChildrenIndices[k]].mMin[x].y &&
+									BVHNodes[QuadNode.mChildrenIndices[k]].mMax[x].z > BVHNodes[QuadNode.mChildrenIndices[k]].mMin[x].z)
+								{
+									MinChild.x = std::min(MinChild.x, BVHNodes[QuadNode.mChildrenIndices[k]].mMin[x].x);
+									MinChild.y = std::min(MinChild.y, BVHNodes[QuadNode.mChildrenIndices[k]].mMin[x].y);
+									MinChild.z = std::min(MinChild.z, BVHNodes[QuadNode.mChildrenIndices[k]].mMin[x].z);
+
+									MaxChild.x = std::max(MaxChild.x, BVHNodes[QuadNode.mChildrenIndices[k]].mMax[x].x);
+									MaxChild.y = std::max(MaxChild.y, BVHNodes[QuadNode.mChildrenIndices[k]].mMax[x].y);
+									MaxChild.z = std::max(MaxChild.z, BVHNodes[QuadNode.mChildrenIndices[k]].mMax[x].z);
+								}
+							}
+
+							QuadNode.mMin[k] = MinChild;
+							QuadNode.mMax[k] = MaxChild;
+						}
+						else
+						{
+							QuadNode.mMin[k] = VertexGroupOriginalDomains[i].second;
+							QuadNode.mMax[k] = VertexGroupOriginalDomains[i].first;
+						}
+					}
+
+					BVHNodes.push_back(QuadNode);
+				}
+
+				ConnectedNodes = NodesToConnectBaseIndex;
+				NodesToConnect = BVHNodes.size() - NodesToConnectBaseIndex;
+
+				if (NodesToConnect == 1)
+				{
+					break;
+				}
+			}
+
+			std::vector<QuadBVHNode> OrderedNodes;
+			for (std::vector<QuadBVHNode>::reverse_iterator RIter = BVHNodes.rbegin();
+				RIter != BVHNodes.rend(); ++RIter)
+			{
+				QuadBVHNode QuadNode = *RIter;
+				if (!QuadNode.mIsLeaf)
+				{
+					for (int j = 0; j < 4; j++)
+					{
+						if (QuadNode.mMax[j].x > QuadNode.mMin[j].x && QuadNode.mMax[j].y > QuadNode.mMin[j].y && QuadNode.mMax[j].z > QuadNode.mMin[j].z)
+						{
+							QuadNode.mChildrenIndices[j] = BVHNodes.size() - 1 - QuadNode.mChildrenIndices[j];
+						}
+					}
+				}
+				OrderedNodes.push_back(QuadNode);
+			}
+
+			if (OrderedNodes.size() > 255)
+			{
+				Logger::Error("PhiveShape2", "SectionBVH overflow, " + std::to_string(OrderedNodes.size()) + " nodes, max 255");
+			}
+
+			GeometrySection.InjectBVH(OrderedNodes, VertexGroupDomains[i].first, VertexGroupDomains[i].second);
+		}
+
+		//Clearing bvh - testing
+		{
+			GeometrySection.m_SectionBvh.m_Elements.resize(1);
+		}
+
+		//Clearing interior primitive bitfield
+		GeometrySection.m_InteriorPrimitiveBitField.m_Elements.resize((int)std::ceil(IndexGroups[i].size() / 8));
+		for (hknpMeshShapeGeometrySectionInteriorPrimitiveBitField& Byte : GeometrySection.m_InteriorPrimitiveBitField.m_Elements)
+		{
+			Byte.m_BitField = 0;
+		}
+	}
+	
+	/*
+	std::vector<float> DebugVertices = ToVertices();
+	std::vector<uint32_t> DebugFaces = ToIndices();
+
+	UIMapView::mDebugMeshes.emplace_back(DebugVertices, DebugFaces);
+	*/
+	/*
+	int DomainIndex = 0;
+	for (PhiveShape2::hknpMeshShapeGeometrySection& GeometrySection : GetMeshShape().m_GeometrySections.m_Elements)
+	{
+		DecodeTreeNode(GeometrySection, GeometrySection.m_SectionBvh.m_Elements[0], VertexGroupOriginalDomains[DomainIndex].first, VertexGroupOriginalDomains[DomainIndex].second);
+		DomainIndex++;
+	}
+	*/
+
+	Logger::Info("PhiveShape2", "Model injected");
 }
 
 PhiveShape2::PhiveShape2(std::vector<unsigned char> Bytes)

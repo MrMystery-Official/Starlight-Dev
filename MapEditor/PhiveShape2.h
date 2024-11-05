@@ -3,13 +3,26 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <glm/glm.hpp>
 #include <utility>
 #include "BinaryVectorReader.h"
 #include "BinaryVectorWriter.h"
+#include "PhiveMaterialData.h"
 
 class PhiveShape2
 {
 public:
+	//BVH
+	struct QuadBVHNode
+	{
+		glm::vec3 mMin[4];
+		glm::vec3 mMax[4];
+		bool mIsLeaf = false;
+
+		uint16_t mChildrenIndices[4] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF }; //mIsLeaf == true
+		uint8_t mPrimitiveIndices[4] = { 0 }; //mIsLeaf == false
+	};
+
 	struct PhiveShapeHeader
 	{
 		char m_Magic[6]; //Includes null terminator
@@ -313,12 +326,12 @@ public:
 
 	struct hknpTransposedFourAabbs8 : public hkReadableWriteableObject
 	{
-		uint32_t m_MinX = 0;
-		uint32_t m_MaxX = 0;
-		uint32_t m_MinY = 0;
-		uint32_t m_MaxY = 0;
-		uint32_t m_MinZ = 0;
-		uint32_t m_MaxZ = 0;
+		uint8_t m_MinX[4] = { 0 };
+		uint8_t m_MaxX[4] = { 0 };
+		uint8_t m_MinY[4] = { 0 };
+		uint8_t m_MaxY[4] = { 0 };
+		uint8_t m_MinZ[4] = { 0 };
+		uint8_t m_MaxZ[4] = { 0 };
 
 		virtual void Read(BinaryVectorReader& Reader) override;
 		virtual void Write(BinaryVectorWriter& Writer, int32_t Offset = -1) override;
@@ -383,6 +396,8 @@ public:
 
 		uint32_t m_Offset;
 
+		void InjectBVH(std::vector<QuadBVHNode>& Nodes, glm::vec3 Min, glm::vec3 Max);
+
 		virtual void Read(BinaryVectorReader& Reader) override;
 		virtual void Write(BinaryVectorWriter& Writer, int32_t Offset = -1) override;
 	};
@@ -412,15 +427,6 @@ public:
 		virtual void Write(BinaryVectorWriter& Writer, int32_t Offset = -1) override;
 	};
 
-	//Phive
-	struct PhiveMaterial
-	{
-		std::string Material;
-		uint32_t SubMaterialIndex;
-		uint64_t MaterialFlags;
-		uint64_t CollisionFlags;
-	};
-
 	hknpMeshShape& GetMeshShape();
 	std::vector<unsigned char> ToBinary();
 	void WriteToFile(std::string Path);
@@ -428,7 +434,8 @@ public:
 	std::vector<float> ToVertices();
 	std::vector<unsigned int> ToIndices();
 
-	void InjectModel(std::vector<float> Vertices, std::vector<unsigned char> Indices);
+	void InjectModel(std::vector<glm::vec3> Vertices, std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>> Indices);
+	void DecodeTreeNode(hknpMeshShapeGeometrySection& GeometrySection, hknpAabb8TreeNode& TreeNode, glm::vec3 ParentMin, glm::vec3 ParentMax);
 
 	PhiveShape2(std::vector<unsigned char> Bytes);
 	PhiveShape2() {}
@@ -446,64 +453,6 @@ private:
 		std::vector<Parameter> m_Parameters;
 	};
 
-	const std::vector<std::string> m_MaterialList =
-	{
-		"Undefined",
-		"Soil",
-		"Grass",
-		"Sand",
-		"HeavySand",
-		"Snow",
-		"HeavySnow",
-		"Stone",
-		"StoneSlip",
-		"StoneNoSlip",
-		"SlipBoard",
-		"Cart",
-		"Metal",
-		"MetalSlip",
-		"MetalNoSlip",
-		"WireNet",
-		"Wood",
-		"Ice",
-		"Cloth",
-		"Glass",
-		"Bone",
-		"Rope",
-		"Character",
-		"Ragdoll",
-		"Surfing",
-		"GuardianFoot",
-		"LaunchPad",
-		"Conveyer",
-		"Rail",
-		"Grudge",
-		"Meat",
-		"Vegetable",
-		"Bomb",
-		"MagicBall",
-		"Barrier",
-		"AirWall",
-		"GrudgeSnow",
-		"Tar",
-		"Water",
-		"HotWater",
-		"IceWater",
-		"Lava",
-		"Bog",
-		"ContaminatedWater",
-		"DungeonCeil",
-		"Gas",
-		"InvalidateRestartPos",
-		"HorseSpeedLimit",
-		"ForbidDynamicCuttingAreaForHugeCharacter",
-		"ForbidHorseReturnToSafePosByClimate",
-		"Dragon",
-		"ReferenceSurfing",
-		"WaterSlip",
-		"HorseDeleteImmediatelyOnDeath"
-	};
-
 	PhiveShapeHeader m_PhiveShapeHeader;
 	HavokTagFileHeader m_HavokTagFileHeader;
 
@@ -511,7 +460,7 @@ private:
 	hknpMeshShape m_HavokMeshShape;
 
 	//Phive
-	std::vector<PhiveMaterial> m_Materials;
+	std::vector<PhiveMaterialData::Material> m_Materials;
 	std::vector<std::string> m_TagStringTable;
 	std::vector<std::string> m_FieldStringTable;
 	std::vector<uint8_t> m_TagHash;

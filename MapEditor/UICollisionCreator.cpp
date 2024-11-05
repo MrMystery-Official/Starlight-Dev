@@ -5,7 +5,6 @@
 #include "BinaryVectorWriter.h"
 #include "Editor.h"
 #include "Util.h"
-#include "SplatoonShapeToTotK.h"
 #include <iostream>
 #include "tinyfiledialogs.h"
 #include "ZStdFile.h"
@@ -51,6 +50,11 @@ std::vector<bool> UICollisionCreator::SubModelHovered;
 
 std::vector<const char*> UICollisionCreator::MasterMaterialNames;
 
+int32_t UICollisionCreator::mFlagSubModelIndex = -1;
+float UICollisionCreator::mMaterialPopUpW = 0.0f;
+bool UICollisionCreator::mMaterialPopUpOpen = true;
+ImVec2 UICollisionCreator::mMaterialPopUpPos = ImVec2(0, 0);
+
 void UICollisionCreator::MouseWheelCallback(GLFWwindow* window, double xOffset, double yOffset)
 {
 	UIMapView::GLFWScrollCallback(window, xOffset, yOffset);
@@ -92,7 +96,7 @@ void UICollisionCreator::Initialize(GLFWwindow* pWindow)
 	DisabledShader = ShaderMgr::GetShader("Disabled");
 
 	MasterMaterialNames.push_back("Apply to all...");
-	MasterMaterialNames.insert(MasterMaterialNames.end(), SplatoonShapeToTotK::Materials.begin(), SplatoonShapeToTotK::Materials.end());
+	MasterMaterialNames.insert(MasterMaterialNames.end(), PhiveMaterialData::mMaterialNames.begin(), PhiveMaterialData::mMaterialNames.end());
 }
 
 std::string GetBfresName(SarcFile& ActorPack, Vector3F& Scale)
@@ -251,7 +255,7 @@ BymlFile GenerateRigidBodyEntityParamByml(std::string ShapeName)
 	return Byml;
 }
 
-BymlFile GenerateRigidBodyControllerEntityParamByml(uint32_t Count)
+BymlFile GenerateRigidBodyControllerEntityParamByml()
 {
 	BymlFile Byml;
 	Byml.GetType() = BymlFile::Type::Dictionary;
@@ -272,33 +276,30 @@ BymlFile GenerateRigidBodyControllerEntityParamByml(uint32_t Count)
 			return Node;
 		};
 
-	for (uint32_t i = 0; i < Count; i++)
-	{
-		BymlFile::Node ChildDict(BymlFile::Type::Dictionary);
+	BymlFile::Node ChildDict(BymlFile::Type::Dictionary);
 
-		ChildDict.AddChild(CreateStringNode("BoneBindModePosition", "All"));
-		ChildDict.AddChild(CreateStringNode("BoneBindModeRotation", "All"));
-		ChildDict.AddChild(CreateStringNode("ContactCollectionName", ""));
-		ChildDict.AddChild(CreateBoolNode("IgnoreChangeMassOnScaling", false));
-		ChildDict.AddChild(CreateBoolNode("IsAddToWorldOnReset", true));
-		ChildDict.AddChild(CreateBoolNode("IsSkipTrackingWhenNoHit", true));
-		ChildDict.AddChild(CreateBoolNode("IsTrackingActor", false));
-		ChildDict.AddChild(CreateBoolNode("IsTrackingEntity", false));
-		ChildDict.AddChild(CreateStringNode("Name", "Physical_Col_" + std::to_string(i)));
-		ChildDict.AddChild(CreateStringNode("TrackingBoneName", ""));
-		ChildDict.AddChild(CreateStringNode("TrackingEntityAlias", ""));
-		ChildDict.AddChild(CreateBoolNode("UseNextMainRigidBodyMatrix", false));
-		ChildDict.AddChild(CreateStringNode("WarpMode", "AfterUpdateWorldMtx"));
+	ChildDict.AddChild(CreateStringNode("BoneBindModePosition", "All"));
+	ChildDict.AddChild(CreateStringNode("BoneBindModeRotation", "All"));
+	ChildDict.AddChild(CreateStringNode("ContactCollectionName", ""));
+	ChildDict.AddChild(CreateBoolNode("IgnoreChangeMassOnScaling", false));
+	ChildDict.AddChild(CreateBoolNode("IsAddToWorldOnReset", true));
+	ChildDict.AddChild(CreateBoolNode("IsSkipTrackingWhenNoHit", true));
+	ChildDict.AddChild(CreateBoolNode("IsTrackingActor", false));
+	ChildDict.AddChild(CreateBoolNode("IsTrackingEntity", false));
+	ChildDict.AddChild(CreateStringNode("Name", "Physical_Col"));
+	ChildDict.AddChild(CreateStringNode("TrackingBoneName", ""));
+	ChildDict.AddChild(CreateStringNode("TrackingEntityAlias", ""));
+	ChildDict.AddChild(CreateBoolNode("UseNextMainRigidBodyMatrix", false));
+	ChildDict.AddChild(CreateStringNode("WarpMode", "AfterUpdateWorldMtx"));
 
-		RigidBodyControllerUnitAryNode.AddChild(ChildDict);
-	}
+	RigidBodyControllerUnitAryNode.AddChild(ChildDict);
 
 	Byml.GetNodes().push_back(RigidBodyControllerUnitAryNode);
 
 	return Byml;
 }
 
-BymlFile GenerateControllerSetParamByml(std::string ActorName, uint32_t Count)
+BymlFile GenerateControllerSetParamByml(std::string ActorName)
 {
 	BymlFile Byml;
 	Byml.GetType() = BymlFile::Type::Dictionary;
@@ -321,22 +322,16 @@ BymlFile GenerateControllerSetParamByml(std::string ActorName, uint32_t Count)
 
 	BymlFile::Node RigidBodyEntityNamePathAryNode(BymlFile::Type::Array, "RigidBodyEntityNamePathAry");
 
-	for (uint32_t i = 0; i < Count; i++)
-	{
-		BymlFile::Node RigidBodyEntityNamePathAryDictNode(BymlFile::Type::Dictionary);
-		RigidBodyEntityNamePathAryDictNode.AddChild(CreateStringNode("FilePath", "Work/Phive/RigidBodyEntityParam/" + ActorName + "_Body_" + std::to_string(i) + ".phive__RigidBodyEntityParam.gyml"));
-		RigidBodyEntityNamePathAryDictNode.AddChild(CreateStringNode("Name", "Physical_Col_" + std::to_string(i)));
-		RigidBodyEntityNamePathAryNode.AddChild(RigidBodyEntityNamePathAryDictNode);
-	}
+	BymlFile::Node RigidBodyEntityNamePathAryDictNode(BymlFile::Type::Dictionary);
+	RigidBodyEntityNamePathAryDictNode.AddChild(CreateStringNode("FilePath", "Work/Phive/RigidBodyEntityParam/" + ActorName + "_Body.phive__RigidBodyEntityParam.gyml"));
+	RigidBodyEntityNamePathAryDictNode.AddChild(CreateStringNode("Name", "Physical_Col"));
+	RigidBodyEntityNamePathAryNode.AddChild(RigidBodyEntityNamePathAryDictNode);
 
 	BymlFile::Node ShapeNamePathAryNode(BymlFile::Type::Array, "ShapeNamePathAry");
-	for (uint32_t i = 0; i < Count; i++)
-	{
-		BymlFile::Node ShapeNamePathAryDictNode(BymlFile::Type::Dictionary);
-		ShapeNamePathAryDictNode.AddChild(CreateStringNode("FilePath", "Work/Phive/ShapeParam/" + ActorName + "__Physical_Col_" + std::to_string(i) + ".phive__ShapeParam.gyml"));
-		ShapeNamePathAryDictNode.AddChild(CreateStringNode("Name", ActorName + "__Physical_Col_" + std::to_string(i)));
-		ShapeNamePathAryNode.AddChild(ShapeNamePathAryDictNode);
-	}
+	BymlFile::Node ShapeNamePathAryDictNode(BymlFile::Type::Dictionary);
+	ShapeNamePathAryDictNode.AddChild(CreateStringNode("FilePath", "Work/Phive/ShapeParam/" + ActorName + "__Physical_Col.phive__ShapeParam.gyml"));
+	ShapeNamePathAryDictNode.AddChild(CreateStringNode("Name", ActorName + "__Physical_Col"));
+	ShapeNamePathAryNode.AddChild(ShapeNamePathAryDictNode);
 
 	Byml.GetNodes().push_back(ControllerEntityNamePathAryNode);
 	Byml.GetNodes().push_back(RigidBodyEntityNamePathAryNode);
@@ -366,7 +361,10 @@ bool UICollisionCreator::RenderCollisionModelView(uint32_t Size)
 	//glClearColor(1.0f, ImGui::GetStyle().Colors[ImGuiCol_WindowBg].y, ImGui::GetStyle().Colors[ImGuiCol_WindowBg].z, ImGui::GetStyle().Colors[ImGuiCol_WindowBg].w);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	
-	glm::mat4 GLMModel = glm::mat4(1.0f);  // Identity matrix
+	std::vector<glm::mat4> InstanceMatrix(1);
+
+	glm::mat4& GLMModel = InstanceMatrix[0];
+	GLMModel = glm::mat4(1.0f); // Identity matrix
 
 	CalculateCameraPrespective(Size);
 
@@ -387,15 +385,12 @@ bool UICollisionCreator::RenderCollisionModelView(uint32_t Size)
 	glUniform3fv(glGetUniformLocation(DisabledShader->ID, "lightColor"), 1, &UIMapView::mLightColor[0]);
 	glUniform3fv(glGetUniformLocation(DisabledShader->ID, "lightPos"), 1, &CameraPosition[0]);
 	
-	std::vector<glm::mat4> InstanceMatrix;
-	InstanceMatrix.push_back(GLMModel);
-
 	Model->mInstanceMatrix.SetData<glm::mat4>(InstanceMatrix);
 
 	for (uint16_t i : Model->mOpaqueObjects)
 	{
 		Shader* UsedShader = SubModelHovered[i] ? SelectedShader : InstancedDiscardShader;
-		if (!SubModelHovered[i] && !Materials[i].Generate) UsedShader = DisabledShader;
+		if (!SubModelHovered[i] && !Materials[i].mGenerate) UsedShader = DisabledShader;
 
 		UsedShader->Activate();
 
@@ -420,7 +415,7 @@ bool UICollisionCreator::RenderCollisionModelView(uint32_t Size)
 	for (uint16_t i : Model->mTransparentObjects)
 	{
 		Shader* UsedShader = SubModelHovered[i] ? SelectedShader : InstancedDiscardShader;
-		if (!SubModelHovered[i] && !Materials[i].Generate) UsedShader = DisabledShader;
+		if (!SubModelHovered[i] && !Materials[i].mGenerate) UsedShader = DisabledShader;
 
 		UsedShader->Activate();
 
@@ -496,6 +491,42 @@ bool UICollisionCreator::RenderCollisionModelView(uint32_t Size)
 	return Result;
 }
 
+void UICollisionCreator::DrawMaterialFlagsPopUp()
+{
+	if (mFlagSubModelIndex == -1)
+		return;
+
+	ImGui::SetNextWindowPos(ImVec2(mMaterialPopUpPos.x, mMaterialPopUpPos.y));
+	if (ImGui::BeginPopup("CollisionCreatorMaterialFlagPopUp"))
+	{
+		ImGui::Text("Flags");
+		float PosX = ImGui::GetCursorPosX();
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(PosX + ImGui::CalcTextSize("ForbidAutoPlacementAndEnemyEntry").x + ImGui::GetStyle().ItemSpacing.x * 4.0f + ImGui::GetFrameHeight());
+		ImVec2 FilterBasePos = ImGui::GetCursorPos();
+		ImGui::Text("Filters");
+		FilterBasePos.y = ImGui::GetCursorPosY();
+
+		ImGui::BeginChild("##CollisionCreatorMaterialFlagPopUpFlagChild", ImVec2(ImGui::CalcTextSize("ForbidAutoPlacementAndEnemyEntry").x + ImGui::GetStyle().ItemSpacing.x * 3.0f + ImGui::GetFrameHeight(), ImGui::GetFrameHeight() * 8.0f * Editor::UIScale));
+		for (size_t i = 0; i < PhiveMaterialData::mMaterialFlagNames.size(); i++)
+		{
+			ImGui::Checkbox(PhiveMaterialData::mMaterialFlagNames[i], &Materials[mFlagSubModelIndex].mMaterial.mFlags[i]);
+		}
+		ImGui::EndChild();
+
+		ImGui::SetCursorPos(FilterBasePos);
+
+		ImGui::BeginChild("##CollisionCreatorMaterialFlagPopUpFiltersChild", ImVec2(ImGui::CalcTextSize("HitOnlyEnemyVehicleAndAirWall").x + ImGui::GetStyle().ItemSpacing.x * 3.0f + ImGui::GetFrameHeight(), ImGui::GetFrameHeight() * 8.0f * Editor::UIScale));
+		for (size_t i = 0; i < PhiveMaterialData::mMaterialFilterNames.size(); i++)
+		{
+			ImGui::Checkbox(PhiveMaterialData::mMaterialFilterNames[i], &Materials[mFlagSubModelIndex].mMaterial.mCollisionFlags[i]);
+		}
+		ImGui::EndChild();
+
+		ImGui::EndPopup();
+	}
+}
+
 void UICollisionCreator::CalculateCameraPrespective(uint32_t Size)
 {
 	// Initializes matrices since otherwise they will be the null matrix
@@ -517,7 +548,6 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 
 	if (FocusedModelView)
 	{
-
 		ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
 		ImGui::InputText("Actor name (e.g. MrLapinou_House_C_Red_01)", &GlobalActorName);
 		ImGui::PopItemWidth();
@@ -534,7 +564,8 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 					Materials.resize(Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size());
 					for (int SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
 					{
-						Materials[SubModelIndex].Settings.MaterialIndex = 7; //Default material index -> Stone
+						Materials[SubModelIndex].mMaterial.mMaterialId = 7; //Default material index -> Stone
+						Materials[SubModelIndex].mMaterial.mCollisionFlags[0] = true;
 					}
 					SubModelHovered.resize(Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size());
 				}
@@ -562,7 +593,8 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 			Materials.resize(Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size());
 			for (int SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
 			{
-				Materials[SubModelIndex].Settings.MaterialIndex = 7; //Default material index -> Stone
+				Materials[SubModelIndex].mMaterial.mMaterialId = 7; //Default material index -> Stone
+				Materials[SubModelIndex].mMaterial.mCollisionFlags[0] = true;
 			}
 			SubModelHovered.resize(Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size());
 			GlobalBfresName = BfresName;
@@ -587,139 +619,203 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 				goto End;
 			}
 
-			SarcFile ActorPack(ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + SecondActorName + ".pack.zs"), ZStdFile::Dictionary::Pack).Data);
-
-			//Clearing actor pack
-			for (auto Iter = ActorPack.GetEntries().begin(); Iter != ActorPack.GetEntries().end(); ) {
-				if (Iter->Name.starts_with("Phive/"))
-					Iter = ActorPack.GetEntries().erase(Iter);
-				else
-					Iter++;
-			}
-
-			std::string ShapeParamBaseName = SecondActorName + "__Physical_Col_";
-
-			uint32_t MaterialOffset = 0;
-			for (int SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
-			{
-				if (!Materials[SubModelIndex].Generate)
-				{
-					MaterialOffset++;
-					continue;
-				}
-
-				std::string PhshName = ShapeParamBaseName + std::to_string(SubModelIndex - MaterialOffset);
-				std::string ShapeParamBymlName = ShapeParamBaseName + std::to_string(SubModelIndex - MaterialOffset) + ".phive__ShapeParam.bgyml";
-
-				SarcFile::Entry Entry;
-				Entry.Bytes = GenerateShapeParamFile(PhshName, Vector3F(-10, -10, -10), Vector3F(10, 10, 10)).ToBinary(BymlFile::TableGeneration::Auto);
-				Entry.Name = "Phive/ShapeParam/" + ShapeParamBymlName;
-				ActorPack.GetEntries().push_back(Entry);
-			}
-			MaterialOffset = 0;
-
-			for (int SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
-			{
-				if (!Materials[SubModelIndex].Generate)
-				{
-					MaterialOffset++;
-					continue;
-				}
-
-				std::string ShapeName = ShapeParamBaseName + std::to_string(SubModelIndex - MaterialOffset);
-				std::string RigidBodyEntityParamBymlName = SecondActorName + "_Body_" + std::to_string(SubModelIndex - MaterialOffset) + ".phive__RigidBodyEntityParam.bgyml";
-
-				SarcFile::Entry Entry;
-				Entry.Bytes = GenerateRigidBodyEntityParamByml(ShapeName).ToBinary(BymlFile::TableGeneration::Auto);
-				Entry.Name = "Phive/RigidBodyEntityParam/" + RigidBodyEntityParamBymlName;
-				ActorPack.GetEntries().push_back(Entry);
-			}
-			MaterialOffset = 0;
-
-			uint32_t PhshCount = 0;
-			for (UICollisionCreator::Material Material : Materials)
-			{
-				if (Material.Generate)
-					PhshCount++;
-			}
-
-			//RigidBodyControllerEntityParam
-			SarcFile::Entry RigidBodyControllerEntityParamEntry;
-			RigidBodyControllerEntityParamEntry.Bytes = GenerateRigidBodyControllerEntityParamByml(PhshCount).ToBinary(BymlFile::TableGeneration::Auto);
-			RigidBodyControllerEntityParamEntry.Name = "Phive/RigidBodyControllerEntityParam/" + SecondActorName + "_Body.phive__RigidBodyControllerEntityParam.bgyml";
-			ActorPack.GetEntries().push_back(RigidBodyControllerEntityParamEntry);
-
-			//ControllerSetParam
-			SarcFile::Entry ControllerSetParamEntry;
-			ControllerSetParamEntry.Bytes = GenerateControllerSetParamByml(SecondActorName, PhshCount).ToBinary(BymlFile::TableGeneration::Auto);
-			ControllerSetParamEntry.Name = "Phive/ControllerSetParam/" + SecondActorName + ".phive__ControllerSetParam.bgyml";
-			ActorPack.GetEntries().push_back(ControllerSetParamEntry);
-
-			//PhysicsRef
-			SarcFile::Entry* PhysicsEntry = nullptr;
-			for (SarcFile::Entry& Entry : ActorPack.GetEntries())
-			{
-				if (Entry.Name.starts_with("Component/Physics/"))
-				{
-					PhysicsEntry = &Entry;
-					break;
-				}
-			}
-			if (PhysicsEntry != nullptr)
-			{
-				BymlFile PhysicsRefByml(PhysicsEntry->Bytes);
-				if (PhysicsRefByml.HasChild("ControllerSetPath"))
-				{
-					BymlFile::Node* ControllerRefNode = PhysicsRefByml.GetNode("ControllerSetPath");
-					ControllerRefNode->SetValue<std::string>("Work/Phive/ControllerSetParam/" + SecondActorName + ".phive__ControllerSetParam.gyml");
-					PhysicsEntry->Bytes = PhysicsRefByml.ToBinary(BymlFile::TableGeneration::Auto);
-				}
-			}
-
-			Util::CreateDir(Editor::GetWorkingDirFile("Save/Pack/Actor"));
-
-			ZStdFile::Compress(ActorPack.ToBinary(), ZStdFile::Dictionary::Pack).WriteToFile(Editor::GetWorkingDirFile("Save/Pack/Actor/" + SecondActorName + ".pack.zs"));
-
-
 			Util::CreateDir(Editor::GetWorkingDirFile("Save/Phive/Shape/Dcc"));
+			std::vector<glm::vec3> Vertices;
+			std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>> Indices;
+			uint32_t MaterialOffset = 0;
+			uint32_t IndexOffset = 0;
+			bool HasGeometry = false;
+
+			std::vector<ModMaterialInfo> MaterialInfo;
+			std::unordered_map<size_t, size_t> SubModelIndexToMaterialIndex;
+
 			for (size_t SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
 			{
-				//Vertices.insert(Vertices.end(), ModelFile.GetModels()[0].Vertices[SubModelIndex].begin(), ModelFile.GetModels()[0].Vertices[SubModelIndex].end());
+				if (!Materials[SubModelIndex].mGenerate)
+				{
+					MaterialOffset++;
+					continue;
+				}
 
-				if (!Materials[SubModelIndex].Generate)
+				bool Found = false;
+
+				uint64_t Flags = 0;
+
+				for (size_t i = 0; i < PhiveMaterialData::mMaterialFlagNames.size(); i++)
+				{
+					if (!Materials[SubModelIndex].mMaterial.mFlags[i])
+						continue;
+
+					Flags |= PhiveMaterialData::mMaterialFlagMasks[i];
+				}
+
+				uint64_t Filters = 0;
+				//Generating base
+				for (size_t i = 0; i < PhiveMaterialData::mMaterialFilterNames.size(); i++)
+				{
+					if (!Materials[SubModelIndex].mMaterial.mCollisionFlags[i])
+						continue;
+
+					if(PhiveMaterialData::mMaterialFilterIsBase[i])
+						Filters |= PhiveMaterialData::mMaterialFilterMasks[i];
+				}
+				//Applying filters
+				for (size_t i = 0; i < PhiveMaterialData::mMaterialFilterNames.size(); i++)
+				{
+					if (!Materials[SubModelIndex].mMaterial.mCollisionFlags[i])
+						continue;
+
+					if (!PhiveMaterialData::mMaterialFilterIsBase[i])
+						Filters &= PhiveMaterialData::mMaterialFilterMasks[i];
+				}
+
+				for (size_t i = 0; i < MaterialInfo.size(); i++)
+				{
+					if (MaterialInfo[i].mId == Materials[SubModelIndex].mMaterial.mMaterialId &&
+						MaterialInfo[i].mFlags == Flags &&
+						MaterialInfo[i].mCollisionFlags == Filters)
+					{
+						Found = true;
+						SubModelIndexToMaterialIndex.insert({ SubModelIndex, i });
+						break;
+					}
+				}
+
+				if (!Found)
+				{
+					ModMaterialInfo Info;
+					Info.mId = (int)Materials[SubModelIndex].mMaterial.mMaterialId;
+					Info.mFlags = Flags;
+					Info.mCollisionFlags = Filters;
+
+					MaterialInfo.push_back(Info);
+					SubModelIndexToMaterialIndex.insert({ SubModelIndex, MaterialInfo.size() - 1 });
+				}
+			}
+
+			for (size_t SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
+			{
+				if (!Materials[SubModelIndex].mGenerate)
 				{
 					MaterialOffset++;
 					continue;
 				}
 
 				std::vector<glm::vec4> Positions = Model->mBfres->Models.GetByIndex(0).Value.Shapes.GetByIndex(SubModelIndex).Value.Vertices;
-
-				std::vector<float> Vertices(Positions.size() * 3);
+				uint32_t Offset = Vertices.size();
+				Vertices.resize(Vertices.size() + Positions.size());
 
 				for (size_t i = 0; i < Positions.size(); i++)
 				{
-					Vertices[i * 3] = Positions[i].x * ModelScale.GetX();
-					Vertices[i * 3 + 1] = Positions[i].y * ModelScale.GetY();
-					Vertices[i * 3 + 2] = Positions[i].z * ModelScale.GetZ();
+					Vertices[Offset + i] = glm::vec3(Positions[i].x * ModelScale.GetX(), Positions[i].y * ModelScale.GetY(), Positions[i].z * ModelScale.GetZ());
 				}
 
-				std::vector<uint32_t> Indices = Model->mBfres->Models.GetByIndex(0).Value.Shapes.GetByIndex(SubModelIndex).Value.Meshes[0].GetIndices();
+				std::vector<uint32_t> Triangles = Model->mBfres->Models.GetByIndex(0).Value.Shapes.GetByIndex(SubModelIndex).Value.Meshes[0].GetIndices();
+				Offset = Indices.size();
+				Indices.resize(Indices.size() + (Triangles.size() / 3));
+				for (size_t i = 0; i < Triangles.size() / 3; i++)
+				{
+					Indices[Offset + i] = std::make_pair(std::make_tuple(Triangles[i * 3] + IndexOffset, Triangles[i * 3 + 1] + IndexOffset, Triangles[i * 3 + 2] + IndexOffset), SubModelIndexToMaterialIndex[SubModelIndex]);
+				}
 
+				IndexOffset += Positions.size();
+				HasGeometry = true;
+			}
+			
+			if (HasGeometry)
+			{
 				BinaryVectorWriter Writer;
-				Writer.WriteInteger(Vertices.size() * sizeof(float), sizeof(uint32_t));
-				Writer.WriteInteger(Indices.size() * sizeof(uint32_t), sizeof(uint32_t));
-
-				Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(Vertices.data()), Vertices.size() * sizeof(float));
-				Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(Indices.data()), Indices.size() * sizeof(uint32_t));
+				Writer.WriteInteger(MaterialInfo.size(), sizeof(uint32_t));
+				Writer.WriteInteger(Vertices.size() * 12, sizeof(uint32_t));
+				Writer.WriteInteger(Indices.size() * 16, sizeof(uint32_t));
+				for (size_t i = 0; i < MaterialInfo.size(); i++)
+				{
+					Writer.WriteInteger(MaterialInfo[i].mId, sizeof(uint32_t));
+					Writer.WriteInteger(MaterialInfo[i].mFlags, sizeof(uint64_t));
+					Writer.WriteInteger(0xFFFFFFFF, sizeof(uint32_t));
+					Writer.WriteInteger(MaterialInfo[i].mCollisionFlags, sizeof(uint32_t));
+				}
+				for (glm::vec3& Vertex : Vertices)
+				{
+					Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&Vertex.x), sizeof(float));
+					Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&Vertex.y), sizeof(float));
+					Writer.WriteRawUnsafeFixed(reinterpret_cast<const char*>(&Vertex.z), sizeof(float));
+				}
+				for (auto& Index : Indices)
+				{
+					Writer.WriteInteger(std::get<0>(Index.first), sizeof(uint32_t));
+					Writer.WriteInteger(std::get<1>(Index.first), sizeof(uint32_t));
+					Writer.WriteInteger(std::get<2>(Index.first), sizeof(uint32_t));
+					Writer.WriteInteger(Index.second, sizeof(uint32_t));
+				}
 
 				PhiveSocketConnector::SendData(PhiveSocketConnector::OperationType::FX_OP_RAWTOPHIVE, Writer.GetData());
 				std::vector<unsigned char> Ret = PhiveSocketConnector::GetData();
-				if (!Ret.empty())
-				{
-					std::vector<unsigned char> Shape = SplatoonShapeToTotK::Convert(Ret, Materials[SubModelIndex].Settings);
-					ZStdFile::Compress(Shape, ZStdFile::Dictionary::Base).WriteToFile(Editor::GetWorkingDirFile("Save/Phive/Shape/Dcc/" + SecondActorName + "__Physical_Col_" + std::to_string(SubModelIndex - MaterialOffset) + ".Nin_NX_NVN.bphsh.zs"));
-					Util::WriteFile(Editor::GetWorkingDirFile("Shapes/" + SecondActorName + "__Physical_Col_" + std::to_string(SubModelIndex - MaterialOffset) + ".bphsh"), Shape);
+				Util::WriteFile(Editor::GetWorkingDirFile("Pot2CollisionGeneratedByTotK_Materials.bphsh"), Ret);
+				ZStdFile::Compress(Ret, ZStdFile::Dictionary::Base).WriteToFile(Editor::GetWorkingDirFile("Save/Phive/Shape/Dcc/" + SecondActorName + "__Physical_Col.Nin_NX_NVN.bphsh.zs"));
+
+				SarcFile ActorPack(ZStdFile::Decompress(Editor::GetRomFSFile("Pack/Actor/" + SecondActorName + ".pack.zs"), ZStdFile::Dictionary::Pack).Data);
+
+				//Clearing actor pack
+				for (auto Iter = ActorPack.GetEntries().begin(); Iter != ActorPack.GetEntries().end(); ) {
+					if (Iter->Name.starts_with("Phive/"))
+						Iter = ActorPack.GetEntries().erase(Iter);
+					else
+						Iter++;
 				}
+
+				std::string ShapeParamBaseName = SecondActorName + "__Physical_Col";
+
+				{
+					SarcFile::Entry Entry;
+					Entry.Bytes = GenerateShapeParamFile(ShapeParamBaseName, Vector3F(-10, -10, -10), Vector3F(10, 10, 10)).ToBinary(BymlFile::TableGeneration::Auto);
+					Entry.Name = "Phive/ShapeParam/" + ShapeParamBaseName + ".phive__ShapeParam.bgyml";
+					ActorPack.GetEntries().push_back(Entry);
+				}
+
+				{
+					SarcFile::Entry Entry;
+					Entry.Bytes = GenerateRigidBodyEntityParamByml(ShapeParamBaseName).ToBinary(BymlFile::TableGeneration::Auto);
+					Entry.Name = "Phive/RigidBodyEntityParam/" + SecondActorName + "_Body.phive__RigidBodyEntityParam.bgyml";
+					ActorPack.GetEntries().push_back(Entry);
+				}
+
+				//RigidBodyControllerEntityParam
+				SarcFile::Entry RigidBodyControllerEntityParamEntry;
+				RigidBodyControllerEntityParamEntry.Bytes = GenerateRigidBodyControllerEntityParamByml().ToBinary(BymlFile::TableGeneration::Auto);
+				RigidBodyControllerEntityParamEntry.Name = "Phive/RigidBodyControllerEntityParam/" + SecondActorName + "_Body.phive__RigidBodyControllerEntityParam.bgyml";
+				ActorPack.GetEntries().push_back(RigidBodyControllerEntityParamEntry);
+
+				//ControllerSetParam
+				SarcFile::Entry ControllerSetParamEntry;
+				ControllerSetParamEntry.Bytes = GenerateControllerSetParamByml(SecondActorName).ToBinary(BymlFile::TableGeneration::Auto);
+				ControllerSetParamEntry.Name = "Phive/ControllerSetParam/" + SecondActorName + ".phive__ControllerSetParam.bgyml";
+				ActorPack.GetEntries().push_back(ControllerSetParamEntry);
+
+				//PhysicsRef
+				SarcFile::Entry* PhysicsEntry = nullptr;
+				for (SarcFile::Entry& Entry : ActorPack.GetEntries())
+				{
+					if (Entry.Name.starts_with("Component/Physics/"))
+					{
+						PhysicsEntry = &Entry;
+						break;
+					}
+				}
+				if (PhysicsEntry != nullptr)
+				{
+					BymlFile PhysicsRefByml(PhysicsEntry->Bytes);
+					if (PhysicsRefByml.HasChild("ControllerSetPath"))
+					{
+						BymlFile::Node* ControllerRefNode = PhysicsRefByml.GetNode("ControllerSetPath");
+						ControllerRefNode->SetValue<std::string>("Work/Phive/ControllerSetParam/" + SecondActorName + ".phive__ControllerSetParam.gyml");
+						PhysicsEntry->Bytes = PhysicsRefByml.ToBinary(BymlFile::TableGeneration::Auto);
+					}
+				}
+
+				Util::CreateDir(Editor::GetWorkingDirFile("Save/Pack/Actor"));
+
+				ZStdFile::Compress(ActorPack.ToBinary(), ZStdFile::Dictionary::Pack).WriteToFile(Editor::GetWorkingDirFile("Save/Pack/Actor/" + SecondActorName + ".pack.zs"));
 			}
 		}
 
@@ -761,11 +857,11 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 				bool Hovered = false;
 
 				ImGui::Dummy(ImVec2(0, PaddingTopBottom));
-				ImGui::Checkbox(("##GenCollisionCreatorShape" + std::to_string(SubModelIndex)).c_str(), &Materials[SubModelIndex].Generate);
+				ImGui::Checkbox(("##GenCollisionCreatorShape" + std::to_string(SubModelIndex)).c_str(), &Materials[SubModelIndex].mGenerate);
 				ImGui::Dummy(ImVec2(0, PaddingTopBottom));
 				ImGui::NextColumn();
 
-				if (!Materials[SubModelIndex].Generate)
+				if (!Materials[SubModelIndex].mGenerate)
 					ImGui::BeginDisabled();
 
 				ImGui::Dummy(ImVec2(0, PaddingTopBottom + (ImGui::GetFrameHeight() - TextSize.y) / 2));
@@ -781,18 +877,26 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 				{
 					FirstComboPos = ImGui::GetCursorScreenPos();
 				}
-				ImGui::Combo(("##UICollisionCreatorMaterialType" + std::to_string(SubModelIndex)).c_str(), reinterpret_cast<int*>(&Materials[SubModelIndex].Settings.MaterialIndex), SplatoonShapeToTotK::Materials.data(), SplatoonShapeToTotK::Materials.size());
+				ImGui::Combo(("##UICollisionCreatorMaterialType" + std::to_string(SubModelIndex)).c_str(), reinterpret_cast<int*>(&Materials[SubModelIndex].mMaterial.mMaterialId), PhiveMaterialData::mMaterialNames.data(), PhiveMaterialData::mMaterialNames.size());
 				if (FirstComboSize.x == 0.0f && FirstComboSize.y == 0.0f)
 				{
 					ImGui::SameLine();
 					FirstComboSize = ImVec2(ImGui::GetCursorScreenPos().x - FirstComboPos.x, ImGui::GetCursorScreenPos().y - FirstComboPos.y);
 					ImGui::NewLine();
 				}
-				ImGui::Checkbox(("Climbable##CollisionCreatorShape" + std::to_string(SubModelIndex)).c_str(), &Materials[SubModelIndex].Settings.Climbable);
+				//ImGui::Checkbox(("Climbable##CollisionCreatorShape" + std::to_string(SubModelIndex)).c_str(), &Materials[SubModelIndex].Settings.Climbable);
+				float w = ImGui::GetCursorScreenPos().x;
+				if (ImGui::Button(("Flags##CollisionCreatorShape" + std::to_string(SubModelIndex)).c_str()))
+				{
+					mFlagSubModelIndex = SubModelIndex;
+					mMaterialPopUpW = w;
+					mMaterialPopUpPos = ImGui::GetCursorScreenPos();
+					mMaterialPopUpOpen = true;
+				}
 
 				ImGui::Columns();
 
-				if (!Materials[SubModelIndex].Generate)
+				if (!Materials[SubModelIndex].mGenerate)
 					ImGui::EndDisabled();
 
 				ImGui::Separator();
@@ -810,7 +914,7 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 					{
 						for (int SubModelIndex = 0; SubModelIndex < Model->mBfres->Models.GetByIndex(0).Value.Shapes.Nodes.size(); SubModelIndex++)
 						{
-							Materials[SubModelIndex].Settings.MaterialIndex = SelectedMasterMaterial - 1;
+							Materials[SubModelIndex].mMaterial.mMaterialId = SelectedMasterMaterial - 1;
 						}
 					}
 				}
@@ -824,5 +928,12 @@ void UICollisionCreator::DrawCollisionCreatorWindow()
 		}
 	}
 End:
+	if (mMaterialPopUpOpen)
+	{
+		mMaterialPopUpOpen = false;
+		ImGui::OpenPopup("CollisionCreatorMaterialFlagPopUp");
+	}
+	DrawMaterialFlagsPopUp();
+
 	ImGui::End();
 }

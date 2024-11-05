@@ -175,6 +175,9 @@
     <Filter Include="Source Files\ui\ui_parts\bfevfl\nodes">
       <UniqueIdentifier>{d78d0049-b1f1-4ea6-ae9c-0537538d5f04}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\file\phive\havok">
+      <UniqueIdentifier>{b48fd92d-0773-4abf-88d5-8e9646c7e4a5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -438,9 +441,6 @@
     <ClCompile Include="PopupStackActors.cpp">
       <Filter>Source Files\ui\popup</Filter>
     </ClCompile>
-    <ClCompile Include="SplatoonShapeToTotK.cpp">
-      <Filter>Source Files\phive_creator</Filter>
-    </ClCompile>
     <ClCompile Include="PhiveSocketConnector.cpp">
       <Filter>Source Files\phive_creator</Filter>
     </ClCompile>
@@ -647,6 +647,15 @@
     </ClCompile>
     <ClCompile Include="SceneExporter.cpp">
       <Filter>Source Files\engine</Filter>
+    </ClCompile>
+    <ClCompile Include="DynamicPropertyMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="RailMgr.cpp">
+      <Filter>Source Files\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="PhiveMaterialData.cpp">
+      <Filter>Source Files\phive_creator</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -922,9 +931,6 @@
     </ClInclude>
     <ClInclude Include="PopupStackActors.h">
       <Filter>Header Files\ui\popup</Filter>
-    </ClInclude>
-    <ClInclude Include="SplatoonShapeToTotK.h">
-      <Filter>Header Files\phive_creator</Filter>
     </ClInclude>
     <ClInclude Include="PhiveSocketConnector.h">
       <Filter>Header Files\phive_creator</Filter>
@@ -1207,6 +1213,18 @@
     </ClInclude>
     <ClInclude Include="SceneExporter.h">
       <Filter>Header Files\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="DynamicPropertyMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="RailMgr.h">
+      <Filter>Header Files\manager</Filter>
+    </ClInclude>
+    <ClInclude Include="HavokClasses.h">
+      <Filter>Header Files\file\phive\havok</Filter>
+    </ClInclude>
+    <ClInclude Include="PhiveMaterialData.h">
+      <Filter>Header Files\phive_creator</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

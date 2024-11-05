@@ -110,6 +110,18 @@ void APIENTRY glDebugOutput(GLenum source,
 	std::cout << std::endl;
 }
 
+void PrintExtensions()
+{
+	GLint numExtensions = 0;
+	glGetIntegerv(GL_NUM_EXTENSIONS, &numExtensions);
+
+	std::cout << "Supported OpenGL Extensions:\n";
+	for (int i = 0; i < numExtensions; ++i) {
+		const char* extension = (const char*)glGetStringi(GL_EXTENSIONS, i);
+		std::cout << extension << std::endl;
+	}
+}
+
 void UI::Initialize()
 {
 	glfwSetErrorCallback([](int Error, const char* Description)

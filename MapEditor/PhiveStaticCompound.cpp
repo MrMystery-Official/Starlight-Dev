@@ -3,6 +3,7 @@
 #include "BinaryVectorReader.h"
 #include "BinaryVectorWriter.h"
 #include "Logger.h"
+#include "PhiveWrapper.h"
 #include <iostream>
 #include <fstream>
 
@@ -66,6 +67,170 @@ std::optional<glm::vec2> PhiveStaticCompound::GetActorModelScale(Actor& SceneAct
 	}
 
 	return Max;
+}
+
+void PhiveStaticCompound::PhiveStaticCompoundHkTagFile::ReadStringTable(BinaryVectorReader Reader, std::vector<std::string>& Dest)
+{
+	uint32_t Size = Reader.ReadUInt32(true) & 0x3FFFFFFF;
+	uint32_t TargetAddress = Reader.GetPosition() + Size - 4; //-4 = Size(3) + Flags(1)
+
+	Reader.Seek(4, BinaryVectorReader::Position::Current); //Magic
+
+	std::string Text = "";
+	while (Reader.GetPosition() != TargetAddress)
+	{
+		char Character = Reader.ReadUInt8();
+		if (Character == 0x00)
+		{
+			Dest.push_back(Text);
+			Text.clear();
+			continue;
+		}
+
+		Text += Character;
+	}
+}
+
+//ReadPackedInt taken from https://github.com/blueskythlikesclouds/TagTools/blob/havoc/Havoc/Extensions/BinaryReaderEx.cs
+int64_t PhiveStaticCompound::PhiveStaticCompoundHkTagFile::ReadPackedInt(BinaryVectorReader& Reader)
+{
+	uint8_t FirstByte = Reader.ReadUInt8();
+
+	if ((FirstByte & 0x80) == 0)
+		return FirstByte;
+
+	switch (FirstByte >> 3)
+	{
+	case 0x10:
+	case 0x11:
+	case 0x12:
+	case 0x13:
+	case 0x14:
+	case 0x15:
+	case 0x16:
+	case 0x17:
+		return ((FirstByte << 8) | Reader.ReadUInt8()) & 0x3FFF;
+
+	case 0x18:
+	case 0x19:
+	case 0x1A:
+	case 0x1B:
+		return ((FirstByte << 16) | (Reader.ReadUInt8() << 8) | Reader.ReadUInt8()) & 0x1FFFFF;
+
+	case 0x1C:
+		return ((FirstByte << 24) | (Reader.ReadUInt8() << 16) | (Reader.ReadUInt8() << 8) |
+			Reader.ReadUInt8()) &
+			0x7FFFFFF;
+
+	case 0x1D:
+		return ((FirstByte << 32) | (Reader.ReadUInt8() << 24) | (Reader.ReadUInt8() << 16) |
+			(Reader.ReadUInt8() << 8) | Reader.ReadUInt8()) & 0x7FFFFFFFFFFFFFF;
+
+	case 0x1E:
+		return ((FirstByte << 56) | (Reader.ReadUInt8() << 48) | (Reader.ReadUInt8() << 40) |
+			(Reader.ReadUInt8() << 32) | (Reader.ReadUInt8() << 24) | (Reader.ReadUInt8() << 16) |
+			(Reader.ReadUInt8() << 8) | Reader.ReadUInt8()) & 0x7FFFFFFFFFFFFFF;
+
+	case 0x1F:
+		return (FirstByte & 7) == 0
+			? ((FirstByte << 40) | (Reader.ReadUInt8() << 32) | (Reader.ReadUInt8() << 24) |
+				(Reader.ReadUInt8() << 16) |
+				(Reader.ReadUInt8() << 8) | Reader.ReadUInt8()) & 0xFFFFFFFFFF
+			: (FirstByte & 7) == 1
+			? (Reader.ReadUInt8() << 56) | (Reader.ReadUInt8() << 48) | (Reader.ReadUInt8() << 40) |
+			(Reader.ReadUInt8() << 32) | (Reader.ReadUInt8() << 24) | (Reader.ReadUInt8() << 16) |
+			(Reader.ReadUInt8() << 8) | Reader.ReadUInt8()
+			: 0;
+
+	default:
+		return 0;
+	}
+}
+
+void PhiveStaticCompound::PhiveStaticCompoundHkTagFile::ReadTagNameMapping(BinaryVectorReader& Reader)
+{
+	uint32_t Size = Reader.ReadUInt32(true) & 0x3FFFFFFF;
+	Reader.Seek(4, BinaryVectorReader::Position::Current); //Magic
+	Size = Size - 8; //Flags(1) - Size(3) - Magic(4)
+
+	uint32_t ElementCount = ReadPackedInt(Reader);
+	ElementCount = mMaxNameMappingReference;
+	mNameMapping.resize(ElementCount);
+
+	for (uint32_t i = 0; i < ElementCount; i++)
+	{
+		PhiveTagNameMappingItem Item;
+
+		uint32_t Index = ReadPackedInt(Reader);
+		uint32_t TemplateCount = ReadPackedInt(Reader);
+
+		Item.mTag = mTagStringTable[Index];
+		Item.mParameters.resize(TemplateCount);
+		for (size_t j = 0; j < Item.mParameters.size(); j++)
+		{
+			uint32_t ParameterIndex = ReadPackedInt(Reader);
+			Item.mParameters[j].mValueIndex = ReadPackedInt(Reader);
+
+			Item.mParameters[j].mParameter = mTagStringTable[ParameterIndex];
+			if (Item.mParameters[j].mParameter[0] == 't' && mTagStringTable.size() > (Item.mParameters[j].mValueIndex - 1))
+			{
+				Item.mParameters[j].mValue = mTagStringTable[Item.mParameters[j].mValueIndex - 1];
+			}
+		}
+
+		mNameMapping[i] = Item;
+	}
+}
+
+void PhiveStaticCompound::PhiveStaticCompoundHkTagFile::ExtractItems()
+{
+	auto FindSection = [](BinaryVectorReader Reader, std::string Section)
+		{
+			Reader.Seek(0, BinaryVectorReader::Position::Begin);
+			char Data[4] = { 0 };
+			while (!(Data[0] == Section.at(0) && Data[1] == Section.at(1) && Data[2] == Section.at(2) && Data[3] == Section.at(3)))
+			{
+				Reader.ReadStruct(Data, 4);
+			}
+			return Reader.GetPosition() - 8; //-8 = Flags(1) - Size(3) - Magic(4)
+		};
+
+	BinaryVectorReader Reader(mData);
+
+	Reader.Seek(FindSection(Reader, "TST1"), BinaryVectorReader::Position::Begin);
+	ReadStringTable(Reader, mTagStringTable);
+
+	Reader.Seek(FindSection(Reader, "FST1"), BinaryVectorReader::Position::Begin);
+	ReadStringTable(Reader, mFieldStringTable);
+
+	Reader.Seek(FindSection(Reader, "ITEM"), BinaryVectorReader::Position::Begin);
+	
+	uint32_t Size = Reader.ReadUInt32(true) & 0x3FFFFFFF;
+	uint32_t ItemCount = (Size - 8) / 12;
+	mItems.resize(ItemCount);
+	Reader.Seek(4, BinaryVectorReader::Position::Current);
+	for (uint32_t i = 0; i < ItemCount; i++)
+	{
+		Reader.ReadStruct(&mItems[i], sizeof(uint32_t) * 3);
+	}
+	for (PhiveDataItem& Item : mItems)
+	{
+		Item.mTypeIndex = Item.mFlags & 0xFFFFFF;
+		mMaxNameMappingReference = std::max(mMaxNameMappingReference, Item.mTypeIndex);
+	}
+
+	Reader.Seek(FindSection(Reader, "TNA1"), BinaryVectorReader::Position::Begin);
+	ReadTagNameMapping(Reader);
+
+	for (PhiveDataItem& Item : mItems)
+	{
+		if (Item.mTypeIndex == 0)
+			continue;
+
+		std::cout << "Item name: " << mNameMapping[Item.mTypeIndex - 1].mTag << std::endl;
+	}
+
+	Logger::Info("PhiveStaticCompound", "Read tag and field string table");
 }
 
 PhiveStaticCompound::PhiveStaticCompound(std::vector<unsigned char> Bytes)
@@ -134,6 +299,7 @@ PhiveStaticCompound::PhiveStaticCompound(std::vector<unsigned char> Bytes)
 		mCompoundTagFile[ImageIter].mSizeFlag = _byteswap_ulong(mCompoundTagFile[ImageIter].mSizeFlag);
 		mCompoundTagFile[ImageIter].mData.resize(mCompoundTagFile[ImageIter].mSizeFlag - 8);
 		Reader.ReadStruct(mCompoundTagFile[ImageIter].mData.data(), mCompoundTagFile[ImageIter].mData.size());
+		//mCompoundTagFile[ImageIter].ExtractItems();
 		ImageIter++;
 	}
 

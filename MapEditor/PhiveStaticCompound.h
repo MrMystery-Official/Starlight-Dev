@@ -154,10 +154,45 @@ public:
 
 	struct PhiveStaticCompoundHkTagFile
 	{
+		struct PhiveTagNameMappingItem
+		{
+			struct Parameter
+			{
+				std::string mParameter;
+				std::string mValue = "";
+				uint32_t mValueIndex = 0;
+			};
+
+			std::string mTag;
+			std::vector<Parameter> mParameters;
+		};
+
+		struct PhiveDataItem
+		{
+			uint32_t mFlags;
+			uint32_t mDataOffset;
+			uint32_t mCount;
+
+			uint32_t mTypeIndex = 0;
+		};
+
 		uint32_t mSizeFlag;
 		char mMagic[4];
 
 		std::vector<unsigned char> mData;
+
+		std::vector<std::string> mTagStringTable;
+		std::vector<std::string> mFieldStringTable;
+
+		uint32_t mMaxNameMappingReference = 0;
+		std::vector<PhiveTagNameMappingItem> mNameMapping;
+
+		std::vector<PhiveDataItem> mItems;
+
+		void ReadTagNameMapping(BinaryVectorReader& Reader);
+		int64_t ReadPackedInt(BinaryVectorReader& Reader);
+		void ReadStringTable(BinaryVectorReader Reader, std::vector<std::string>& Dest);
+		void ExtractItems();
 	};
 
 	/* Water box */

@@ -195,6 +195,7 @@
     <ClCompile Include="BVNode.cpp" />
     <ClCompile Include="Byml.cpp" />
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="DynamicPropertyMgr.cpp" />
     <ClCompile Include="EBO.cpp" />
     <ClCompile Include="Editor.cpp" />
     <ClCompile Include="EditorConfig.cpp" />
@@ -239,6 +240,7 @@
     <ClCompile Include="PhiveBinaryVectorReader.cpp" />
     <ClCompile Include="PhiveBinaryVectorWriter.cpp" />
     <ClCompile Include="PhiveClassGenerator.cpp" />
+    <ClCompile Include="PhiveMaterialData.cpp" />
     <ClCompile Include="PhiveNavMesh.cpp" />
     <ClCompile Include="PhiveShape.cpp" />
     <ClCompile Include="PhiveShape2.cpp" />
@@ -266,6 +268,7 @@
     <ClCompile Include="PopupStackActors.cpp" />
     <ClCompile Include="PreferencesConfig.cpp" />
     <ClCompile Include="ProjectRebuilder.cpp" />
+    <ClCompile Include="RailMgr.cpp" />
     <ClCompile Include="recastnavigation\detour\DetourAlloc.cpp" />
     <ClCompile Include="recastnavigation\detour\DetourAssert.cpp" />
     <ClCompile Include="recastnavigation\detour\DetourCommon.cpp" />
@@ -291,7 +294,6 @@
     <ClCompile Include="SceneMgr.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderMgr.cpp" />
-    <ClCompile Include="SplatoonShapeToTotK.cpp" />
     <ClCompile Include="StarImGui.cpp" />
     <ClCompile Include="StartlightData.cpp" />
     <ClCompile Include="stb.cpp" />
@@ -381,6 +383,7 @@
     <ClInclude Include="BVNode.h" />
     <ClInclude Include="Byml.h" />
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="DynamicPropertyMgr.h" />
     <ClInclude Include="EBO.h" />
     <ClInclude Include="Editor.h" />
     <ClInclude Include="EditorConfig.h" />
@@ -397,6 +400,7 @@
     <ClInclude Include="GLBfresVAO.h" />
     <ClInclude Include="GLFormatHelper.h" />
     <ClInclude Include="HashMgr.h" />
+    <ClInclude Include="HavokClasses.h" />
     <ClInclude Include="HGHT.h" />
     <ClInclude Include="ImGuiNodeEditorExt.h" />
     <ClInclude Include="imgui\imconfig.h" />
@@ -434,6 +438,7 @@
     <ClInclude Include="PhiveBinaryVectorReader.h" />
     <ClInclude Include="PhiveBinaryVectorWriter.h" />
     <ClInclude Include="PhiveClassGenerator.h" />
+    <ClInclude Include="PhiveMaterialData.h" />
     <ClInclude Include="PhiveNavMesh.h" />
     <ClInclude Include="PhiveShape.h" />
     <ClInclude Include="PhiveShape2.h" />
@@ -461,6 +466,7 @@
     <ClInclude Include="PopupStackActors.h" />
     <ClInclude Include="PreferencesConfig.h" />
     <ClInclude Include="ProjectRebuilder.h" />
+    <ClInclude Include="RailMgr.h" />
     <ClInclude Include="recastnavigation\detour\DetourAlloc.h" />
     <ClInclude Include="recastnavigation\detour\DetourAssert.h" />
     <ClInclude Include="recastnavigation\detour\DetourCommon.h" />
@@ -480,7 +486,6 @@
     <ClInclude Include="SceneMgr.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="ShaderMgr.h" />
-    <ClInclude Include="SplatoonShapeToTotK.h" />
     <ClInclude Include="StarImGui.h" />
     <ClInclude Include="StarlightData.h" />
     <ClInclude Include="TegraSwizzle.h" />

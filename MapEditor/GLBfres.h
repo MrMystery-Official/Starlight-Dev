@@ -40,6 +40,7 @@ public:
 
 	static std::unordered_map<BfresFile::BfresAttribFormat, FormatInfo> mFormatList;
 	static std::unordered_map<std::string, uint32_t> mAttributeLocations;
+	static void (*mDrawFunc)(GLBfres*, std::vector<glm::mat4>&, Shader*);
 
 	std::vector<std::pair<BufferObject, uint32_t>> mIndexBuffers; //Buffer, count
 	std::vector<std::vector<BufferObject>> mShapeBuffers;
@@ -55,6 +56,8 @@ public:
 	GLBfres() = default;
 
 	void LoadFallbackTexture(GLMaterial& Material);
+	static void DrawCulled(GLBfres* Parent, std::vector<glm::mat4>& ModelMatrices, Shader* Shader);
+	static void DrawNotCulled(GLBfres* Parent, std::vector<glm::mat4>& ModelMatrices, Shader* Shader);
 	void Draw(std::vector<glm::mat4>& ModelMatrices, Shader* Shader);
 	void Delete();
 };

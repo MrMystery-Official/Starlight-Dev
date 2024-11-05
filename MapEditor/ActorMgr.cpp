@@ -540,17 +540,18 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 	//Cave stuff
 	//LocationArea - Location (Dynamic) - Cave_CentralHyrule_0009
 	/*
-	if (BymlActor.Dynamic.DynamicString.count("Location") && BymlActor.Gyml == "LocationArea")
+	if (BymlActor.Dynamic.count("Location") && BymlActor.Gyml == "LocationArea")
 	{
-		if (BymlActor.Dynamic.DynamicString["Location"].length() == 0 || !BymlActor.Dynamic.DynamicString["Location"].starts_with("Cave_"))
+		std::string Str = std::get<std::string>(BymlActor.Dynamic["Location"].Data);
+		if (Str.length() == 0 || !Str.starts_with("Cave_"))
 		{
-			BymlActor.Dynamic.DynamicString.erase("Location");
+			BymlActor.Dynamic.erase("Location");
 			goto FinishedCaveLoading;
 		}
-		Logger::Info("ActorMgr", "Loading cave " + BymlActor.Dynamic.DynamicString["Location"]);
+		Logger::Info("ActorMgr", "Loading cave " + Str);
 		//BymlActor.Dynamic.DynamicString["Location"]
-		BymlFile FileStatic(ZStdFile::Decompress(Editor::GetRomFSFile(Editor::BancDir + "/Cave/" + BymlActor.Dynamic.DynamicString["Location"] + "_GroupSet_000_Static.bcett.byml.zs"), ZStdFile::Dictionary::BcettByaml).Data);
-		BymlFile FileDynamic(ZStdFile::Decompress(Editor::GetRomFSFile(Editor::BancDir + "/Cave/" + BymlActor.Dynamic.DynamicString["Location"] + "_GroupSet_000_Dynamic.bcett.byml.zs"), ZStdFile::Dictionary::BcettByaml).Data);
+		BymlFile FileStatic(ZStdFile::Decompress(Editor::GetRomFSFile(Editor::BancDir + "/Cave/" + Str + "_GroupSet_000_Static.bcett.byml.zs"), ZStdFile::Dictionary::BcettByaml).Data);
+		BymlFile FileDynamic(ZStdFile::Decompress(Editor::GetRomFSFile(Editor::BancDir + "/Cave/" + Str + "_GroupSet_000_Dynamic.bcett.byml.zs"), ZStdFile::Dictionary::BcettByaml).Data);
 		
 		auto DecodeByml = [](BymlFile& File, Actor::Type Type)
 			{
@@ -568,7 +569,7 @@ Actor* ActorMgr::AddActorFromByml(BymlFile::Node& Node, Actor* ModifyActor) //nu
 	}
 
 FinishedCaveLoading:
-*/
+	*/
 
 	//Water/Fluid stuff in bphsc
 	for (PhiveStaticCompound& StaticCompound : SceneMgr::mStaticCompounds)
