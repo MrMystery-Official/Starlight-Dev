@@ -16,5 +16,5 @@
 ## Support
 
 -   **For bug reports or issues:** Please contact me via Discord(mrmystery0778) or open a GitHub issue.
--   **For general support:** Use the support channel in the Starlight Discord server: https://discord.gg/ug2pkkNq
+-   **For general support:** Use the support channel in the [Starlight Discord server](https://discord.gg/5SpRWKt8Sq).
 -   **Using Starlight in your mods:** If you use Starlight extensively in your mod creation, please credit this tool in your acknowledgments.
