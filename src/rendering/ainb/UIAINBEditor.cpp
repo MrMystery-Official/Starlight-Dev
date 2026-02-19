@@ -1804,6 +1804,12 @@ namespace application::rendering::ainb
 		{
 			for (auto& Child : n->mPtr->LinkedNodes[Type])
 			{
+				if (Child.NodeIndex >= Nodes.size())
+				{
+					application::util::Logger::Warning("UIAINBEditor", "The node %s with index %u links to a another node with index %i, which does not exist", n->mPtr->GetName().c_str(), n->mPtr->NodeIndex, Child.NodeIndex);
+					continue;
+				}
+
 				childCount++;
 				if (std::find(Visited.begin(), Visited.end(), &Nodes[Child.NodeIndex]) == Visited.end())
 				{
@@ -1866,8 +1872,13 @@ namespace application::rendering::ainb
 		{
 			for (auto& Child : n->mPtr->LinkedNodes[Type])
 			{
+				if (Child.NodeIndex >= Nodes.size())
+				{
+					application::util::Logger::Warning("UIAINBEditor", "The node %s with index %u links to a another node with index %i, which does not exist", n->mPtr->GetName().c_str(), n->mPtr->NodeIndex, Child.NodeIndex);
+					continue;
+				}
+
 				VisualNode* Node = &Nodes[Child.NodeIndex];
-				// FIXED: Only set _mRelY if not already visited
 				if (std::find(Visited.begin(), Visited.end(), Node) == Visited.end())
 				{
 					Node->_mRelY = curY + (Node->_mTreeHeight / 2);
@@ -2024,6 +2035,11 @@ namespace application::rendering::ainb
 		{
 			for (auto& Child : n->mPtr->LinkedNodes[Type])
 			{
+				if (Child.NodeIndex >= Nodes.size())
+				{
+					application::util::Logger::Warning("UIAINBEditor", "The node %s with index %u links to a another node with index %i, which does not exist", n->mPtr->GetName().c_str(), n->mPtr->NodeIndex, Child.NodeIndex);
+					continue;
+				}
 				if (std::find(Placed.begin(), Placed.end(), &Nodes[Child.NodeIndex]) == Placed.end())
 				{
 					AutoLayoutPlaceSubtree(&Nodes[Child.NodeIndex], x + HorizontalSpacing, finalY + Nodes[Child.NodeIndex]._mRelY, Placed, Bounds, Nodes);
