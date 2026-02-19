@@ -1326,6 +1326,24 @@ namespace application::gl
                                 }
                             }
 
+                            uint16_t Min = 0xFFFF;
+                            uint16_t Max = 0x0000;
+                            for (uint16_t Data : Hght.mHeightMap)
+                            {
+                                Min = std::min(Min, Data);
+                                Max = std::max(Max, Data);
+                            }
+
+                            for (auto& FileRes : Area->mFileResources)
+                            {
+                                if (FileRes.mObj.mType == application::file::game::terrain::TerrainSceneFile::ResFileType::HeightMap)
+                                {
+                                    FileRes.mObj.mMinHeight = Min / 65535.0f;
+                                    FileRes.mObj.mMaxHeight = Max / 65535.0f;
+                                    TerrainScene->mTerrainSceneFile.mModified = true;
+                                }
+                            }
+
                             application::util::Logger::Info("TerrainRenderer", "Saved height data for additional ResArea: %s (Scale: %.3f)",
                                 Area->mFilenameOffset.mResString.mString.c_str(), CurrentScale);
 

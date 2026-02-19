@@ -1271,11 +1271,259 @@ namespace application::rendering::map_editor
 
             if (ImGui::CollapsingHeader("Phive", ImGuiTreeNodeFlags_DefaultOpen))
             {
+                /*
+
+			struct RopeLink
+			{
+				uint64_t mID = 0;
+				std::vector<uint64_t> mOwners;
+				std::vector<uint64_t> mRefers;
+			};
+
+			std::optional<RopeLink> mRopeHeadLink = std::nullopt;
+			std::optional<RopeLink> mRopeTailLink = std::nullopt;
+		};
+                */
                 ImGui::Indent();
 
                 DrawDynamicTypePropertiesSeparator("Placement", RenderInfo->mEntity->mPhive.mPlacement, SyncBancEntity, mPropertiesWindowInfo.mSetPhivePlacementColumnWidth);
                
                  ImGui::Unindent();
+
+                 ImGui::NewLine();
+                 ImGui::Text("Constraint Link");
+
+                 if (!RenderInfo->mEntity->mPhive.mConstraintLink.has_value())
+                 {
+                     ImGui::SameLine();
+                     if (ImGui::Button("Add"))
+                     {
+                         RenderInfo->mEntity->mPhive.mConstraintLink.emplace();
+						 SyncBancEntity = true;
+                     }
+                 }
+
+                 ImGui::Separator();
+                 if (RenderInfo->mEntity->mPhive.mConstraintLink.has_value())
+                 {
+                     ImGui::Indent();
+
+                     ImGui::Columns(2, "PhiveConstraintLinkColumnsID");
+                     ImGui::Text("ID");
+                     ImGui::NextColumn();
+                     ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                     ImGui::InputScalar("##PhiveConstarintLinkID", ImGuiDataType_U64, reinterpret_cast<uint64_t*>(&RenderInfo->mEntity->mPhive.mConstraintLink->mID));
+                     ImGui::PopItemWidth();
+                     ImGui::NextColumn();
+
+                     ImGui::Columns();
+                     ImGui::Text("Owners");
+                     if (ImGui::Button("Add##Owner", ImVec2(ImGui::GetWindowWidth() - ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().IndentSpacing - ImGui::GetStyle().ScrollbarSize, 0)))
+                     {
+                         application::game::BancEntity::Phive::ConstraintLink::Owner Owner;
+                         Owner.mType = "Fixed";
+                         Owner.mParamData.insert({ "EnableAngularSpringMode", false });
+                         Owner.mParamData.insert({ "EnableLinearSpringMode", false });
+                         RenderInfo->mEntity->mPhive.mConstraintLink->mOwners.push_back(Owner);
+                     }
+                     ImGui::Separator();
+                     ImGui::Indent();
+                     uint32_t OwnerIndex = 0;
+                     for (application::game::BancEntity::Phive::ConstraintLink::Owner& Owner : RenderInfo->mEntity->mPhive.mConstraintLink->mOwners)
+                     {
+                         ImGui::Columns(2, ("PhiveConstraintLinkColumnsType" + std::to_string(OwnerIndex)).c_str());
+                         ImGui::Text("Type");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGui::InputText(std::string("##PhiveConstraintLinkOwnerType" + std::to_string(OwnerIndex)).c_str(), &Owner.mType);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+                         ImGui::Columns();
+
+                         DrawDynamicTypePropertiesSeparator("Breakable Data##ConstraintLink", Owner.mBreakableData, SyncBancEntity, mPropertiesWindowInfo.mSetPhiveColumnWidth);
+
+                         DrawDynamicTypePropertiesSeparator("Alias Data##ConstraintLink", Owner.mAliasData, SyncBancEntity, mPropertiesWindowInfo.mSetPhiveColumnWidth);
+
+                         DrawDynamicTypePropertiesSeparator("Cluster Data##ConstraintLink", Owner.mClusterData, SyncBancEntity, mPropertiesWindowInfo.mSetPhiveColumnWidth);
+
+                         DrawDynamicTypePropertiesSeparator("User Data##ConstraintLink", Owner.mUserData, SyncBancEntity, mPropertiesWindowInfo.mSetPhiveColumnWidth);
+
+                         DrawDynamicTypePropertiesSeparator("Param Data##ConstraintLink", Owner.mParamData, SyncBancEntity, mPropertiesWindowInfo.mSetPhiveColumnWidth);
+
+                         ImGui::Text("Pose");
+                         ImGui::Separator();
+                         ImGui::Indent();
+                         ImGui::Columns(2, ("PhiveConstraintLinkColumnsPose" + std::to_string(OwnerIndex)).c_str());
+                         ImGui::Text("Translate");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerPosTranslate" + std::to_string(OwnerIndex)).c_str(), &Owner.mOwnerPose.mTranslate.x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+                         ImGui::Text("Rotate");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerPosRotate" + std::to_string(OwnerIndex)).c_str(), &Owner.mOwnerPose.mRotate.x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+                         ImGui::Columns();
+                         ImGui::Unindent();
+
+                         ImGui::Text("Refer");
+                         ImGui::Separator();
+                         ImGui::Indent();
+
+                         ImGui::Columns(2, ("PhiveConstraintLinkColumnsRefer" + std::to_string(OwnerIndex)).c_str());
+                         ImGui::Text("ID");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGui::InputScalar(("PhiveConstraintLinkColumnsReferID" + std::to_string(OwnerIndex)).c_str(), ImGuiDataType_U64, reinterpret_cast<uint64_t*>(&Owner.mRefer));
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+                         ImGui::Columns();
+
+                         ImGui::Text("Pose");
+                         ImGui::Indent();
+                         ImGui::Columns(2, ("PhiveConstraintLinkColumnsReferPose" + std::to_string(OwnerIndex)).c_str());
+                         ImGui::Text("Translate");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerReferPosTranslate" + std::to_string(OwnerIndex)).c_str(), &Owner.mReferPose.mTranslate.x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+                         ImGui::Text("Rotate");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerReferPosRotate" + std::to_string(OwnerIndex)).c_str(), &Owner.mReferPose.mRotate.x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+                         ImGui::Columns();
+                         ImGui::Unindent();
+                         ImGui::Unindent();
+
+                         ImGui::Text("Pivot Data");
+                         ImGui::SameLine();
+                         if (ImGui::Button("Add all"))
+                         {
+                             if (!Owner.mPivotData.mAxis.has_value()) Owner.mPivotData.mAxis = 0;
+                             if (!Owner.mPivotData.mAxisA.has_value()) Owner.mPivotData.mAxisA = 0;
+                             if (!Owner.mPivotData.mAxisB.has_value()) Owner.mPivotData.mAxisB = 0;
+
+                             if (!Owner.mPivotData.mPivot.has_value()) Owner.mPivotData.mPivot.emplace();
+                             if (!Owner.mPivotData.mPivotA.has_value()) Owner.mPivotData.mPivotA.emplace();
+                             if (!Owner.mPivotData.mPivotB.has_value()) Owner.mPivotData.mPivotB.emplace();
+                         }
+                         ImGui::Separator();
+                         ImGui::Indent();
+                         ImGui::Columns(2, ("PhiveConstraintLinkColumnsPivotData" + std::to_string(OwnerIndex)).c_str());
+
+                         if (Owner.mPivotData.mAxis.has_value())
+                         {
+                             ImGui::Text("Axis");
+                             ImGui::NextColumn();
+                             ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                             ImGui::InputScalar(std::string("##PhiveConstrainLinkOwnerPivotDataAxis" + std::to_string(OwnerIndex)).c_str(), ImGuiDataType_S32, &Owner.mPivotData.mAxis.value());
+                             ImGui::PopItemWidth();
+                             ImGui::NextColumn();
+                         }
+
+                         if (Owner.mPivotData.mAxisA.has_value())
+                         {
+                             ImGui::Text("AxisA");
+                             ImGui::NextColumn();
+                             ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                             ImGui::InputScalar(std::string("##PhiveConstrainLinkOwnerPivotDataAxisA" + std::to_string(OwnerIndex)).c_str(), ImGuiDataType_S32, &Owner.mPivotData.mAxisA.value());
+                             ImGui::PopItemWidth();
+                             ImGui::NextColumn();
+                         }
+
+                         if (Owner.mPivotData.mAxisB.has_value())
+                         {
+                             ImGui::Text("AxisB");
+                             ImGui::NextColumn();
+                             ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                             ImGui::InputScalar(std::string("##PhiveConstrainLinkOwnerPivotDataAxisB" + std::to_string(OwnerIndex)).c_str(), ImGuiDataType_S32, &Owner.mPivotData.mAxisB.value());
+                             ImGui::PopItemWidth();
+                             ImGui::NextColumn();
+                         }
+
+                         if (Owner.mPivotData.mPivot.has_value())
+                         {
+                             ImGui::Text("Pivot");
+                             ImGui::NextColumn();
+                             ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                             ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerPivot" + std::to_string(OwnerIndex)).c_str(), &Owner.mPivotData.mPivot->x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                             ImGui::PopItemWidth();
+                             ImGui::NextColumn();
+                         }
+
+                         if (Owner.mPivotData.mPivotA.has_value())
+                         {
+                             ImGui::Text("PivotA");
+                             ImGui::NextColumn();
+                             ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                             ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerPivotA" + std::to_string(OwnerIndex)).c_str(), &Owner.mPivotData.mPivotA->x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                             ImGui::PopItemWidth();
+                             ImGui::NextColumn();
+                         }
+
+                         if (Owner.mPivotData.mPivotB.has_value())
+                         {
+                             ImGui::Text("PivotB");
+                             ImGui::NextColumn();
+                             ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                             ImGuiExt::InputFloat3Colored(std::string("##PhiveConstrainLinkOwnerPivotB" + std::to_string(OwnerIndex)).c_str(), &Owner.mPivotData.mPivotB->x, ImVec4(0.26f, 0.06f, 0.07f, 1.0f), ImVec4(0.06f, 0.26f, 0.07f, 1.0f), ImVec4(0.06f, 0.07f, 0.26f, 1.0f), true);
+                             ImGui::PopItemWidth();
+                             ImGui::NextColumn();
+                         }
+
+                         ImGui::Columns();
+                         ImGui::Unindent();
+
+                         OwnerIndex++;
+                     }
+                     ImGui::Unindent();
+
+                     ImGui::Text("Refers");
+                     if (ImGui::Button("Add##Refer", ImVec2(ImGui::GetWindowWidth() - ImGui::GetStyle().FramePadding.x * 2 - ImGui::GetStyle().IndentSpacing - ImGui::GetStyle().ScrollbarSize, 0)))
+                     {
+                         application::game::BancEntity::Phive::ConstraintLink::Refer Refer;
+                         Refer.mOwner = 0;
+                         Refer.mType = "Fixed";
+                         RenderInfo->mEntity->mPhive.mConstraintLink->mRefers.push_back(Refer);
+                     }
+                     ImGui::Separator();
+                     ImGui::Indent();
+                     uint32_t ReferIndex = 0;
+                     for (application::game::BancEntity::Phive::ConstraintLink::Refer& Refer : RenderInfo->mEntity->mPhive.mConstraintLink->mRefers)
+                     {
+                         ImGui::Columns(2, ("##PhiveConstrainLinkRefer" + std::to_string(ReferIndex)).c_str());
+
+                         ImGui::Text("Owner");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGui::InputScalar(("##PhiveConstrainLinkReferOwner" + std::to_string(ReferIndex)).c_str(), ImGuiDataType_U64, &Refer.mOwner);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+
+                         ImGui::Text("Type");
+                         ImGui::NextColumn();
+                         ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
+                         ImGui::InputText(("##PhiveConstrainLinkReferType" + std::to_string(ReferIndex)).c_str(), &Refer.mType);
+                         ImGui::PopItemWidth();
+                         ImGui::NextColumn();
+
+                         ImGui::Columns();
+
+                         if (ReferIndex < (RenderInfo->mEntity->mPhive.mConstraintLink->mRefers.size() - 1))
+                             ImGui::NewLine();
+
+                         ReferIndex++;
+                     }
+
+                     ImGui::Unindent();
+                     ImGui::Unindent();
+                 }
             }
 
             DrawDynamicTypePropertiesHeader("Presence", RenderInfo->mEntity->mPresence, SyncBancEntity, mPropertiesWindowInfo.mSetPresenceColumnWidth, ImGuiTreeNodeFlags_None);

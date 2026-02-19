@@ -23,7 +23,7 @@ Please make sure to restart Starlight *after* you have specified the paths for t
 
 For those who prefer to skip the build process or wish to support the ongoing development of Starlight, pre-compiled binaries are available for supporters on [Patreon](https://patreon.com/MrMystery846).
 
-### Building from Source (tested on Windows and MacOS)
+### Building from Source (tested on Windows and macOS)
 
 To compile Starlight on your local machine, follow these steps:
 

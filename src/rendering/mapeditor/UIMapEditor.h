@@ -90,6 +90,7 @@ namespace application::rendering::map_editor
 		struct PropertiesWindowInfo
 		{
 			bool mSetDynamicColumnWidth = true;
+			bool mSetPhiveColumnWidth = true;
 			bool mSetExternalParametersColumnWidth = true;
 			bool mSetPresenceColumnWidth = true;
 			bool mSetPhivePlacementColumnWidth = true;
