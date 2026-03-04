@@ -11,20 +11,13 @@ namespace application::util
 	//std::string FileUtil::gCurrentDirectory = "/Users/X/Desktop/AINBTool/Build/BfresTool";
 
 	std::string FileUtil::gRomFSPath = "";
-	std::string FileUtil::gBfresPath = "";
 	bool FileUtil::gPathsValid = false;
 
 	void FileUtil::ValidatePaths()
 	{
-		bool RomFSValid = !gRomFSPath.empty();
-		if (RomFSValid)
-			RomFSValid = FileExists(gRomFSPath + "/Pack/Bootup.Nin_NX_NVN.pack.zs");
-
-		bool ModelValid = !gBfresPath.empty();
-		if (ModelValid)
-			ModelValid = FileExists(gBfresPath + "/Weapon_Sword_020.Weapon_Sword_020.bfres");
-
-		gPathsValid = RomFSValid && ModelValid;
+		gPathsValid = !gRomFSPath.empty();
+		if (gPathsValid)
+			gPathsValid = FileExists(gRomFSPath + "/Pack/Bootup.Nin_NX_NVN.pack.zs");
 	}
 
 	std::string FileUtil::GetRomFSFilePath(const std::string& LocalPath, bool Replaceable)
@@ -45,7 +38,7 @@ namespace application::util
 		if (FileExists(ReplaceablePath))
 			return ReplaceablePath;
 
-		return gBfresPath + "/" + Name;
+		return gRomFSPath + "/Model/" + Name + ".mc";
 	}
 
 	std::string FileUtil::GetAssetFilePath(const std::string& Path)

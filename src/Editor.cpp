@@ -250,6 +250,8 @@ namespace application
             application::manager::PluginMgr::Initialize();
             application::rendering::popup::PopUpCommon::Initialize();
 
+            application::file::game::bfres::BfresFile::gMeshCodecWorkingMemSize = 0x12ac10 * 2;
+            application::file::game::bfres::BfresFile::gMeshCodecWorkingMem = malloc(application::file::game::bfres::BfresFile::gMeshCodecWorkingMemSize);
             application::file::game::bfres::BfresFile::Initialize();
             InitializeDefaultModels();
 
@@ -338,6 +340,11 @@ namespace application
 
     void Editor::Shutdown()
     {
+        if(application::file::game::bfres::BfresFile::gMeshCodecWorkingMem)
+        {
+            free(application::file::game::bfres::BfresFile::gMeshCodecWorkingMem);
+        }
+
         application::util::GitManager::Shutdown();
         application::manager::UIMgr::Cleanup();
         application::file::tool::AdditionalAINBNodes::Save(application::util::FileUtil::GetWorkingDirFilePath("Nodes.ainode.byml"));

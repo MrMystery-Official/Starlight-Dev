@@ -37,14 +37,6 @@ if (WIN32)
     # Common MSVC flags
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
 
-    # Debug
-    #set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi")
-    #set(CMAKE_EXE_LINKER_FLAGS_DEBUG "/DEBUG")
-
-    # Release WITH PDBs
-    #set(CMAKE_CXX_FLAGS_RELEASE "/MD /Zi")
-    #set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/DEBUG")
-
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /Zi")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /Zi")
 
@@ -190,6 +182,79 @@ if(NOT EXISTS ${CMAKE_SOURCE_DIR}/libs/libgit2)
         "${CMAKE_SOURCE_DIR}/libs/libgit2")
 endif()
 
+if(NOT EXISTS ${CMAKE_SOURCE_DIR}/libs/meshcodec)
+    CloneRepositoryOnly(
+        "https://github.com/dt-12345/MeshCodec.git"
+        "main"
+        "${CMAKE_SOURCE_DIR}/libs/meshcodec")
+endif()
+
+# -----------------------------------------------------------------------
+# Patch meshcodec sources (runs once, guarded by a stamp file)
+# -----------------------------------------------------------------------
+set(MESHCODEC_PATCH_STAMP "${CMAKE_SOURCE_DIR}/libs/meshcodec/.patched")
+if(NOT EXISTS "${MESHCODEC_PATCH_STAMP}")
+    message(STATUS "Patching meshcodec sources...")
+
+    find_program(PYTHON_EXECUTABLE python3 REQUIRED)
+    set(MESHCODEC_PATCH_SCRIPT [=[
+import glob
+import re
+
+def patch_file(path):
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        src = f.read()
+    original = src
+
+    # Replace invalid template guard pattern safely (do not remove surrounding structure).
+    src = re.sub(
+        r'^(\s*)if constexpr \(!std::is_same_v<T, u8> && !std::is_same_v<T, u16>\)\n\1\s*static_assert\(false, "Only supports u8 and u16"\);\n',
+        r'\1static_assert(std::is_same_v<T, u8> || std::is_same_v<T, u16>, "Only supports u8 and u16");\n',
+        src,
+        flags=re.MULTILINE,
+    )
+    src = re.sub(r'^[ \t]*static_assert\(false,\s*"[^"]*"\);\n', "", src, flags=re.MULTILINE)
+
+    src = re.sub(r"#include\s*<(xmmintrin|emmintrin|immintrin)\.h>\n", "", src)
+    src = re.sub(
+        r"std::(max|min)\(([^(),]+),([^(),]+)\)",
+        lambda m: "std::" + m.group(1) + "<decltype(" + m.group(2).strip() + ")>(" + m.group(2) + "," + m.group(3) + ")",
+        src,
+    )
+
+    if "#include <algorithm>" not in src:
+        src = "#include <algorithm>\n" + src
+    if "std::size_t" in src and "#include <cstddef>" not in src:
+        src = "#include <cstddef>\n" + src
+
+    if src != original:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(src)
+        print("Patched: " + path)
+
+files = glob.glob(r"${CMAKE_SOURCE_DIR}/libs/meshcodec/src/**/*.cpp", recursive=True)
+files += glob.glob(r"${CMAKE_SOURCE_DIR}/libs/meshcodec/src/**/*.h", recursive=True)
+for p in files:
+    patch_file(p)
+]=])
+    execute_process(
+        COMMAND ${PYTHON_EXECUTABLE} -c "${MESHCODEC_PATCH_SCRIPT}"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESULT_VARIABLE PATCH_RESULT
+    )
+
+    if(NOT PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "meshcodec patching failed")
+    endif()
+
+    # Write stamp so we never patch again unless libs/meshcodec is re-cloned
+    file(WRITE "${MESHCODEC_PATCH_STAMP}" "patched")
+    message(STATUS "meshcodec patching complete")
+else()
+    message(STATUS "meshcodec already patched, skipping")
+endif()
+# -----------------------------------------------------------------------
+
 set(IS_DEBUG_BUILD CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 project ("Starlight")
@@ -229,6 +294,8 @@ include_directories( libs/bullet3/src )
 include_directories( libs/libgit2/include )
 include_directories( libs/astcenc/Source )
 include_directories( libs/json/single_include )
+include_directories( libs/meshcodec/src/include )
+include_directories( libs/meshcodec/src )
 
 add_library(imgui
     libs/imgui/imgui.cpp
@@ -236,10 +303,8 @@ add_library(imgui
     libs/imgui/imgui_draw.cpp
     libs/imgui/imgui_tables.cpp
     libs/imgui/imgui_widgets.cpp
-    # Add GLFW backend files
     libs/imgui/imgui_impl_glfw.cpp
     libs/imgui/imgui_impl_opengl3.cpp
-    # Optional
     libs/imgui/imgui_stdlib.cpp
 )
 target_include_directories(imgui PUBLIC
@@ -332,6 +397,50 @@ target_include_directories(meshoptimizer PUBLIC
     ${CMAKE_SOURCE_DIR}/libs/meshoptimizer/src
 )
 
+add_library(meshcodec
+    libs/meshcodec/src/include/mc_Types.h
+
+    # meshoptimizer derived-ish
+    libs/meshcodec/src/include/mc_IndexCodec.h
+    libs/meshcodec/src/include/mc_VertexCodec.h
+
+    # zstandard
+    libs/meshcodec/src/include/mc_Zstd.h
+
+    libs/meshcodec/src/include/mc_AttributeCodec.h
+    libs/meshcodec/src/include/mc_BitStream.h
+    libs/meshcodec/src/include/mc_Codec.h
+    libs/meshcodec/src/include/mc_CompressionFormat.h
+    libs/meshcodec/src/include/mc_DecompContext.h
+    libs/meshcodec/src/include/mc_Float.h
+    libs/meshcodec/src/include/mc_IndexDecompressor.h
+    libs/meshcodec/src/include/mc_IndexStreamContext.h
+    libs/meshcodec/src/include/mc_StackAllocator.h
+    libs/meshcodec/src/include/mc_StreamContext.h
+    libs/meshcodec/src/include/mc_VertexDecompContext.h
+    libs/meshcodec/src/include/mc_VertexDecompressor.h
+
+    libs/meshcodec/src/mc_AttributeCodec.cpp
+    libs/meshcodec/src/mc_AttributeStreamInfo.cpp
+    libs/meshcodec/src/mc_Codec.cpp
+    libs/meshcodec/src/mc_Float.cpp
+    libs/meshcodec/src/mc_IndexCodec.cpp
+    libs/meshcodec/src/mc_IndexDecompressor.cpp
+    libs/meshcodec/src/mc_IndexStreamContext.cpp
+    libs/meshcodec/src/mc_StackAllocator.cpp
+    libs/meshcodec/src/mc_VertexCodec.cpp
+    libs/meshcodec/src/mc_VertexDecompContext.cpp
+    libs/meshcodec/src/mc_VertexDecompressor.cpp
+    libs/meshcodec/src/mc_Zstd.cpp
+
+    libs/meshcodec/src/mc_MeshCodec.h
+    libs/meshcodec/src/mc_MeshCodec.cpp
+)
+target_include_directories(meshcodec PUBLIC
+    ${CMAKE_SOURCE_DIR}/libs/meshcodec/src/include
+    ${CMAKE_SOURCE_DIR}/libs/zstd/lib
+)
+
 include_directories( src )
 
 # Include sub-projects.
@@ -343,6 +452,7 @@ link_libraries(OpenMeshCore OpenMeshTools)
 link_libraries(BulletDynamics BulletCollision LinearMath)
 link_libraries(libgit2package)
 link_libraries(meshoptimizer)
+link_libraries(meshcodec)
 message(STATUS "ASTCENC_TARGET: ${ASTCENC_TARGET}")
 link_libraries(${ASTCENC_TARGET})
 

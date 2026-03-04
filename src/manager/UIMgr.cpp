@@ -372,19 +372,6 @@ namespace application::manager
                 ImGui::InputText("##RomFSPath", &application::util::FileUtil::gRomFSPath);
                 ImGui::PopStyleColor();
                 ImGui::PopItemWidth();
-                ImGui::NextColumn();
-
-                ImGui::Text("Model Dump Path");
-                ImGui::NextColumn();
-                ImGui::PushItemWidth(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize);
-                bool ModelValid = !application::util::FileUtil::gBfresPath.empty();
-                if (ModelValid)
-                    ModelValid = application::util::FileUtil::FileExists(application::util::FileUtil::gBfresPath + "/Weapon_Sword_020.Weapon_Sword_020.bfres");
-
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, ModelValid ? ImVec4(0.06f, 0.26f, 0.07f, 1.0f) : ImVec4(0.26f, 0.06f, 0.07f, 1.0f));
-                ImGui::InputText("##ModelPath", &application::util::FileUtil::gBfresPath);
-                ImGui::PopStyleColor();
-                ImGui::PopItemWidth();
 
                 ImGui::Unindent();
                 ImGui::Columns();

@@ -934,7 +934,7 @@ namespace application::rendering::collision
                 }
                 if (ImGui::MenuItem(CreateID("Open BFRES").c_str()))
                 {
-                    auto Dialog = pfd::open_file("Choose BFRES file to open", application::util::FileUtil::gBfresPath,
+                    auto Dialog = pfd::open_file("Choose BFRES file to open", application::util::FileUtil::gRomFSPath,
                         { "Binary Cafe Resource (.bfres, .bfres.mc)", "*.bfres *.bfres.mc" },
                         pfd::opt::none);
 

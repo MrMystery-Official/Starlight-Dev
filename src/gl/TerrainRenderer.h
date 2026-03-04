@@ -6,6 +6,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <limits>
 #include <unordered_set>
 #include <file/game/phive/util/PhiveMaterialData.h>
 
@@ -50,8 +51,9 @@ namespace application::gl
 		std::string mSceneName;
 		std::string mSectionName;
 
-		float CalculateErrorForScale(int tileX, int tileY, float targetScale,
-			const glm::vec2& TilePos, const glm::vec2& SectionStartPoint);
+			float CalculateErrorForScale(int tileX, int tileY, float targetScale,
+				const glm::vec2& TilePos, const glm::vec2& SectionStartPoint,
+				float earlyExitError = std::numeric_limits<float>::max());
 		std::vector<float> GenerateTerrainVertices(const float Width, const float Height);
 		glm::vec2 SectionNameToCoords(const std::string& SectionName);
 		glm::vec2 GetSectionMidpoint(const std::string& SectionName);

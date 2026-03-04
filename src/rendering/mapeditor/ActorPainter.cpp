@@ -274,10 +274,12 @@ namespace application::rendering::map_editor
 			GLMModel = glm::translate(GLMModel, Intersection);
 			GLMModel = glm::scale(GLMModel, glm::vec3(mRadius, mRadius, mRadius));
 
-			gSphereShader->Bind();
-			MapEditor->mCamera.Matrix(gSphereShader, "camMatrix");
-			glUniformMatrix4fv(glGetUniformLocation(gSphereShader->mID, "modelMatrix"), 1, GL_FALSE, glm::value_ptr(GLMModel));
-			gSphereMesh.Draw();
+				gSphereShader->Bind();
+				MapEditor->mCamera.Matrix(gSphereShader, "camMatrix");
+				glUniformMatrix4fv(glGetUniformLocation(gSphereShader->mID, "modelMatrix"), 1, GL_FALSE, glm::value_ptr(GLMModel));
+				glUniform3f(glGetUniformLocation(gSphereShader->mID, "tintColor"), 0.0f, 1.0f, 0.5f);
+				glUniform1f(glGetUniformLocation(gSphereShader->mID, "opacity"), 0.5f);
+				gSphereMesh.Draw();
 
 			//application::manager::BfresRendererMgr::GetRenderer(application::manager::BfresFileMgr::GetBfresFile("Default"))->Draw(InstanceMatrix);
 

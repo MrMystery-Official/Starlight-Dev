@@ -27,6 +27,8 @@ namespace application::file::game::bfres
 	{
 	public:
 		static std::unordered_map<uint64_t, std::string> gExternalBinaryStrings;
+		static void* gMeshCodecWorkingMem;
+		static uint64_t gMeshCodecWorkingMemSize;
 		static void Initialize();
 
 		enum BfresAttribFormat : uint32_t

@@ -12,13 +12,76 @@
 #include <util/FileUtil.h>
 #include <filesystem>
 #include <util/Logger.h>
+#include <algorithm>
 #include <map>
 #include <sstream>
 #include <tool/scene/static_compound/StaticCompoundImplementationFieldScene.h>
 #include <meshoptimizer.h>
+#include <cmath>
+#include <limits>
 
 namespace application::gl
 {
+    namespace
+    {
+        constexpr int kSectionTileCount = 16;
+        constexpr int kTileResolution = 256;
+        constexpr int kTerrainTextureSize = kSectionTileCount * kTileResolution;
+        constexpr int kAreaGridResolution = 260;
+        constexpr float kBaseLodScale = 0.125f;
+        constexpr float kSectionWidthWorld = 1000.0f;
+
+        int ScaleToLod(const float scale)
+        {
+            return std::max(1, static_cast<int>(std::lround(scale / kBaseLodScale)));
+        }
+
+        int ClampIndex(const int value, const int size)
+        {
+            return std::clamp(value, 0, size - 1);
+        }
+
+        float BilinearSampleHeight(const std::vector<float>& data, const int textureSize, float x, float y)
+        {
+            x = std::clamp(x, 0.0f, static_cast<float>(textureSize - 1));
+            y = std::clamp(y, 0.0f, static_cast<float>(textureSize - 1));
+
+            const int x0 = static_cast<int>(std::floor(x));
+            const int y0 = static_cast<int>(std::floor(y));
+            const int x1 = std::min(x0 + 1, textureSize - 1);
+            const int y1 = std::min(y0 + 1, textureSize - 1);
+
+            const float fx = x - static_cast<float>(x0);
+            const float fy = y - static_cast<float>(y0);
+
+            const float h00 = data[y0 * textureSize + x0];
+            const float h10 = data[y0 * textureSize + x1];
+            const float h01 = data[y1 * textureSize + x0];
+            const float h11 = data[y1 * textureSize + x1];
+
+            const float h0 = h00 * (1.0f - fx) + h10 * fx;
+            const float h1 = h01 * (1.0f - fx) + h11 * fx;
+            return h0 * (1.0f - fy) + h1 * fy;
+        }
+
+        application::file::game::terrain::MateFile::MaterialIndexInfo SampleNearestMaterial(
+            const std::vector<unsigned char>& layerData, const int textureSize, float x, float y)
+        {
+            x = std::clamp(x, 0.0f, static_cast<float>(textureSize - 1));
+            y = std::clamp(y, 0.0f, static_cast<float>(textureSize - 1));
+
+            const int sampleX = ClampIndex(static_cast<int>(std::floor(x)), textureSize);
+            const int sampleY = ClampIndex(static_cast<int>(std::floor(y)), textureSize);
+            const int base = (sampleY * textureSize + sampleX) * 3;
+
+            return application::file::game::terrain::MateFile::MaterialIndexInfo{
+                .mIndexA = layerData[base],
+                .mIndexB = layerData[base + 1],
+                .mBlendFactor = layerData[base + 2]
+            };
+        }
+    }
+
     //Default material is stone (7), this only holds everything else
     std::unordered_map<uint16_t, uint16_t> TerrainRenderer::gMaterialAlbToPhiveMaterialIndex =
     {
@@ -71,8 +134,8 @@ namespace application::gl
     {
         glm::vec2 Nearest(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
 
-        int AreaCount = 16 / (Scale / 0.125f);
-        float TileSize = 1000.0f / AreaCount;
+        const int AreaCount = std::max(1, kSectionTileCount / ScaleToLod(Scale));
+        const float TileSize = kSectionWidthWorld / static_cast<float>(AreaCount);
         for (int x = 0; x < AreaCount; x++)
         {
             for (int y = 0; y < AreaCount; y++)
@@ -92,6 +155,12 @@ namespace application::gl
         {
             application::file::game::texture::TexToGoFile* MaterialAlbTexture = application::manager::TexToGoFileMgr::GetTexture("MaterialAlb.txtg");
 
+            if(!MaterialAlbTexture)
+            {
+                application::util::Logger::Error("TerrainRenderer", "Unable to locate MaterialAlb");
+                return;
+            }
+application::util::Logger::Info("TerrainRenderer", "#0");
             glGenTextures(1, &gMaterialAlbID);
             glBindTexture(GL_TEXTURE_2D_ARRAY, gMaterialAlbID);
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -99,22 +168,33 @@ namespace application::gl
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-            // Use glTexStorage3D for immutable storage
+application::util::Logger::Info("TerrainRenderer", "#1");
+
             if (MaterialAlbTexture->GetPolishedFormat() != application::file::game::texture::TextureFormat::Format::CPU_DECODED)
             {
-                glTexStorage3D(GL_TEXTURE_2D_ARRAY,
-                    1,  // Mip levels
-                    application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],  // Internal format
-                    1024, 1024, MaterialAlbTexture->GetDepth()); // Width, Height, Depth
+                application::util::Logger::Info("TerrainRenderer", "#1.1");
+
+                glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
+                    1024, 1024, MaterialAlbTexture->GetDepth(),
+                    0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+                glCompressedTexImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                    application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
+                    1024, 1024, MaterialAlbTexture->GetDepth(),
+                    0, MaterialAlbTexture->GetSurface(0).mData.size() * MaterialAlbTexture->GetDepth(), nullptr);
             }
             else
             {
-                glTexStorage3D(GL_TEXTURE_2D_ARRAY,
-                    1,  // Mip levels
-                    GL_RGBA8,  // Internal format
-                    1024, 1024, MaterialAlbTexture->GetDepth()); // Width, Height, Depth
-            }
+                glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
+                    1024, 1024, MaterialAlbTexture->GetDepth(),
+                    0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
+                glCompressedTexImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                    application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
+                    1024, 1024, MaterialAlbTexture->GetDepth(),
+                    0, MaterialAlbTexture->GetSurface(0).mData.size() * MaterialAlbTexture->GetDepth(), nullptr);
+            }
+application::util::Logger::Info("TerrainRenderer", "#2");
             // Upload data to the immutable texture
             for (uint16_t i = 0; i < MaterialAlbTexture->GetDepth(); i++)
             {
@@ -131,18 +211,19 @@ namespace application::gl
                         1024, 1024, 1, GL_RGBA, GL_UNSIGNED_BYTE, Surface.mData.data());
                 }
             }
+application::util::Logger::Info("TerrainRenderer", "#4");
         }
     }
 
-    void TerrainRenderer::LoadData(const std::string& SceneName, const std::string& SectionName)
-    {
-        //Init first time
-        if (gShader == nullptr)
-        {
-            gShader = application::manager::ShaderMgr::GetShader("Terrain", true);
+	    void TerrainRenderer::LoadData(const std::string& SceneName, const std::string& SectionName)
+	    {
+	        //Init first time
+	        if (gShader == nullptr)
+	        {
+	            gShader = application::manager::ShaderMgr::GetShader("Terrain", true);
 
-            std::vector<float> Vertices = GenerateTerrainVertices(1000.0f, 1000.0f);
-            mVertexCount = Vertices.size() / 5;
+	            std::vector<float> Vertices = GenerateTerrainVertices(1000.0f, 1000.0f);
+	            mVertexCount = Vertices.size() / 5;
 
             glGenVertexArrays(1, &gTerrainVAO);
             glBindVertexArray(gTerrainVAO);
@@ -153,9 +234,14 @@ namespace application::gl
 
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
             glEnableVertexAttribArray(0);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(sizeof(float) * 3));
-            glEnableVertexAttribArray(1);
-        }
+	            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(sizeof(float) * 3));
+	            glEnableVertexAttribArray(1);
+	        }
+	        else
+	        {
+	            // Shared terrain mesh is static; every renderer instance still needs a valid draw count.
+	            mVertexCount = 16 * 16 * 4;
+	        }
 
 		application::manager::TerrainMgr::TerrainScene* TerrainScene = application::manager::TerrainMgr::GetTerrainScene(SceneName);
         if(TerrainScene == nullptr)
@@ -172,36 +258,42 @@ namespace application::gl
 		const glm::vec2 SectionMidPoint = GetSectionMidpoint(SectionName);
 		const glm::vec2 SectionStartPoint = SectionMidPoint - glm::vec2(500.0f, 500.0f);
 
-        mHeightTextureData.resize((256 * 16) * (256 * 16));
-        mLayersTextureData.resize((256 * 16) * (256 * 16) * 3);
-        mTexCoordsTextureData.resize((256 * 16) * (256 * 16) * 4);
+	        mHeightTextureData.resize(kTerrainTextureSize * kTerrainTextureSize);
+	        mLayersTextureData.resize(kTerrainTextureSize * kTerrainTextureSize * 3);
+	        mTexCoordsTextureData.resize(kTerrainTextureSize * kTerrainTextureSize * 4);
 
-        mTerrainPosition = glm::vec3(SectionMidPoint.x, 0, SectionMidPoint.y);
-        mModelMatrix = glm::translate(mModelMatrix, mTerrainPosition);
+	        mTerrainPosition = glm::vec3(SectionMidPoint.x, 0, SectionMidPoint.y);
+	        mModelMatrix = glm::mat4(1.0f);
+	        mModelMatrix = glm::translate(mModelMatrix, mTerrainPosition);
 
         std::vector<application::file::game::terrain::TerrainSceneFile::ResArea*> Tiles = TerrainScene->mTerrainSceneFile.GetSectionTilesByPos(32.0f, SectionMidPoint, 1000.0f);
         
-        constexpr float TileWidth = 1000.0f / 16.0f;
+	        constexpr float TileWidth = kSectionWidthWorld / static_cast<float>(kSectionTileCount);
 
-        std::vector<int> MateReverseMap(application::file::game::terrain::MateFile::TEXTURE_INDEX_MAP.size(), 0);
-        for (int b = 0; b < application::file::game::terrain::MateFile::TEXTURE_INDEX_MAP.size(); ++b) {
-            MateReverseMap[application::file::game::terrain::MateFile::TEXTURE_INDEX_MAP[b]] = b;
-        }
+	        std::vector<int> MateReverseMap(application::file::game::terrain::MateFile::TEXTURE_INDEX_MAP.size(), 0);
+	        for (size_t b = 0; b < application::file::game::terrain::MateFile::TEXTURE_INDEX_MAP.size(); ++b) {
+	            MateReverseMap[application::file::game::terrain::MateFile::TEXTURE_INDEX_MAP[b]] = b;
+	        }
 
-        for (int x = 0; x < 16; x++)
-        {
-            for (int y = 0; y < 16; y++)
+	        auto getMaterialInfoIndex = [&MateReverseMap](uint8_t layer) -> int
+	        {
+	            if (layer >= MateReverseMap.size())
+	                return 0;
+	            return MateReverseMap[layer];
+	        };
+
+	        for (int x = 0; x < kSectionTileCount; x++)
+	        {
+	            for (int y = 0; y < kSectionTileCount; y++)
             {
                 const glm::vec2 TilePos = SectionStartPoint + glm::vec2(x * TileWidth, y * TileWidth) + glm::vec2(0.5f * TileWidth, 0.5f * TileWidth);
                 application::file::game::terrain::TerrainSceneFile::ResArea* TileArea = nullptr;
 
-				float CurrentScale = 0.125f; // Default scale for tiles
-                int BeginX = 0;
-                int EndX = 256;
-                int BeginY = 0;
-                int EndY = 256;
+					float CurrentScale = kBaseLodScale; // Default scale for tiles
+	                int BeginX = 0;
+	                int BeginY = 0;
 
-                while (TileArea == nullptr && CurrentScale <= 32.0f)
+	                while (TileArea == nullptr && CurrentScale <= 32.0f)
                 {
                     glm::vec2 MatchingAreaPos = GetNearestAreaPosition(CurrentScale, TilePos, SectionStartPoint);
 
@@ -218,18 +310,16 @@ namespace application::gl
                             TileArea = Area;
 
 							//When I thought of those calculations only god and I knew what that code does, now only god knows.
-							int SubSectionSize = 256 / (CurrentScale / 0.125f);
+								const int SubSectionSize = kTileResolution / ScaleToLod(CurrentScale);
 
-                            int AreaTileScale = TileWidth * (CurrentScale / 0.125f);
-                            glm::vec2 StartTilePos = TilePos - glm::vec2(0.5f * TileWidth, 0.5f * TileWidth);
-                            glm::vec2 StartAreaPos = AreaPos - glm::vec2(0.5f * AreaTileScale, 0.5f * AreaTileScale);
+	                            const float AreaTileScale = TileWidth * (CurrentScale / kBaseLodScale);
+	                            glm::vec2 StartTilePos = TilePos - glm::vec2(0.5f * TileWidth, 0.5f * TileWidth);
+	                            glm::vec2 StartAreaPos = AreaPos - glm::vec2(0.5f * AreaTileScale, 0.5f * AreaTileScale);
 
-                            BeginX = (StartTilePos.x - StartAreaPos.x) / TileWidth * SubSectionSize;
-                            BeginY = (StartTilePos.y - StartAreaPos.y) / TileWidth * SubSectionSize;
-                            EndX = BeginX + SubSectionSize;
-                            EndY = BeginY + SubSectionSize;
+	                            BeginX = (StartTilePos.x - StartAreaPos.x) / TileWidth * SubSectionSize;
+	                            BeginY = (StartTilePos.y - StartAreaPos.y) / TileWidth * SubSectionSize;
 
-                            break;
+	                            break;
                         }
                     }
 
@@ -252,50 +342,58 @@ namespace application::gl
                 application::file::game::terrain::HghtFile& Hght = ArchivePack->mHghtArchive.mHeightMaps[TileArea->mFilenameOffset.mResString.mString];
                 application::file::game::terrain::MateFile& Mate = ArchivePack->mMateArchive.mMateFiles[TileArea->mFilenameOffset.mResString.mString];
 
-                int LODScale = static_cast<int>(TileArea->mScale / 0.125f);
-                int SourceResolution = 256 / LODScale;
+	                const int LODScale = ScaleToLod(TileArea->mScale);
+	                const int SourceResolution = std::max(1, kTileResolution / LODScale);
 
-                for (int heightX = 0; heightX < 256; heightX++)
-                {
-                    for (int heightY = 0; heightY < 256; heightY++)
-                    {
-                        int TextureX = x * 256 + heightX;
-                        int TextureY = y * 256 + heightY;
-                        int TextureIndex = TextureY * (256 * 16) + TextureX;
+	                for (int heightX = 0; heightX < kTileResolution; heightX++)
+	                {
+	                    for (int heightY = 0; heightY < kTileResolution; heightY++)
+	                    {
+	                        const int TextureX = x * kTileResolution + heightX;
+	                        const int TextureY = y * kTileResolution + heightY;
+	                        const int TextureIndex = TextureY * kTerrainTextureSize + TextureX;
 
-                        if (TextureIndex >= 0 && TextureIndex < mHeightTextureData.size())
-                        {
+	                        if (TextureIndex >= 0 && static_cast<size_t>(TextureIndex) < mHeightTextureData.size())
+	                        {
                             float Height = 0.0f;
 
                             unsigned char LayerA = 0;
                             unsigned char LayerB = 0;
                             unsigned char BlendFactor = 0;
 
-                            if (LODScale == 1) // Full resolution
-                            {
-                                Height = Hght.GetHeightAtGridPos(heightX + 2, heightY + 2) * mHeightScale;
+	                            if (LODScale == 1) // Full resolution
+	                            {
+	                                Height = Hght.GetHeightAtGridPos(heightX + 2, heightY + 2) * mHeightScale;
 
-                                LayerA = Mate.GetMaterialAtGridPos(heightX + 2, heightY + 2)->mIndexA;
-                                LayerB = Mate.GetMaterialAtGridPos(heightX + 2, heightY + 2)->mIndexB;
-                                BlendFactor = Mate.GetMaterialAtGridPos(heightX + 2, heightY + 2)->mBlendFactor;
-                            }
-                            else
-                            {
-                                float SourceX = (float(heightX) / 256.0f) * SourceResolution;
-                                float SourceY = (float(heightY) / 256.0f) * SourceResolution;
+	                                if (auto* Material = Mate.GetMaterialAtGridPos(heightX + 2, heightY + 2))
+	                                {
+	                                    LayerA = Material->mIndexA;
+	                                    LayerB = Material->mIndexB;
+	                                    BlendFactor = Material->mBlendFactor;
+	                                }
+	                            }
+	                            else
+	                            {
+	                                const float SourceX = (float(heightX) / static_cast<float>(kTileResolution)) * SourceResolution;
+	                                const float SourceY = (float(heightY) / static_cast<float>(kTileResolution)) * SourceResolution;
 
-                                int x0 = static_cast<int>(std::floor(SourceX));
-                                int x1 = std::min(x0 + 1, SourceResolution - 1);
-                                int y0 = static_cast<int>(std::floor(SourceY));
-                                int y1 = std::min(y0 + 1, SourceResolution - 1);
+	                                int x0 = static_cast<int>(std::floor(SourceX));
+	                                int x1 = std::min(x0 + 1, SourceResolution - 1);
+	                                int y0 = static_cast<int>(std::floor(SourceY));
+	                                int y1 = std::min(y0 + 1, SourceResolution - 1);
 
-                                float fx = SourceX - x0;
-                                float fy = SourceY - y0;
+	                                float fx = SourceX - x0;
+	                                float fy = SourceY - y0;
 
-                                float h00 = Hght.GetHeightAtGridPos(BeginX + x0 + 2, BeginY + y0 + 2) * mHeightScale;
-                                float h10 = Hght.GetHeightAtGridPos(BeginX + x1 + 2, BeginY + y0 + 2) * mHeightScale;
-                                float h01 = Hght.GetHeightAtGridPos(BeginX + x0 + 2, BeginY + y1 + 2) * mHeightScale;
-                                float h11 = Hght.GetHeightAtGridPos(BeginX + x1 + 2, BeginY + y1 + 2) * mHeightScale;
+	                                const int sampleX0 = ClampIndex(BeginX + x0 + 2, Hght.GetWidth());
+	                                const int sampleX1 = ClampIndex(BeginX + x1 + 2, Hght.GetWidth());
+	                                const int sampleY0 = ClampIndex(BeginY + y0 + 2, Hght.GetHeight());
+	                                const int sampleY1 = ClampIndex(BeginY + y1 + 2, Hght.GetHeight());
+
+	                                const float h00 = Hght.GetHeightAtGridPos(sampleX0, sampleY0) * mHeightScale;
+	                                const float h10 = Hght.GetHeightAtGridPos(sampleX1, sampleY0) * mHeightScale;
+	                                const float h01 = Hght.GetHeightAtGridPos(sampleX0, sampleY1) * mHeightScale;
+	                                const float h11 = Hght.GetHeightAtGridPos(sampleX1, sampleY1) * mHeightScale;
 
                                 float h0 = h00 * (1.0f - fx) + h10 * fx;
                                 float h1 = h01 * (1.0f - fx) + h11 * fx;
@@ -303,16 +401,15 @@ namespace application::gl
 
 
 
-                                application::file::game::terrain::MateFile::MaterialIndexInfo Material00 = Mate.mMaterials[(BeginX + x0 + 2) + (BeginY + y0 + 2) * Mate.mWidth];
+	                                const int mateSampleX0 = ClampIndex(BeginX + x0 + 2, Mate.mWidth);
+	                                const int mateSampleX1 = ClampIndex(BeginX + x1 + 2, Mate.mWidth);
+	                                const int mateSampleY0 = ClampIndex(BeginY + y0 + 2, Mate.mHeight);
+	                                const int mateSampleY1 = ClampIndex(BeginY + y1 + 2, Mate.mHeight);
 
-                                application::file::game::terrain::MateFile::MaterialIndexInfo Material10 = (BeginX + x0 + 2) < (Mate.mWidth - 1) ?
-                                    Mate.mMaterials[(BeginX + x0 + 2) + 1 + (BeginY + y0 + 2) * Mate.mWidth] : Material00;
-
-                                application::file::game::terrain::MateFile::MaterialIndexInfo Material01 = (BeginY + y0 + 2) < (Mate.mHeight - 1) ?
-                                    Mate.mMaterials[(BeginX + x0 + 2) + ((BeginY + y0 + 2) + 1) * Mate.mWidth] : Material00;
-
-                                application::file::game::terrain::MateFile::MaterialIndexInfo Material11 = (((BeginY + y0 + 2) < (Mate.mHeight - 1)) && ((BeginX + x0 + 2) < (Mate.mWidth - 1))) ?
-                                    Mate.mMaterials[(BeginX + x0 + 2) + 1 + ((BeginY + y0 + 2) + 1) * Mate.mWidth] : Material00;
+	                                application::file::game::terrain::MateFile::MaterialIndexInfo Material00 = Mate.mMaterials[mateSampleX0 + mateSampleY0 * Mate.mWidth];
+	                                application::file::game::terrain::MateFile::MaterialIndexInfo Material10 = Mate.mMaterials[mateSampleX1 + mateSampleY0 * Mate.mWidth];
+	                                application::file::game::terrain::MateFile::MaterialIndexInfo Material01 = Mate.mMaterials[mateSampleX0 + mateSampleY1 * Mate.mWidth];
+	                                application::file::game::terrain::MateFile::MaterialIndexInfo Material11 = Mate.mMaterials[mateSampleX1 + mateSampleY1 * Mate.mWidth];
 
                                 std::map<uint8_t, float> textureWeights;
 
@@ -371,13 +468,19 @@ namespace application::gl
 							mLayersTextureData[TextureIndex * 3 + 1] = LayerB;
 							mLayersTextureData[TextureIndex * 3 + 2] = BlendFactor;
 
-                            mTexCoordsTextureData[TextureIndex * 4] = static_cast<float>(TextureX) / (256 * 16) * 1000.0 * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[MateReverseMap[LayerA]].mObj.mUScale;
-                            mTexCoordsTextureData[TextureIndex * 4 + 1] = static_cast<float>(TextureY) / (256 * 16) * 1000.0 * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[MateReverseMap[LayerA]].mObj.mVScale;
-                            mTexCoordsTextureData[TextureIndex * 4 + 2] = static_cast<float>(TextureX) / (256 * 16) * 1000.0 * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[MateReverseMap[LayerB]].mObj.mUScale;
-                            mTexCoordsTextureData[TextureIndex * 4 + 3] = static_cast<float>(TextureY) / (256 * 16) * 1000.0 * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[MateReverseMap[LayerB]].mObj.mVScale;
-                        }
-                    }
-                }
+	                            const float texU = static_cast<float>(TextureX) / static_cast<float>(kTerrainTextureSize) * kSectionWidthWorld;
+	                            const float texV = static_cast<float>(TextureY) / static_cast<float>(kTerrainTextureSize) * kSectionWidthWorld;
+
+	                            const int materialInfoA = getMaterialInfoIndex(LayerA);
+	                            const int materialInfoB = getMaterialInfoIndex(LayerB);
+
+	                            mTexCoordsTextureData[TextureIndex * 4] = texU * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[materialInfoA].mObj.mUScale;
+	                            mTexCoordsTextureData[TextureIndex * 4 + 1] = texV * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[materialInfoA].mObj.mVScale;
+	                            mTexCoordsTextureData[TextureIndex * 4 + 2] = texU * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[materialInfoB].mObj.mUScale;
+	                            mTexCoordsTextureData[TextureIndex * 4 + 3] = texV * TerrainScene->mTerrainSceneFile.mTerrainScene.mMaterialInfo[materialInfoB].mObj.mVScale;
+	                        }
+	                    }
+	                }
             }
         }
 
@@ -389,7 +492,7 @@ namespace application::gl
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 256 * 16, 256 * 16, 0, GL_RED, GL_FLOAT, mHeightTextureData.data());
+	        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, kTerrainTextureSize, kTerrainTextureSize, 0, GL_RED, GL_FLOAT, mHeightTextureData.data());
 
         glGenTextures(1, &mLayersTextureID);
         glBindTexture(GL_TEXTURE_2D, mLayersTextureID);
@@ -399,7 +502,7 @@ namespace application::gl
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8UI, 256 * 16, 256 * 16, 0, GL_RGB_INTEGER, GL_UNSIGNED_BYTE, mLayersTextureData.data());
+	        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8UI, kTerrainTextureSize, kTerrainTextureSize, 0, GL_RGB_INTEGER, GL_UNSIGNED_BYTE, mLayersTextureData.data());
 
         glGenTextures(1, &mTexCoordsTextureID);
         glBindTexture(GL_TEXTURE_2D, mTexCoordsTextureID);
@@ -409,7 +512,7 @@ namespace application::gl
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 256 * 16, 256 * 16, 0, GL_RGBA, GL_FLOAT, mTexCoordsTextureData.data());
+	        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, kTerrainTextureSize, kTerrainTextureSize, 0, GL_RGBA, GL_FLOAT, mTexCoordsTextureData.data());
 
         InitializeMaterialAlbTexture();
     }
@@ -451,59 +554,63 @@ namespace application::gl
     }
 
     float TerrainRenderer::CalculateErrorForScale(int tileX, int tileY, float targetScale,
-        const glm::vec2& TilePos, const glm::vec2& SectionStartPoint)
+        const glm::vec2& /*TilePos*/, const glm::vec2& /*SectionStartPoint*/, float earlyExitError)
     {
-        int targetLOD = targetScale / 0.125f;
-        int targetSubSectionSize = 256 / targetLOD;
+        const int targetLOD = ScaleToLod(targetScale);
+        const int targetSubSectionSize = std::max(1, kTileResolution / targetLOD);
         float maxError = 0.0f;
 
-        for (int px = 0; px < 256; px += targetLOD)
+        for (int px = 0; px < kTileResolution; ++px)
         {
-            for (int py = 0; py < 256; py += targetLOD)
+            for (int py = 0; py < kTileResolution; ++py)
             {
-                // Get actual height from our high-resolution data
-                int textureX = tileX * 256 + px;
-                int textureY = tileY * 256 + py;
-                int textureIndex = textureY * (256 * 16) + textureX;
+	                // Get actual height from our high-resolution data
+	                const int textureX = tileX * kTileResolution + px;
+	                const int textureY = tileY * kTileResolution + py;
+	                const int textureIndex = textureY * kTerrainTextureSize + textureX;
 
-                if (textureIndex < 0 || textureIndex >= mHeightTextureData.size()) continue;
+	                if (textureIndex < 0 || static_cast<size_t>(textureIndex) >= mHeightTextureData.size())
+	                    continue;
 
-                float actualHeight = mHeightTextureData[textureIndex];
+	                const float actualHeight = mHeightTextureData[textureIndex];
 
-                // Calculate bilinear interpolated height at target LOD
-                int lodX = px / targetLOD;
-                int lodY = py / targetLOD;
+	                // Calculate bilinear interpolated height at target LOD
+	                const float lodX = static_cast<float>(px) / targetLOD;
+	                const float lodY = static_cast<float>(py) / targetLOD;
 
                 auto getHeightAtTargetLOD = [&](int offsetX, int offsetY) -> float {
-                    int texX = tileX * 256 + offsetX * targetLOD;
-                    int texY = tileY * 256 + offsetY * targetLOD;
-                    int texIdx = texY * (256 * 16) + texX;
+                    const int texX = tileX * kTileResolution + offsetX * targetLOD;
+                    const int texY = tileY * kTileResolution + offsetY * targetLOD;
+                    const int texIdx = texY * kTerrainTextureSize + texX;
 
-                    if (texIdx >= 0 && texIdx < mHeightTextureData.size()) {
+                    if (texIdx >= 0 && static_cast<size_t>(texIdx) < mHeightTextureData.size()) {
                         return mHeightTextureData[texIdx];
                     }
                     return actualHeight;
                     };
 
-                int x0 = lodX;
-                int x1 = std::min(lodX + 1, targetSubSectionSize - 1);
-                int y0 = lodY;
-                int y1 = std::min(lodY + 1, targetSubSectionSize - 1);
+	                const int x0 = std::clamp(static_cast<int>(std::floor(lodX)), 0, targetSubSectionSize - 1);
+	                const int x1 = std::min(x0 + 1, targetSubSectionSize - 1);
+	                const int y0 = std::clamp(static_cast<int>(std::floor(lodY)), 0, targetSubSectionSize - 1);
+	                const int y1 = std::min(y0 + 1, targetSubSectionSize - 1);
 
-                float fx = (float(px % targetLOD)) / targetLOD;
-                float fy = (float(py % targetLOD)) / targetLOD;
+	                const float fx = lodX - static_cast<float>(x0);
+	                const float fy = lodY - static_cast<float>(y0);
 
-                float h00 = getHeightAtTargetLOD(x0, y0);
-                float h10 = getHeightAtTargetLOD(x1, y0);
-                float h01 = getHeightAtTargetLOD(x0, y1);
-                float h11 = getHeightAtTargetLOD(x1, y1);
+	                const float h00 = getHeightAtTargetLOD(x0, y0);
+	                const float h10 = getHeightAtTargetLOD(x1, y0);
+	                const float h01 = getHeightAtTargetLOD(x0, y1);
+	                const float h11 = getHeightAtTargetLOD(x1, y1);
 
-                float h0 = h00 * (1.0f - fx) + h10 * fx;
-                float h1 = h01 * (1.0f - fx) + h11 * fx;
-                float interpolatedHeight = h0 * (1.0f - fy) + h1 * fy;
+	                const float h0 = h00 * (1.0f - fx) + h10 * fx;
+	                const float h1 = h01 * (1.0f - fx) + h11 * fx;
+	                const float interpolatedHeight = h0 * (1.0f - fy) + h1 * fy;
 
-                float error = std::abs(actualHeight - interpolatedHeight);
-                maxError = std::max(maxError, error);
+	                const float error = std::abs(actualHeight - interpolatedHeight);
+	                maxError = std::max(maxError, error);
+
+                if (maxError >= earlyExitError)
+                    return maxError;
             }
         }
 
@@ -514,7 +621,7 @@ namespace application::gl
     {
         const float QuadSize = 1.0f;
         const int Dimensions = 251;
-        const int TerrainTextureSize = 256 * 16; // 4096
+        const int TerrainTextureSize = kTerrainTextureSize; // 4096
 
         // Results
         const int QuadCount = Dimensions / QuadSize;
@@ -618,10 +725,10 @@ namespace application::gl
                     .mBlendFactor = mLayersTextureData[(z1 * TerrainTextureSize + x1) * 3 + 2]
                 };
 
-                uint16_t rm00 = m00.mBlendFactor > 0.5f ? m00.mIndexB : m00.mIndexA;
-                uint16_t rm10 = m10.mBlendFactor > 0.5f ? m10.mIndexB : m10.mIndexA;
-                uint16_t rm01 = m01.mBlendFactor > 0.5f ? m01.mIndexB : m01.mIndexA;
-                uint16_t rm11 = m11.mBlendFactor > 0.5f ? m11.mIndexB : m11.mIndexA;
+	                uint16_t rm00 = m00.mBlendFactor > 127 ? m00.mIndexB : m00.mIndexA;
+	                uint16_t rm10 = m10.mBlendFactor > 127 ? m10.mIndexB : m10.mIndexA;
+	                uint16_t rm01 = m01.mBlendFactor > 127 ? m01.mIndexB : m01.mIndexA;
+	                uint16_t rm11 = m11.mBlendFactor > 127 ? m11.mIndexB : m11.mIndexA;
 
                 std::map<uint16_t, uint8_t> IndexCount;
                 IndexCount[rm00]++;
@@ -758,7 +865,7 @@ namespace application::gl
         std::vector<application::file::game::terrain::TerrainSceneFile::ResArea*> Tiles =
             TerrainScene->mTerrainSceneFile.GetSectionTilesByPos(32.0f, SectionMidPoint, 1000.0f);
 
-        constexpr float BaseTileWidth = 1000.0f / 16.0f;
+        constexpr float BaseTileWidth = kSectionWidthWorld / static_cast<float>(kSectionTileCount);
 
         constexpr float ERROR_THRESHOLD = 0.1f;
 
@@ -772,11 +879,11 @@ namespace application::gl
 
                 const glm::vec2 TilePos = SectionStartPoint + glm::vec2(x * BaseTileWidth, y * BaseTileWidth) + glm::vec2(0.5f * BaseTileWidth, 0.5f * BaseTileWidth);
 
-                float CurrentScale = 0.125f;
+                float CurrentScale = kBaseLodScale;
 
                 while (CurrentScale <= 32.0f)
                 {
-                    float TileWidth = BaseTileWidth * (CurrentScale / 0.125f);
+                    float TileWidth = BaseTileWidth * (CurrentScale / kBaseLodScale);
 
                     for (application::file::game::terrain::TerrainSceneFile::ResArea* Area : Tiles)
                     {
@@ -804,10 +911,10 @@ namespace application::gl
                             application::file::game::terrain::MateFile& Mate = ArchivePack->mMateArchive.mMateFiles[Area->mFilenameOffset.mResString.mString];
 
                             const glm::vec2 StartTilePos = TilePos - glm::vec2(0.5f * BaseTileWidth, 0.5f * BaseTileWidth);
-                            const int SubSectionSize = 256 / (CurrentScale / 0.125f);
+                            const int SubSectionSize = kTileResolution / ScaleToLod(CurrentScale);
 
-                            int BeginX = (StartTilePos.x - AreaStartPos.x) / TileWidth * 256;
-                            int BeginY = (StartTilePos.y - AreaStartPos.y) / TileWidth * 256;
+                            int BeginX = (StartTilePos.x - AreaStartPos.x) / TileWidth * kTileResolution;
+                            int BeginY = (StartTilePos.y - AreaStartPos.y) / TileWidth * kTileResolution;
                             int EndX = BeginX + SubSectionSize;
                             int EndY = BeginY + SubSectionSize;
 
@@ -816,24 +923,24 @@ namespace application::gl
                                 for (int AreaY = BeginY - 2; AreaY < EndY + 2; AreaY++)
                                 {
                                     // Map from ResArea coordinates back to world coordinates, then to texture coordinates
-                                    float worldX = AreaStartPos.x + (AreaX / 256.0f) * TileWidth;
-                                    float worldY = AreaStartPos.y + (AreaY / 256.0f) * TileWidth;
+                                    float worldX = AreaStartPos.x + (AreaX / static_cast<float>(kTileResolution)) * TileWidth;
+                                    float worldY = AreaStartPos.y + (AreaY / static_cast<float>(kTileResolution)) * TileWidth;
 
                                     // Convert world coordinates to texture coordinates
-                                    int TextureX = (worldX - SectionStartPoint.x) / 1000.0f * (256 * 16);
-                                    int TextureY = (worldY - SectionStartPoint.y) / 1000.0f * (256 * 16);
+                                    int TextureX = (worldX - SectionStartPoint.x) / kSectionWidthWorld * kTerrainTextureSize;
+                                    int TextureY = (worldY - SectionStartPoint.y) / kSectionWidthWorld * kTerrainTextureSize;
 
                                     // Skip if the texture coordinates are outside our texture bounds
                                     // (This happens for margin areas on edge tiles)
-                                    if (TextureX < 0 || TextureX >= (256 * 16) ||
-                                        TextureY < 0 || TextureY >= (256 * 16))
+                                    if (TextureX < 0 || TextureX >= kTerrainTextureSize ||
+                                        TextureY < 0 || TextureY >= kTerrainTextureSize)
                                     {
                                         continue; // Skip margin areas that have no data
                                     }
 
-                                    int TextureIndex = (TextureY * (256 * 16) + TextureX) * 3;
+                                    int TextureIndex = (TextureY * kTerrainTextureSize + TextureX) * 3;
 
-                                    if (TextureIndex >= 0 && TextureIndex < mLayersTextureData.size())
+                                    if (TextureIndex >= 0 && static_cast<size_t>(TextureIndex) < mLayersTextureData.size())
                                     {
                                         uint8_t TextureLayerA = mLayersTextureData[TextureIndex];
                                         uint8_t TextureLayerB = mLayersTextureData[TextureIndex + 1];
@@ -877,7 +984,7 @@ namespace application::gl
 
                 const glm::vec2 TilePos = SectionStartPoint + glm::vec2(x * BaseTileWidth, y * BaseTileWidth) + glm::vec2(0.5f * BaseTileWidth, 0.5f * BaseTileWidth);
                 application::file::game::terrain::TerrainSceneFile::ResArea* TileArea = nullptr;
-                float CurrentScale = 0.125f; // Default scale for tiles
+                float CurrentScale = kBaseLodScale; // Default scale for tiles
 
                 while (TileArea == nullptr && CurrentScale <= 32.0f)
                 {
@@ -906,71 +1013,13 @@ namespace application::gl
                     continue;
                 }
 
-                int AreaLOD = TileArea->mScale / 0.125f;
-                if (AreaLOD == 1)
-                {
-                    continue; // Full resolution, no need to calculate further
-                }
+	                const int AreaLOD = ScaleToLod(TileArea->mScale);
+	                if (AreaLOD == 1)
+	                {
+	                    continue; // Full resolution, no need to calculate further
+	                }
 
-                int SubSectionSize = 256 / AreaLOD;
-                float maxTileError = 0.0f;
-
-                // Calculate the required LOD for this tile by checking interpolation error
-                // We need to check every pixel in the tile, not just the LOD sample points
-                for (int pixelX = 0; pixelX < 256; pixelX++)
-                {
-                    for (int pixelY = 0; pixelY < 256; pixelY++)
-                    {
-                        // Get the actual high-resolution height
-                        int actualTexX = x * 256 + pixelX;
-                        int actualTexY = y * 256 + pixelY;
-                        int actualTexIndex = actualTexY * (256 * 16) + actualTexX;
-
-                        if (actualTexIndex < 0 || actualTexIndex >= mHeightTextureData.size())
-                            continue;
-
-                        float actualHeight = mHeightTextureData[actualTexIndex];
-
-                        // Calculate what this pixel's height would be if interpolated from the current LOD
-                        // Find the LOD grid position for this pixel
-                        float lodX = (float)pixelX / AreaLOD;
-                        float lodY = (float)pixelY / AreaLOD;
-
-                        int x0 = (int)std::floor(lodX);
-                        int x1 = std::min(x0 + 1, SubSectionSize - 1);
-                        int y0 = (int)std::floor(lodY);
-                        int y1 = std::min(y0 + 1, SubSectionSize - 1);
-
-                        float fx = lodX - x0;
-                        float fy = lodY - y0;
-
-                        // Get the heights at the 4 LOD sample points
-                        auto getHeightAtLODPoint = [&](int lodPtX, int lodPtY) -> float {
-                            int sampleTexX = x * 256 + lodPtX * AreaLOD;
-                            int sampleTexY = y * 256 + lodPtY * AreaLOD;
-                            int sampleTexIndex = sampleTexY * (256 * 16) + sampleTexX;
-
-                            if (sampleTexIndex >= 0 && sampleTexIndex < mHeightTextureData.size()) {
-                                return mHeightTextureData[sampleTexIndex];
-                            }
-                            return actualHeight; // Fallback
-                            };
-
-                        float h00 = getHeightAtLODPoint(x0, y0);
-                        float h10 = getHeightAtLODPoint(x1, y0);
-                        float h01 = getHeightAtLODPoint(x0, y1);
-                        float h11 = getHeightAtLODPoint(x1, y1);
-
-                        // Bilinear interpolation
-                        float h0 = h00 * (1.0f - fx) + h10 * fx;
-                        float h1 = h01 * (1.0f - fx) + h11 * fx;
-                        float interpolatedHeight = h0 * (1.0f - fy) + h1 * fy;
-
-                        // Calculate error
-                        float error = std::abs(actualHeight - interpolatedHeight);
-                        maxTileError = std::max(maxTileError, error);
-                    }
-                }
+	                float maxTileError = CalculateErrorForScale(x, y, TileArea->mScale, TilePos, SectionStartPoint, ERROR_THRESHOLD);
 
                 // Check if we need a higher LOD ResArea for this tile
                 if (maxTileError > ERROR_THRESHOLD)
@@ -980,12 +1029,12 @@ namespace application::gl
                     float testError = maxTileError;
 					application::file::game::terrain::TerrainSceneFile::ResArea* ParentArea = TileArea;
 
-                    while (testError > ERROR_THRESHOLD && requiredScale > 0.125f)
+                    while (testError > ERROR_THRESHOLD && requiredScale > kBaseLodScale)
                     {
                         requiredScale /= 2.0f; // Next higher LOD level
 
                         // Calculate error for this potential LOD level
-                        testError = CalculateErrorForScale(x, y, requiredScale, TilePos, SectionStartPoint);
+	                        testError = CalculateErrorForScale(x, y, requiredScale, TilePos, SectionStartPoint, ERROR_THRESHOLD);
 
 
 
@@ -1030,143 +1079,47 @@ namespace application::gl
                                 application::file::game::terrain::TerrainSceneFile::ResFile MaterialMapFile;
                                 MaterialMapFile.mType = application::file::game::terrain::TerrainSceneFile::ResFileType::Material;
 
-                                //Generating the files (hght & mate)
-                                {
-                                    SubSectionSize = 260 / AreaLOD;
+	                                //Generating the files (hght & mate)
+	                                {
+	                                    application::file::game::terrain::HghtFile CopyHght;
+	                                    application::file::game::terrain::MateFile CopyMate;
+	                                    CopyHght.mWidth = kAreaGridResolution;
+	                                    CopyHght.mHeight = kAreaGridResolution;
+	                                    CopyHght.mHeightMap.resize(CopyHght.mWidth * CopyHght.mHeight);
 
-                                    application::manager::TerrainMgr::TerrainScene::ArchivePack* ArchivePack = application::manager::TerrainMgr::GetArchivePack(ParentArea->mFilenameOffset.mResString.mString, *TerrainScene);
+	                                    CopyMate.mWidth = kAreaGridResolution;
+	                                    CopyMate.mHeight = kAreaGridResolution;
+	                                    CopyMate.mMaterials.resize(CopyMate.mWidth * CopyMate.mHeight);
 
-                                    if (ArchivePack == nullptr)
-                                    {
-                                        application::util::Logger::Error("TerrainRenderer", "Failed to get archive pack for tile: %s", ParentArea->mFilenameOffset.mResString.mString.c_str());
-                                        continue;
-                                    }
+	                                    const float newAreaWidth = BaseTileWidth * (requiredScale / kBaseLodScale);
+	                                    const glm::vec2 newAreaStartPos = RequiredAreaPos - glm::vec2(0.5f * newAreaWidth, 0.5f * newAreaWidth);
 
-                                    application::file::game::terrain::HghtFile& Hght = ArchivePack->mHghtArchive.mHeightMaps[ParentArea->mFilenameOffset.mResString.mString];
-                                    application::file::game::terrain::MateFile& Mate = ArchivePack->mMateArchive.mMateFiles[ParentArea->mFilenameOffset.mResString.mString];
+	                                    for (int gridY = 0; gridY < kAreaGridResolution; ++gridY)
+	                                    {
+	                                        for (int gridX = 0; gridX < kAreaGridResolution; ++gridX)
+	                                        {
+	                                            const float worldX = newAreaStartPos.x + ((static_cast<float>(gridX) - 2.0f) / static_cast<float>(kTileResolution)) * newAreaWidth;
+	                                            const float worldY = newAreaStartPos.y + ((static_cast<float>(gridY) - 2.0f) / static_cast<float>(kTileResolution)) * newAreaWidth;
 
-                                    int AreaTileScale = BaseTileWidth * (ParentArea->mScale / 0.125f);
-                                    glm::vec2 StartTilePos = TilePos - glm::vec2(0.5f * BaseTileWidth, 0.5f * BaseTileWidth);
-                                    glm::vec2 AreaPos = glm::vec2(ParentArea->mX * 1000.0f * 0.5f, ParentArea->mZ * 1000.0f * 0.5f);
-                                    glm::vec2 StartAreaPos = AreaPos - glm::vec2(0.5f * AreaTileScale, 0.5f * AreaTileScale);
+	                                            const float texX = ((worldX - SectionStartPoint.x) / kSectionWidthWorld) * static_cast<float>(kTerrainTextureSize);
+	                                            const float texY = ((worldY - SectionStartPoint.y) / kSectionWidthWorld) * static_cast<float>(kTerrainTextureSize);
 
-                                    int BeginX = (StartTilePos.x - StartAreaPos.x) / BaseTileWidth * 128;
-                                    int BeginY = (StartTilePos.y - StartAreaPos.y) / BaseTileWidth * 128;
-                                    int EndX = BeginX + SubSectionSize;
-                                    int EndY = BeginY + SubSectionSize;
+	                                            const float sampledHeight = BilinearSampleHeight(mHeightTextureData, kTerrainTextureSize, texX, texY);
+	                                            int heightValue = 0;
+	                                            if (mHeightScale > std::numeric_limits<float>::epsilon())
+	                                            {
+	                                                heightValue = static_cast<int>(std::lround(sampledHeight / mHeightScale));
+	                                            }
+	                                            heightValue = std::clamp(heightValue, 0, 0xFFFF);
 
-                                    application::file::game::terrain::HghtFile CopyHght;
-                                    application::file::game::terrain::MateFile CopyMate;
-                                    CopyHght.mWidth = 260;
-                                    CopyHght.mHeight = 260;
-                                    CopyHght.mHeightMap.resize(CopyHght.mWidth * CopyHght.mHeight);
+	                                            const size_t Index = static_cast<size_t>(gridX) + static_cast<size_t>(CopyHght.GetWidth()) * static_cast<size_t>(gridY);
+	                                            CopyHght.mHeightMap[Index] = static_cast<uint16_t>(heightValue);
+	                                            CopyMate.mMaterials[Index] = SampleNearestMaterial(mLayersTextureData, kTerrainTextureSize, texX, texY);
+	                                        }
+	                                    }
 
-                                    CopyMate.mWidth = 260;
-                                    CopyMate.mHeight = 260;
-                                    CopyMate.mMaterials.resize(CopyMate.mWidth * CopyMate.mHeight);
-
-                                    const float RealFactor = (500 * requiredScale) / (500 * ParentArea->mScale);
-
-                                    for (uint16_t heightX = 0; heightX < 260; heightX++)
-                                    {
-                                        for (uint16_t heightY = 0; heightY < 260; heightY++)
-                                        {
-                                            float SourceX = heightX * RealFactor;
-                                            float SourceY = heightY * RealFactor;
-
-                                            int x0 = static_cast<int>(std::floor(SourceX));
-                                            int x1 = std::min(x0 + 1, SubSectionSize - 1);
-                                            int y0 = static_cast<int>(std::floor(SourceY));
-                                            int y1 = std::min(y0 + 1, SubSectionSize - 1);
-
-                                            float fx = SourceX - x0;
-                                            float fy = SourceY - y0;
-
-                                            float h00 = Hght.GetHeightAtGridPos(BeginX + x0, BeginY + y0);
-                                            float h10 = Hght.GetHeightAtGridPos(BeginX + x1, BeginY + y0);
-                                            float h01 = Hght.GetHeightAtGridPos(BeginX + x0, BeginY + y1);
-                                            float h11 = Hght.GetHeightAtGridPos(BeginX + x1, BeginY + y1);
-
-                                            float h0 = h00 * (1.0f - fx) + h10 * fx;
-                                            float h1 = h01 * (1.0f - fx) + h11 * fx;
-
-                                            const size_t Index = heightX + CopyHght.GetWidth() * heightY;
-                                            CopyHght.mHeightMap[Index] = static_cast<uint16_t>(std::round(h0 * (1.0f - fy) + h1 * fy));
-
-
-
-                                            application::file::game::terrain::MateFile::MaterialIndexInfo Material00 = Mate.mMaterials[(BeginX + x0) + (BeginY + y0) * Mate.mWidth];
-
-                                            application::file::game::terrain::MateFile::MaterialIndexInfo Material10 = (BeginX + x0) < (Mate.mWidth - 1) ?
-                                                Mate.mMaterials[(BeginX + x0) + 1 + (BeginY + y0) * Mate.mWidth] : Material00;
-
-                                            application::file::game::terrain::MateFile::MaterialIndexInfo Material01 = (BeginY + y0) < (Mate.mHeight - 1) ?
-                                                Mate.mMaterials[(BeginX + x0) + ((BeginY + y0) + 1) * Mate.mWidth] : Material00;
-
-                                            application::file::game::terrain::MateFile::MaterialIndexInfo Material11 = (((BeginY + y0) < (Mate.mHeight - 1)) && ((BeginX + x0) < (Mate.mWidth - 1))) ?
-                                                Mate.mMaterials[(BeginX + x0) + 1 + ((BeginY + y0) + 1) * Mate.mWidth] : Material00;
-
-                                            std::map<uint8_t, float> textureWeights;
-
-                                            float weight00 = (1 - fx) * (1 - fy);
-                                            textureWeights[Material00.mIndexA] += weight00 * (255 - Material00.mBlendFactor) / 255.0f;
-                                            textureWeights[Material00.mIndexB] += weight00 * Material00.mBlendFactor / 255.0f;
-
-                                            float weight10 = fx * (1 - fy);
-                                            textureWeights[Material10.mIndexA] += weight10 * (255 - Material10.mBlendFactor) / 255.0f;
-                                            textureWeights[Material10.mIndexB] += weight10 * Material10.mBlendFactor / 255.0f;
-
-                                            float weight01 = (1 - fx) * fy;
-                                            textureWeights[Material01.mIndexA] += weight01 * (255 - Material01.mBlendFactor) / 255.0f;
-                                            textureWeights[Material01.mIndexB] += weight01 * Material01.mBlendFactor / 255.0f;
-
-                                            float weight11 = fx * fy;
-                                            textureWeights[Material11.mIndexA] += weight11 * (255 - Material11.mBlendFactor) / 255.0f;
-                                            textureWeights[Material11.mIndexB] += weight11 * Material11.mBlendFactor / 255.0f;
-
-                                            uint8_t dominantTextureA = 0;
-                                            uint8_t dominantTextureB = 0;
-                                            float maxWeightA = 0.0f;
-                                            float maxWeightB = 0.0f;
-
-                                            for (const auto& pair : textureWeights)
-                                            {
-                                                if (pair.second > maxWeightA)
-                                                {
-                                                    maxWeightB = maxWeightA;
-                                                    dominantTextureB = dominantTextureA;
-                                                    maxWeightA = pair.second;
-                                                    dominantTextureA = pair.first;
-                                                }
-                                                else if (pair.second > maxWeightB)
-                                                {
-                                                    maxWeightB = pair.second;
-                                                    dominantTextureB = pair.first;
-                                                }
-                                            }
-
-                                            // Calculate blend factor between the two most dominant textures
-                                            uint8_t blendFactor = 0;
-                                            if (maxWeightA + maxWeightB > 0)
-                                            {
-                                                blendFactor = static_cast<uint8_t>(std::round((maxWeightB / (maxWeightA + maxWeightB)) * 255.0f));
-                                            }
-
-                                            // Create the new material info for this point
-                                            application::file::game::terrain::MateFile::MaterialIndexInfo newMaterial;
-                                            newMaterial.mIndexA = dominantTextureA;
-                                            newMaterial.mIndexB = dominantTextureB;
-                                            newMaterial.mBlendFactor = blendFactor;
-
-                                            CopyMate.mMaterials[Index] = newMaterial;
-                                        }
-                                    }
-
-                                    //application::file::game::terrain::HghtFile CopyHght = CopyArchivePack.mHghtArchive.mHeightMaps["56000003F0"];
-                                    //application::file::game::terrain::MateFile CopyMate = CopyArchivePack.mMateArchive.mMateFiles["56000003F0"];
-
-                                    CopyHght.mModified = true;
-                                    CopyMate.mModified = true;
+	                                    CopyHght.mModified = true;
+	                                    CopyMate.mModified = true;
 
                                     std::string Name = NewArea.mFilenameOffset.mResString.mString;
                                     const uint64_t NameInt = std::floor(std::stoull(Name, nullptr, 16) / 4) * 4;
@@ -1247,11 +1200,11 @@ namespace application::gl
 
                 const glm::vec2 TilePos = SectionStartPoint + glm::vec2(x * BaseTileWidth, y * BaseTileWidth) + glm::vec2(0.5f * BaseTileWidth, 0.5f * BaseTileWidth);
 
-				float CurrentScale = 0.125f;
+				float CurrentScale = kBaseLodScale;
 
                 while (CurrentScale <= 32.0f)
                 {
-					float TileWidth = BaseTileWidth * (CurrentScale / 0.125f);
+					float TileWidth = BaseTileWidth * (CurrentScale / kBaseLodScale);
 
                     for (application::file::game::terrain::TerrainSceneFile::ResArea* Area : Tiles)
                     {
@@ -1279,10 +1232,10 @@ namespace application::gl
                             application::file::game::terrain::HghtFile& Hght = ArchivePack->mHghtArchive.mHeightMaps[Area->mFilenameOffset.mResString.mString];
 
                             const glm::vec2 StartTilePos = TilePos - glm::vec2(0.5f * BaseTileWidth, 0.5f * BaseTileWidth);
-                            const int SubSectionSize = 256 / (CurrentScale / 0.125f);
+                            const int SubSectionSize = kTileResolution / ScaleToLod(CurrentScale);
 
-                            int BeginX = (StartTilePos.x - AreaStartPos.x) / TileWidth * 256;
-                            int BeginY = (StartTilePos.y - AreaStartPos.y) / TileWidth * 256;
+                            int BeginX = (StartTilePos.x - AreaStartPos.x) / TileWidth * kTileResolution;
+                            int BeginY = (StartTilePos.y - AreaStartPos.y) / TileWidth * kTileResolution;
                             int EndX = BeginX + SubSectionSize;
                             int EndY = BeginY + SubSectionSize;
                             
@@ -1291,26 +1244,31 @@ namespace application::gl
                                 for (int AreaY = BeginY - 2; AreaY < EndY + 2; AreaY++)
                                 {
                                     // Map from ResArea coordinates back to world coordinates, then to texture coordinates
-                                    float worldX = AreaStartPos.x + (AreaX / 256.0f) * TileWidth;
-                                    float worldY = AreaStartPos.y + (AreaY / 256.0f) * TileWidth;
+                                    float worldX = AreaStartPos.x + (AreaX / static_cast<float>(kTileResolution)) * TileWidth;
+                                    float worldY = AreaStartPos.y + (AreaY / static_cast<float>(kTileResolution)) * TileWidth;
 
                                     // Convert world coordinates to texture coordinates
-                                    int TextureX = (worldX - SectionStartPoint.x) / 1000.0f * (256 * 16);
-                                    int TextureY = (worldY - SectionStartPoint.y) / 1000.0f * (256 * 16);
+                                    int TextureX = (worldX - SectionStartPoint.x) / kSectionWidthWorld * kTerrainTextureSize;
+                                    int TextureY = (worldY - SectionStartPoint.y) / kSectionWidthWorld * kTerrainTextureSize;
 
                                     // Skip if the texture coordinates are outside our texture bounds
                                     // (This happens for margin areas on edge tiles)
-                                    if (TextureX < 0 || TextureX >= (256 * 16) ||
-                                        TextureY < 0 || TextureY >= (256 * 16))
+                                    if (TextureX < 0 || TextureX >= kTerrainTextureSize ||
+                                        TextureY < 0 || TextureY >= kTerrainTextureSize)
                                     {
                                         continue; // Skip margin areas that have no data
                                     }
 
-                                    int TextureIndex = TextureY * (256 * 16) + TextureX;
+                                    int TextureIndex = TextureY * kTerrainTextureSize + TextureX;
 
-                                    if (TextureIndex >= 0 && TextureIndex < mHeightTextureData.size())
+                                    if (TextureIndex >= 0 && static_cast<size_t>(TextureIndex) < mHeightTextureData.size())
                                     {
-                                        uint16_t HeightValue = static_cast<uint16_t>(mHeightTextureData[TextureIndex] / mHeightScale);
+                                        int HeightValue = 0;
+                                        if (mHeightScale > std::numeric_limits<float>::epsilon())
+                                        {
+                                            HeightValue = static_cast<int>(std::lround(mHeightTextureData[TextureIndex] / mHeightScale));
+                                        }
+                                        HeightValue = std::clamp(HeightValue, 0, 0xFFFF);
 
                                         // Ensure we don't write outside the height map bounds
                                         int hghtX = AreaX + 2;
@@ -1319,7 +1277,7 @@ namespace application::gl
                                         if (hghtX >= 0 && hghtX < Hght.GetWidth() &&
                                             hghtY >= 0 && hghtY < Hght.GetHeight())
                                         {
-                                            Hght.mHeightMap[hghtX + hghtY * Hght.GetWidth()] = HeightValue;
+                                            Hght.mHeightMap[hghtX + hghtY * Hght.GetWidth()] = static_cast<uint16_t>(HeightValue);
                                             Hght.mModified = true;
                                         }
                                     }
@@ -1535,7 +1493,7 @@ namespace application::gl
         const unsigned int Patches = 16;
 
         std::vector<float> Vertices;
-        Vertices.resize(Patches * Patches * 20);
+        Vertices.reserve(Patches * Patches * 20);
 
         for (unsigned i = 0; i < Patches; i++)
         {
@@ -1567,7 +1525,6 @@ namespace application::gl
             }
         }
 
-        Vertices.shrink_to_fit();
         return Vertices;
 	}
 }

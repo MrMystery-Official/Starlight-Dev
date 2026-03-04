@@ -6,6 +6,7 @@
 #include <file/game/sarc/SarcFile.h>
 #include <filesystem>
 #include <util/General.h>
+#include <util/Logger.h>
 #include <Editor.h>
 #include <map>
 #include <cmath>
@@ -164,7 +165,19 @@ namespace application::tool
 	{
         bool Write = false;
 
-        application::file::game::restbl::ResTableFile ResTable(application::file::game::ZStdBackend::Decompress(application::util::FileUtil::GetRomFSFilePath("System/Resource/ResourceSizeTable.Product." + application::Editor::gInternalGameVersion + ".rsizetable.zs")));
+        std::string Path = "System/Resource/ResourceSizeTable.Product." + application::Editor::gInternalGameVersion + ".rsizetable.zs";
+        if(!application::util::FileUtil::FileExists(application::util::FileUtil::GetRomFSFilePath(Path)))
+        {
+            Path = "System/Resource/ResourceSizeTable.Product." + application::Editor::gInternalGameVersion + ".Nin_NX_NVN.rsizetable.zs";
+        }
+
+        if(!application::util::FileUtil::FileExists(application::util::FileUtil::GetRomFSFilePath(Path)))
+        {
+            application::util::Logger::Warning("ResourceSizeTableGenerator", "Could not find base RSTB file %s", Path.c_str());
+            return;
+        }
+
+        application::file::game::restbl::ResTableFile ResTable(application::file::game::ZStdBackend::Decompress(application::util::FileUtil::GetRomFSFilePath(Path)));
 
         for (const auto& DirEntry : std::filesystem::recursive_directory_iterator(application::util::FileUtil::GetSaveFilePath()))
         {
@@ -214,6 +227,6 @@ namespace application::tool
 
 
         std::filesystem::create_directories(application::util::FileUtil::GetSaveFilePath("System/Resource"));
-        application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("System/Resource/ResourceSizeTable.Product." + application::Editor::gInternalGameVersion + ".rsizetable.zs"), application::file::game::ZStdBackend::Compress(ResTable.ToBinary(), application::file::game::ZStdBackend::Dictionary::None));
+        application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath(Path), application::file::game::ZStdBackend::Compress(ResTable.ToBinary(), application::file::game::ZStdBackend::Dictionary::None));
 	}
 }

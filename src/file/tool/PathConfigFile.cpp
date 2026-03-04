@@ -24,20 +24,17 @@ namespace application::file::tool
 		}
 
 		uint8_t Version = Reader.ReadUInt8();
-		if (Version != 0x01)
+		if (Version != 0x02)
 		{
-			application::util::Logger::Error("PathConfig", "Version invalid, expected 0x01");
+			application::util::Logger::Error("PathConfig", "Version invalid, expected 0x02. Please delete the path config file and reconfigure your paths");
 			return;
 		}
 
 		uint16_t RomFSPathSize = Reader.ReadUInt16();
-		uint16_t BfresPathSize = Reader.ReadUInt16();
 
 		application::util::FileUtil::gRomFSPath.resize(RomFSPathSize);
-		application::util::FileUtil::gBfresPath.resize(BfresPathSize);
 
 		Reader.ReadStruct(application::util::FileUtil::gRomFSPath.data(), RomFSPathSize);
-		Reader.ReadStruct(application::util::FileUtil::gBfresPath.data(), BfresPathSize);
 
 		application::util::FileUtil::ValidatePaths();
 
@@ -49,13 +46,11 @@ namespace application::file::tool
 		application::util::BinaryVectorWriter Writer;
 
 		Writer.WriteBytes("EPATHCFG"); //Magic
-		Writer.WriteInteger(0x01, sizeof(uint8_t)); //Version
+		Writer.WriteInteger(0x02, sizeof(uint8_t)); //Version
 
 		Writer.WriteInteger(application::util::FileUtil::gRomFSPath.size(), sizeof(uint16_t));
-		Writer.WriteInteger(application::util::FileUtil::gBfresPath.size(), sizeof(uint16_t));
 
 		Writer.WriteBytes(application::util::FileUtil::gRomFSPath.c_str());
-		Writer.WriteBytes(application::util::FileUtil::gBfresPath.c_str());
 
 		application::util::FileUtil::WriteFile(Path, Writer.GetData());
 

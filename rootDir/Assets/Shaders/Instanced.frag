@@ -1,4 +1,4 @@
-#version 420 core
+#version 330 core
 
 // Outputs colors in RGBA
 layout (location = 0) out vec4 frag;

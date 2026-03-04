@@ -60,9 +60,25 @@ namespace application::rendering::map_editor
 
 		enum class BrushType : int
 		{
-			SCULPT = 0,
-			SMOOTH = 1,
-			PLATEAU = 2
+			RAISE = 0,
+			LOWER = 1,
+			SMOOTH = 2,
+			FLATTEN = 3,
+			NOISE = 4
+		};
+
+		enum class TextureBrushType : int
+		{
+			PAINT = 0,
+			REPLACE = 1,
+			SMOOTH = 2
+		};
+
+		enum class TextureLayerMode : int
+		{
+			AUTO = 0,
+			LAYER_A = 1,
+			LAYER_B = 2
 		};
 
 		enum class FallOffFunction : int
@@ -80,9 +96,11 @@ namespace application::rendering::map_editor
 
 		static application::gl::Shader* gSphereShader;
 		static application::gl::SimpleMesh gSphereMesh;
-		static const char* gEditorModeNames[];
-		static const char* gBrushNames[];
-		static const char* gFallOffFunctionNames[];
+			static const char* gEditorModeNames[];
+			static const char* gHeightBrushNames[];
+			static const char* gTextureBrushNames[];
+			static const char* gFallOffFunctionNames[];
+			static const char* gTextureLayerModeNames[];
 		static std::vector<GLuint> gTerrainTextureArrayViews;
 		static GLuint gTerrainHoleTexture;
 
@@ -95,34 +113,53 @@ namespace application::rendering::map_editor
 
 		EditorMode mEditorMode = EditorMode::HEIGHT;
 
-		bool mEnabled = false;
-		BrushType mBrushType = BrushType::SCULPT;
-		FallOffFunction mFallOffFunction = FallOffFunction::GAUSSIAN;
-		float mFallOffRate = 0.5f;
-		float mStrength = 1.0f;
-		float mRadius = 4.0f;
-		int mCurrentTextureLayer = 0;
+			bool mEnabled = false;
+			BrushType mBrushType = BrushType::RAISE;
+			TextureBrushType mTextureBrushType = TextureBrushType::PAINT;
+			FallOffFunction mFallOffFunction = FallOffFunction::GAUSSIAN;
+			float mFallOffRate = 0.5f;
+			float mStrength = 1.0f;
+			float mRadius = 4.0f;
+			int mCurrentTextureLayer = 0;
 
 		float mPlateauHeight = 0.0f;
 
-		bool mRenderLayerA = true;
-		bool mRenderLayerB = true;
-		int mSelectedLayer = 0;
-	private:
-		void ApplyBrush(int TexX, int TexY, void* MapEditorPtr);
+			bool mRenderLayerA = true;
+			bool mRenderLayerB = true;
+			TextureLayerMode mTextureLayerMode = TextureLayerMode::AUTO;
+		private:
+			void ApplyBrush(int TexX, int TexY, void* MapEditorPtr);
+			void DrawBrushGizmo(const glm::vec3& HitPos, const glm::vec3& HitNormal, void* MapEditorPtr);
+			void UpdateLivePreview(int TexX, int TexY, void* MapEditorPtr);
 
-		bool mIsMouseDragging = false;
-		float mLastBrushApplyTime = 0.0f;
-		glm::vec2 mLastBrushPosition = glm::vec2(-1.0f, -1.0f);
-		float mBrushUpdateInterval = 0.05f;
-	};
+			bool mIsMouseDragging = false;
+			float mLastBrushApplyTime = 0.0f;
+			glm::vec2 mLastBrushPosition = glm::vec2(-1.0f, -1.0f);
+			float mBrushUpdateInterval = 0.05f;
 
-	namespace TerrainBrushes
-	{
-		std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushSculpt(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
-		std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushSmooth(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
-		std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushPlateau(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
-		
-		std::vector<TerrainEditor::TerrainTextureEdit> TextureBrush(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
-	};
+			bool mShowBrushPreview = true;
+			bool mShowLiveEditPreview = true;
+			float mBrushPreviewOpacity = 0.6f;
+
+			bool mHasLivePreview = false;
+			int mPreviewTexX = -1;
+			int mPreviewTexY = -1;
+			int mPreviewAffectedSamples = 0;
+			float mPreviewCurrentHeight = 0.0f;
+			float mPreviewTargetHeight = 0.0f;
+			float mPreviewDeltaHeight = 0.0f;
+			uint8_t mPreviewLayerA = 0;
+			uint8_t mPreviewLayerB = 0;
+			uint8_t mPreviewBlend = 0;
+		};
+
+		namespace TerrainBrushes
+		{
+			std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushSculpt(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
+			std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushSmooth(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
+			std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushPlateau(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
+			std::vector<TerrainEditor::TerrainHeightEdit> HeightBrushNoise(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
+			
+			std::vector<TerrainEditor::TerrainTextureEdit> TextureBrush(const uint16_t& CorrectedRadius, const int16_t& CenterGridX, const int16_t& CenterGridZ, TerrainEditor* Editor, application::gl::TerrainRenderer* TerrainRenderer);
+		};
 }

@@ -9,7 +9,6 @@ namespace application::util
 	{
 		extern std::string gCurrentDirectory;
 		extern std::string gRomFSPath;
-		extern std::string gBfresPath;
 		extern bool gPathsValid;
 
 		void ValidatePaths();

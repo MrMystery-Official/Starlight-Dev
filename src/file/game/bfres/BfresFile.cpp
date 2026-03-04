@@ -6,10 +6,13 @@
 #include <util/FileUtil.h>
 #include <zstd.h>
 #include <glm/gtx/quaternion.hpp>
+#include <mc_MeshCodec.h>
 
 namespace application::file::game::bfres
 {
     std::unordered_map<uint64_t, std::string> BfresFile::gExternalBinaryStrings;
+    void* BfresFile::gMeshCodecWorkingMem = nullptr;
+	uint64_t BfresFile::gMeshCodecWorkingMemSize = 0;
 
     void BfresFile::Initialize()
     {
@@ -947,22 +950,18 @@ namespace application::file::game::bfres
 
     void BfresFile::DecompressMeshCodec(const std::string& Path, const std::vector<unsigned char>& Bytes)
     {
-        BfresBinaryVectorReader Reader(Bytes, gExternalBinaryStrings);
-        Reader.ReadUInt64(); //Magic(4) + Version(4)
-        int32_t Flags = Reader.ReadInt32();
-        uint32_t DecompressedSize = (Flags >> 5) << (Flags & 0xF);
-        Reader.Seek(0xC, BfresBinaryVectorReader::Position::Begin);
-        std::vector<unsigned char> Source(Reader.GetSize() - 0xC);
-        Reader.ReadStruct(Source.data(), Reader.GetSize() - 0xC);
+        auto header = reinterpret_cast<const mc::ResMeshCodecPackageHeader*>(Bytes.data());
+        size_t decompressedSize = header->GetDecompressedSize();
+        std::vector<unsigned char> outputBuffer(decompressedSize);
 
-        std::vector<unsigned char> Decompressed(DecompressedSize);
-
-        ZSTD_DCtx* const DCtx = ZSTD_createDCtx();
-        ZSTD_DCtx_setFormat(DCtx, ZSTD_format_e::ZSTD_f_zstd1_magicless);
-        const size_t DecompSize = ZSTD_decompressDCtx(DCtx, (void*)Decompressed.data(), Decompressed.size(), Source.data(), Source.size());
-        ZSTD_freeDCtx(DCtx);
-
-        InitializeBfresFile(Path, Decompressed);
+        if (mc::DecompressMC(outputBuffer.data(), decompressedSize, Bytes.data(), Bytes.size(), gMeshCodecWorkingMem, gMeshCodecWorkingMemSize)) 
+        {
+            InitializeBfresFile(Path, outputBuffer);
+        }
+        else
+        {
+            application::util::Logger::Error("BfresFile", "Error while decompressing %s", Path.c_str());
+        }
     }
 
     BfresFile::BfresFile(const std::vector<unsigned char>& Bytes)
