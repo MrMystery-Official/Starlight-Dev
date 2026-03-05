@@ -22,6 +22,7 @@
 #include <glm/gtx/norm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -776,17 +777,11 @@ namespace application::rendering::map_editor
 
     std::string UIMapEditor::GetTemplateStorageFilePath() const
     {
-        return application::util::FileUtil::GetWorkingDirFilePath("Templates/MapEditorTemplates.byml");
-    }
-
-    void UIMapEditor::EnsureTemplateStorageDirectory() const
-    {
-        std::filesystem::create_directories(application::util::FileUtil::GetWorkingDirFilePath("Templates"));
+        return application::util::FileUtil::GetWorkingDirFilePath("Templates.etmpl");
     }
 
     void UIMapEditor::LoadTemplatesFromDisk()
     {
-        EnsureTemplateStorageDirectory();
         StopTemplatePreview();
         mTemplates.clear();
         mSelectedTemplateIndex = -1;
@@ -865,8 +860,6 @@ namespace application::rendering::map_editor
 
     bool UIMapEditor::SaveTemplatesToDisk()
     {
-        EnsureTemplateStorageDirectory();
-
         application::file::game::byml::BymlFile TemplateFile;
         TemplateFile.GetType() = application::file::game::byml::BymlFile::Type::Dictionary;
         TemplateFile.GetNodes().clear();
@@ -1127,6 +1120,58 @@ namespace application::rendering::map_editor
         glDisable(GL_BLEND);
     }
 
+    void UIMapEditor::RenderTemplateBuilderHighlights()
+    {
+        if (mTemplateBuilderActors.empty() || mTemplatePreviewState.mActive)
+        {
+            return;
+        }
+
+        std::unordered_set<uint32_t> HighlightedEntityIndices;
+        HighlightedEntityIndices.reserve(mTemplateBuilderActors.size());
+
+        for (const application::game::BancEntity& BuilderActor : mTemplateBuilderActors)
+        {
+            for (application::game::Scene::BancEntityRenderInfo* RenderInfo : mScene.mDrawListRenderInfoIndices)
+            {
+                if (RenderInfo == nullptr || RenderInfo->mEntity == nullptr || RenderInfo->mEntity->mBfresRenderer == nullptr)
+                {
+                    continue;
+                }
+
+                if (RenderInfo->mEntity->mHash != BuilderActor.mHash || RenderInfo->mEntity->mSRTHash != BuilderActor.mSRTHash)
+                {
+                    continue;
+                }
+
+                if (IsBancEntityRenderInfoCulled(*RenderInfo))
+                {
+                    break;
+                }
+
+                if (!mRenderSettings.mRenderMergedActors && RenderInfo->mMergedActorParent != nullptr)
+                {
+                    break;
+                }
+
+                if (!HighlightedEntityIndices.insert(RenderInfo->mEntityIndex).second)
+                {
+                    break;
+                }
+
+                const float Radius = RenderInfo->mEntity->mBfresRenderer->mBfresFile->Models.GetByIndex(0).mValue.BoundingBoxSphereRadius *
+                    std::fmax(std::fmax(RenderInfo->mScale.x, RenderInfo->mScale.y), RenderInfo->mScale.z);
+                if (!mFrustum.SphereInFrustum(RenderInfo->mTranslate.x, RenderInfo->mTranslate.y, RenderInfo->mTranslate.z, Radius))
+                {
+                    break;
+                }
+
+                DrawBancEntityRenderInfo(*RenderInfo);
+                break;
+            }
+        }
+    }
+
     void UIMapEditor::DrawTemplatePanel()
     {
         ImGui::TextWrapped("Create reusable actor groups, preview them as transparent ghosts, and place them into the scene.");
@@ -1136,24 +1181,15 @@ namespace application::rendering::map_editor
 
         ImGui::SeparatorText("Create");
 
-        if (!IsAnyActorSelected() || mEditingMode != EditingMode::BANC_ENTITY)
-        {
-            ImGui::BeginDisabled();
-        }
+        ImGui::BeginDisabled(!IsAnyActorSelected() || mEditingMode != EditingMode::BANC_ENTITY);
         if (ImGui::Button("Add selected actor", ImVec2(-FLT_MIN, 0)))
         {
             AddSelectedActorToTemplateBuilder();
         }
-        if (!IsAnyActorSelected() || mEditingMode != EditingMode::BANC_ENTITY)
-        {
-            ImGui::EndDisabled();
-        }
+        ImGui::EndDisabled();
 
         ImGui::Columns(2);
-        if (mTemplateBuilderSelectedActorIndex < 0 || mTemplateBuilderSelectedActorIndex >= static_cast<int32_t>(mTemplateBuilderActors.size()))
-        {
-            ImGui::BeginDisabled();
-        }
+        ImGui::BeginDisabled(mTemplateBuilderSelectedActorIndex < 0 || mTemplateBuilderSelectedActorIndex >= static_cast<int32_t>(mTemplateBuilderActors.size()));
         if (ImGui::Button("Remove selected", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
         {
             mTemplateBuilderActors.erase(mTemplateBuilderActors.begin() + mTemplateBuilderSelectedActorIndex);
@@ -1166,25 +1202,16 @@ namespace application::rendering::map_editor
                 mTemplateBuilderSelectedActorIndex = static_cast<int32_t>(mTemplateBuilderActors.size()) - 1;
             }
         }
-        if (mTemplateBuilderSelectedActorIndex < 0 || mTemplateBuilderSelectedActorIndex >= static_cast<int32_t>(mTemplateBuilderActors.size()))
-        {
-            ImGui::EndDisabled();
-        }
+        ImGui::EndDisabled();
 
         ImGui::NextColumn();
-        if (mTemplateBuilderActors.empty())
-        {
-            ImGui::BeginDisabled();
-        }
+        ImGui::BeginDisabled(mTemplateBuilderActors.empty());
         if (ImGui::Button("Clear", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
         {
             mTemplateBuilderActors.clear();
             mTemplateBuilderSelectedActorIndex = -1;
         }
-        if (mTemplateBuilderActors.empty())
-        {
-            ImGui::EndDisabled();
-        }
+        ImGui::EndDisabled();
         ImGui::Columns();
 
         if (ImGui::BeginListBox("##TemplateBuilderActors", ImVec2(-FLT_MIN, 120.0f)))
@@ -1194,9 +1221,24 @@ namespace application::rendering::map_editor
                 const application::game::BancEntity& Actor = mTemplateBuilderActors[i];
                 const bool IsSelected = mTemplateBuilderSelectedActorIndex == static_cast<int32_t>(i);
                 const std::string Label = Actor.mGyml + "##TemplateBuilderActor" + std::to_string(i);
+
+                if (IsSelected)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.55f, 0.82f, 0.90f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.22f, 0.62f, 0.90f, 0.95f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.12f, 0.48f, 0.78f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                }
+
                 if (ImGui::Selectable(Label.c_str(), IsSelected))
                 {
                     mTemplateBuilderSelectedActorIndex = static_cast<int32_t>(i);
+                }
+
+                if (IsSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                    ImGui::PopStyleColor(4);
                 }
             }
             ImGui::EndListBox();
@@ -1283,9 +1325,24 @@ namespace application::rendering::map_editor
 
                 const bool IsSelected = mSelectedTemplateIndex == static_cast<int32_t>(i);
                 const std::string Label = Template.mName + " (" + std::to_string(Template.mActors.size()) + " actors)##TemplateLibraryItem" + std::to_string(i);
+
+                if (IsSelected)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.55f, 0.82f, 0.90f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.22f, 0.62f, 0.90f, 0.95f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.12f, 0.48f, 0.78f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                }
+
                 if (ImGui::Selectable(Label.c_str(), IsSelected))
                 {
                     mSelectedTemplateIndex = static_cast<int32_t>(i);
+                }
+
+                if (IsSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                    ImGui::PopStyleColor(4);
                 }
             }
             ImGui::EndListBox();
@@ -2588,10 +2645,17 @@ namespace application::rendering::map_editor
         {
             application::game::Scene::BancEntityRenderInfo& RenderInfo = Entities[i];
 
+            const bool IsTemplateBuilderActor = !mTemplatePreviewState.mActive &&
+                std::any_of(mTemplateBuilderActors.begin(), mTemplateBuilderActors.end(),
+                    [&RenderInfo](const application::game::BancEntity& Actor)
+                    {
+                        return Actor.mHash == RenderInfo.mEntity->mHash && Actor.mSRTHash == RenderInfo.mEntity->mSRTHash;
+                    });
+
             RenderInfo.mSphereScreenSize = application::util::Math::CalculateScreenRadius(RenderInfo.mTranslate, RenderInfo.mEntity->mBfresRenderer->mSphereBoundingBoxRadius, mCamera.mPosition, 45.0f, mCamera.mHeight);
             RenderInfo.mSphereScreenSize *= MATH_MAX(RenderInfo.mScale.x, MATH_MAX(RenderInfo.mScale.y, RenderInfo.mScale.z));
 
-            if ((SelectedActor != nullptr && Entities[i].mMergedActorParent == GetSelectedActor()->mEntity) || mSelectedActorIndex == Entities[i].mEntityIndex || (!RenderInfo.mEntity->mBfresRenderer->mIsSystemModelTransparent && RenderInfo.mSphereScreenSize < 5.0f) || (!mRenderSettings.mRenderMergedActors && RenderInfo.mMergedActorParent != nullptr) || !mFrustum.SphereInFrustum(RenderInfo.mTranslate.x, RenderInfo.mTranslate.y, RenderInfo.mTranslate.z, RenderInfo.mEntity->mBfresRenderer->mBfresFile->Models.GetByIndex(0).mValue.BoundingBoxSphereRadius * std::fmax(std::fmax(RenderInfo.mScale.x, RenderInfo.mScale.y), RenderInfo.mScale.z)))
+            if ((SelectedActor != nullptr && Entities[i].mMergedActorParent == GetSelectedActor()->mEntity) || mSelectedActorIndex == Entities[i].mEntityIndex || IsTemplateBuilderActor || (!RenderInfo.mEntity->mBfresRenderer->mIsSystemModelTransparent && RenderInfo.mSphereScreenSize < 5.0f) || (!mRenderSettings.mRenderMergedActors && RenderInfo.mMergedActorParent != nullptr) || !mFrustum.SphereInFrustum(RenderInfo.mTranslate.x, RenderInfo.mTranslate.y, RenderInfo.mTranslate.z, RenderInfo.mEntity->mBfresRenderer->mBfresFile->Models.GetByIndex(0).mValue.BoundingBoxSphereRadius * std::fmax(std::fmax(RenderInfo.mScale.x, RenderInfo.mScale.y), RenderInfo.mScale.z)))
             {
                 Shrinking++;
                 continue;
@@ -3052,13 +3116,19 @@ namespace application::rendering::map_editor
 
         RenderTemplatePreview();
 
-        if (application::game::Scene::BancEntityRenderInfo* Info = GetSelectedActor(); Info != nullptr)
+        if (application::game::Scene::BancEntityRenderInfo* Info = GetSelectedActor(); Info != nullptr || !mTemplateBuilderActors.empty())
         {
             gSelectedShader->Bind();
             mCamera.Matrix(gSelectedShader, "camMatrix");
             glUniform3fv(glGetUniformLocation(gSelectedShader->mID, "lightColor"), 1, &gLightColor[0]);
             glUniform3fv(glGetUniformLocation(gSelectedShader->mID, "lightPos"), 1, &mCamera.mPosition[0]);
-            DrawBancEntityRenderInfo(*Info);
+
+            if (Info != nullptr)
+            {
+                DrawBancEntityRenderInfo(*Info);
+            }
+
+            RenderTemplateBuilderHighlights();
         }
 
         if (mRenderSettings.mRenderNavMesh)

@@ -118,10 +118,10 @@ namespace application::rendering::map_editor
 		void StopTemplatePreview();
 		bool PlaceTemplatePreviewIntoScene();
 		void RenderTemplatePreview();
+		void RenderTemplateBuilderHighlights();
 		void LoadTemplatesFromDisk();
 		bool SaveTemplatesToDisk();
 		std::string GetTemplateStorageFilePath() const;
-		void EnsureTemplateStorageDirectory() const;
 		void EvaluateTemplateWorldTransform(const application::game::BancEntity& LocalActor, glm::vec3& OutTranslate, glm::vec3& OutRotate, glm::vec3& OutScale) const;
 
 		bool IsBancEntityRenderInfoCulled(const application::game::Scene::BancEntityRenderInfo& RenderInfo);
