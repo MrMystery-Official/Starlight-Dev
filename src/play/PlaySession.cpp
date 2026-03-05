@@ -6,11 +6,14 @@
 #include <util/FileUtil.h>
 #include <manager/UIMgr.h>
 #include <manager/ShaderMgr.h>
+#include <manager/ActorInfoMgr.h>
 
 #include <file/game/zstd/ZStdBackend.h>
 #include <file/game/phive/shape/PhiveShape.h>
 #include <game/actor_component/ActorComponentShapeParam.h>
 #include <tool/scene/static_compound/StaticCompoundImplementationFieldScene.h>
+#include <glm/geometric.hpp>
+#include <algorithm>
 
 namespace application::play
 {
@@ -57,7 +60,7 @@ namespace application::play
             btIDebugDraw::DBG_DrawWireframe
         );
 
-        mDynamicsWorld->setDebugDrawer(mDebugDrawer);
+        //mDynamicsWorld->setDebugDrawer(mDebugDrawer);
 
         //Values taken from Player.pack.zs, proud of me :)
         float capsuleRadius = 0.35f;
@@ -109,56 +112,31 @@ namespace application::play
 
         if (mScene.IsTerrainScene() && mScene.mStaticCompoundImplementation != nullptr)
         {
-            application::tool::scene::static_compound::StaticCompoundImplementationFieldScene* StaticCompoundImpl = static_cast<application::tool::scene::static_compound::StaticCompoundImplementationFieldScene*>(mScene.mStaticCompoundImplementation.get());
-            
-            uint32_t Index = 0;
+            application::tool::scene::static_compound::StaticCompoundImplementationFieldScene* staticCompoundImpl =
+                static_cast<application::tool::scene::static_compound::StaticCompoundImplementationFieldScene*>(mScene.mStaticCompoundImplementation.get());
 
-            for (application::file::game::phive::PhiveStaticCompoundFile& File : StaticCompoundImpl->mStaticCompoundFiles)
+            mPendingTerrainBodies.clear();
+            mPendingTerrainBodies.reserve(128);
+
+            for (uint32_t fileIndex = 0; fileIndex < staticCompoundImpl->mStaticCompoundFiles.size(); ++fileIndex)
             {
-                for (auto& ExternalBphshMesh : File.mExternalBphshMeshes)
+                application::file::game::phive::PhiveStaticCompoundFile& file = staticCompoundImpl->mStaticCompoundFiles[fileIndex];
+                const glm::vec3 tileOffset = staticCompoundImpl->GetStaticCompoundMiddlePoint(fileIndex % 4, fileIndex / 4);
+
+                for (uint32_t meshIndex = 0; meshIndex < file.mExternalBphshMeshes.size(); ++meshIndex)
                 {
-                    PlaySessionRigidBodyEntity PhysicsEntity;
-
-                    std::vector<float> Vertices = ExternalBphshMesh.mPhiveShape.ToVertices();
-                    std::vector<uint32_t> Indices = ExternalBphshMesh.mPhiveShape.ToIndices();
-
-                    btTriangleMesh* mesh = new btTriangleMesh();
-                    for (size_t i = 0; i < Indices.size(); i += 3)
-                    {
-                        mesh->addTriangle(
-                            btVector3(Vertices[Indices[i + 0] * 3], Vertices[Indices[i + 0] * 3 + 1], Vertices[Indices[i + 0] * 3 + 2]),
-                            btVector3(Vertices[Indices[i + 1] * 3], Vertices[Indices[i + 1] * 3 + 1], Vertices[Indices[i + 1] * 3 + 2]),
-                            btVector3(Vertices[Indices[i + 2] * 3], Vertices[Indices[i + 2] * 3 + 1], Vertices[Indices[i + 2] * 3 + 2]),
-                            true
-                        );
-                    }
-
-                    const std::string id = std::to_string(reinterpret_cast<uint64_t>(&ExternalBphshMesh));
-
-                    mCollisionMeshes[id] = mesh;
-
-                    mShapesToDelete.push_back(new btBvhTriangleMeshShape(mCollisionMeshes[id], true));
-
-                    PhysicsEntity.mCollisionShape = mShapesToDelete.back();
-
-                    glm::vec3 Offset = StaticCompoundImpl->GetStaticCompoundMiddlePoint(Index % 4, Index / 4);
-
-                    btTransform MotionState;
-                    MotionState.setIdentity();
-                    MotionState.setOrigin(btVector3(Offset.x, 0.5f, Offset.z));
-                    PhysicsEntity.mMotionState = new btDefaultMotionState(MotionState);
-
-                    btVector3 Inertia(0, 0, 0);
-
-                    btRigidBody::btRigidBodyConstructionInfo Body(0.0f, PhysicsEntity.mMotionState, PhysicsEntity.mCollisionShape, Inertia);
-                    PhysicsEntity.mRigidBody = new btRigidBody(Body);
-
-                    mTerrainRigidBodies.push_back(PhysicsEntity);
-                    Index++;
+                    PendingTerrainBody pendingBody;
+                    pendingBody.mFileIndex = fileIndex;
+                    pendingBody.mMeshIndex = meshIndex;
+                    pendingBody.mOffset = tileOffset;
+                    pendingBody.mCenter = tileOffset + glm::vec3(125.0f, 0.0f, 125.0f);
+                    mPendingTerrainBodies.push_back(pendingBody);
                 }
             }
         }
 
+        mPhysicsCandidates.clear();
+        mActorActivationRadius.clear();
         for (application::game::Scene::BancEntityRenderInfo* Entity : mScene.mDrawListRenderInfoIndices)
         {
             application::game::actor_component::ActorComponentShapeParam* ShapeParam = static_cast<application::game::actor_component::ActorComponentShapeParam*>(Entity->mEntity->mActorPack->GetComponent(application::game::actor_component::ActorComponentBase::ComponentType::SHAPE_PARAM));
@@ -172,185 +150,537 @@ namespace application::play
             if (Entity == mPlayerEntityInfo)
                 continue;
 
-            PlaySessionRigidBodyEntity PhysicsEntity;
+            mPhysicsCandidates.push_back(Entity);
 
-            std::string Hash = ShapeParam->mPhiveShapeParam.GetHash();
-
-            if (!mCollisionShapes.contains(
-                Hash +
-                "_" + std::to_string(Entity->mScale.x) + 
-                "_" + std::to_string(Entity->mScale.y) + 
-                "_" + std::to_string(Entity->mScale.z)
-            ))
+            float activationRadius = mPhysicsActivationRadius;
+            if (Entity->mEntity != nullptr)
             {
-                std::vector<btCollisionShape*> CollisionShapes;
-                for (const std::string& PathName : ShapeParam->mPhiveShapeParam.mPhiveShapes)
+                if (application::manager::ActorInfoMgr::ActorInfoEntry* actorInfo = application::manager::ActorInfoMgr::GetActorInfo(Entity->mEntity->mGyml);
+                    actorInfo != nullptr && actorInfo->mLoadRadius.has_value() && actorInfo->mLoadRadius.value() > 0.0f)
                 {
-                    application::file::game::phive::shape::PhiveShape Shape(application::file::game::ZStdBackend::Decompress(application::util::FileUtil::GetRomFSFilePath("Phive/Shape/Dcc/" + PathName + ".Nin_NX_NVN.bphsh.zs")));
-                    std::vector<float> Vertices = Shape.ToVertices();
-                    std::vector<uint32_t> Indices = Shape.ToIndices();
-
-                    if (!mCollisionMeshes.contains(PathName))
-                    {
-                        btTriangleMesh* mesh = new btTriangleMesh();
-                        for (size_t i = 0; i < Indices.size(); i += 3)
-                        {
-                            mesh->addTriangle(
-                                btVector3(Vertices[Indices[i + 0] * 3], Vertices[Indices[i + 0] * 3 + 1], Vertices[Indices[i + 0] * 3 + 2]),
-                                btVector3(Vertices[Indices[i + 1] * 3], Vertices[Indices[i + 1] * 3 + 1], Vertices[Indices[i + 1] * 3 + 2]),
-                                btVector3(Vertices[Indices[i + 2] * 3], Vertices[Indices[i + 2] * 3 + 1], Vertices[Indices[i + 2] * 3 + 2]),
-                                true
-                            );
-                        }
-
-                        mCollisionMeshes[PathName] = mesh;
-                    }
-
-                    CollisionShapes.push_back(new btBvhTriangleMeshShape(mCollisionMeshes[PathName], true));
+                    activationRadius = actorInfo->mLoadRadius.value();
                 }
+            }
+            mActorActivationRadius[Entity] = activationRadius;
+        }
 
-                for (application::game::actor_component::ActorComponentShapeParam::PhiveShapeParam::Box& Box : ShapeParam->mPhiveShapeParam.mBoxes)
+        StartActorCollisionLoader();
+        for (application::game::Scene::BancEntityRenderInfo* entity : mPhysicsCandidates)
+        {
+            QueueActorCollisionLoad(entity);
+        }
+        FlushPendingActorCollisionRequests(StartPos);
+
+        mActivationUpdateTimer = mActivationUpdateInterval;
+        UpdatePhysicsActivation(StartPos);
+	}
+
+    void PlaySession::SetRigidBodyActive(PlaySessionRigidBodyEntity& Body, bool Active)
+    {
+        if (Body.mRigidBody == nullptr)
+            return;
+
+        if (Active)
+        {
+            if (!Body.mInWorld)
+            {
+                mDynamicsWorld->addRigidBody(Body.mRigidBody);
+                Body.mInWorld = true;
+            }
+        }
+        else if (Body.mInWorld)
+        {
+            mDynamicsWorld->removeRigidBody(Body.mRigidBody);
+            Body.mInWorld = false;
+        }
+    }
+
+    void PlaySession::EnsureTerrainRigidBody(PendingTerrainBody& TerrainBody)
+    {
+        if (TerrainBody.mBody.has_value())
+            return;
+
+        if (mScene.mStaticCompoundImplementation == nullptr)
+            return;
+
+        application::tool::scene::static_compound::StaticCompoundImplementationFieldScene* staticCompoundImpl =
+            static_cast<application::tool::scene::static_compound::StaticCompoundImplementationFieldScene*>(mScene.mStaticCompoundImplementation.get());
+
+        if (TerrainBody.mFileIndex >= staticCompoundImpl->mStaticCompoundFiles.size())
+            return;
+
+        application::file::game::phive::PhiveStaticCompoundFile& file = staticCompoundImpl->mStaticCompoundFiles[TerrainBody.mFileIndex];
+        if (TerrainBody.mMeshIndex >= file.mExternalBphshMeshes.size())
+            return;
+
+        auto& externalBphshMesh = file.mExternalBphshMeshes[TerrainBody.mMeshIndex];
+        std::vector<float> vertices = externalBphshMesh.mPhiveShape.ToVertices();
+        std::vector<uint32_t> indices = externalBphshMesh.mPhiveShape.ToIndices();
+
+        btTriangleMesh* mesh = new btTriangleMesh();
+        for (size_t i = 0; i + 2 < indices.size(); i += 3)
+        {
+            mesh->addTriangle(
+                btVector3(vertices[indices[i + 0] * 3], vertices[indices[i + 0] * 3 + 1], vertices[indices[i + 0] * 3 + 2]),
+                btVector3(vertices[indices[i + 1] * 3], vertices[indices[i + 1] * 3 + 1], vertices[indices[i + 1] * 3 + 2]),
+                btVector3(vertices[indices[i + 2] * 3], vertices[indices[i + 2] * 3 + 1], vertices[indices[i + 2] * 3 + 2]),
+                true
+            );
+        }
+
+        const std::string id = "terrain_" + std::to_string(TerrainBody.mFileIndex) + "_" + std::to_string(TerrainBody.mMeshIndex);
+        mCollisionMeshes[id] = mesh;
+
+        PlaySessionRigidBodyEntity physicsEntity;
+        mShapesToDelete.push_back(new btBvhTriangleMeshShape(mesh, true));
+        physicsEntity.mCollisionShape = mShapesToDelete.back();
+
+        btTransform motionState;
+        motionState.setIdentity();
+        motionState.setOrigin(btVector3(TerrainBody.mOffset.x, 0.5f, TerrainBody.mOffset.z));
+        physicsEntity.mMotionState = new btDefaultMotionState(motionState);
+
+        btVector3 inertia(0, 0, 0);
+        btRigidBody::btRigidBodyConstructionInfo body(0.0f, physicsEntity.mMotionState, physicsEntity.mCollisionShape, inertia);
+        physicsEntity.mRigidBody = new btRigidBody(body);
+        physicsEntity.mInWorld = false;
+
+        TerrainBody.mBody = physicsEntity;
+    }
+
+    void PlaySession::QueueActorCollisionLoad(application::game::Scene::BancEntityRenderInfo* Entity)
+    {
+        if (Entity == nullptr)
+            return;
+
+        mActorCollisionPendingRequests.insert(Entity);
+    }
+
+    void PlaySession::FlushPendingActorCollisionRequests(const glm::vec3& PlayerPosition)
+    {
+        if (mActorCollisionPendingRequests.empty())
+            return;
+
+        std::unique_lock<std::mutex> lock(mActorCollisionMutex, std::try_to_lock);
+        if (!lock.owns_lock())
+            return;
+
+        bool notifyWorker = false;
+        for (auto it = mActorCollisionPendingRequests.begin(); it != mActorCollisionPendingRequests.end();)
+        {
+            application::game::Scene::BancEntityRenderInfo* entity = *it;
+            if (entity == nullptr ||
+                entity->mEntity == nullptr ||
+                entity->mEntity->mActorPack == nullptr ||
+                mActorCollisionQueued.contains(entity) ||
+                mActorCollisionReady.contains(entity) ||
+                mActorCollisionLoaded.contains(entity))
+            {
+                it = mActorCollisionPendingRequests.erase(it);
+                continue;
+            }
+
+            application::game::actor_component::ActorComponentShapeParam* shapeParam =
+                static_cast<application::game::actor_component::ActorComponentShapeParam*>(
+                    entity->mEntity->mActorPack->GetComponent(application::game::actor_component::ActorComponentBase::ComponentType::SHAPE_PARAM)
+                );
+            if (shapeParam == nullptr || shapeParam->mPhiveShapeParam.IsEmpty())
+            {
+                it = mActorCollisionPendingRequests.erase(it);
+                continue;
+            }
+
+            ActorCollisionJob job;
+            job.mEntity = entity;
+            job.mShapeParam = shapeParam;
+            job.mTranslate = entity->mTranslate;
+            job.mRotate = entity->mRotate;
+            job.mScale = entity->mScale;
+            const glm::vec3 delta = entity->mTranslate - PlayerPosition;
+            job.mDistanceSq = glm::dot(delta, delta);
+            job.mMass = entity->mEntity->mActorPack->mMass;
+            job.mDynamic = (entity->mEntity->mActorPack->mNeedsPhysicsHash && entity->mEntity->mActorPack->mMass > 0.0f);
+
+            mActorCollisionQueue.push(job);
+            mActorCollisionQueued.insert(entity);
+            notifyWorker = true;
+            it = mActorCollisionPendingRequests.erase(it);
+        }
+
+        if (notifyWorker)
+            mActorCollisionCv.notify_one();
+    }
+
+    void PlaySession::ConsumeReadyActorCollisionData()
+    {
+        std::unique_lock<std::mutex> lock(mActorCollisionMutex, std::try_to_lock);
+        if (!lock.owns_lock() || mActorCollisionReady.empty())
+            return;
+
+        for (auto it = mActorCollisionReady.begin(); it != mActorCollisionReady.end();)
+        {
+            mActorCollisionLoaded[it->first] = std::move(it->second);
+            it = mActorCollisionReady.erase(it);
+        }
+    }
+
+    std::optional<PlaySession::AsyncActorCollisionData> PlaySession::BuildActorCollisionData(const ActorCollisionJob& Job)
+    {
+        if (Job.mEntity == nullptr || Job.mShapeParam == nullptr)
+            return std::nullopt;
+
+        application::game::actor_component::ActorComponentShapeParam* shapeParam = Job.mShapeParam;
+        if (shapeParam->mPhiveShapeParam.IsEmpty())
+            return std::nullopt;
+
+        AsyncActorCollisionData data;
+        std::vector<btCollisionShape*> collisionShapes;
+        collisionShapes.reserve(
+            shapeParam->mPhiveShapeParam.mPhiveShapes.size() +
+            shapeParam->mPhiveShapeParam.mBoxes.size() +
+            shapeParam->mPhiveShapeParam.mSpheres.size() +
+            shapeParam->mPhiveShapeParam.mPolytopes.size()
+        );
+
+        for (const std::string& pathName : shapeParam->mPhiveShapeParam.mPhiveShapes)
+        {
+            application::file::game::phive::shape::PhiveShape shape(
+                application::file::game::ZStdBackend::Decompress(
+                    application::util::FileUtil::GetRomFSFilePath("Phive/Shape/Dcc/" + pathName + ".Nin_NX_NVN.bphsh.zs")
+                )
+            );
+
+            std::vector<float> vertices = shape.ToVertices();
+            std::vector<uint32_t> indices = shape.ToIndices();
+
+            btTriangleMesh* mesh = new btTriangleMesh();
+            for (size_t i = 0; i + 2 < indices.size(); i += 3)
+            {
+                mesh->addTriangle(
+                    btVector3(vertices[indices[i + 0] * 3], vertices[indices[i + 0] * 3 + 1], vertices[indices[i + 0] * 3 + 2]),
+                    btVector3(vertices[indices[i + 1] * 3], vertices[indices[i + 1] * 3 + 1], vertices[indices[i + 1] * 3 + 2]),
+                    btVector3(vertices[indices[i + 2] * 3], vertices[indices[i + 2] * 3 + 1], vertices[indices[i + 2] * 3 + 2]),
+                    true
+                );
+            }
+
+            btCollisionShape* meshShape = new btBvhTriangleMeshShape(mesh, true);
+            data.mOwnedMeshes.push_back(mesh);
+            data.mOwnedShapes.push_back(meshShape);
+            collisionShapes.push_back(meshShape);
+        }
+
+        for (application::game::actor_component::ActorComponentShapeParam::PhiveShapeParam::Box& box : shapeParam->mPhiveShapeParam.mBoxes)
+        {
+            btVector3 halfExtents(box.mHalfExtents.x, box.mHalfExtents.y, box.mHalfExtents.z);
+            btBoxShape* boxShape = new btBoxShape(halfExtents);
+            btCompoundShape* compoundShape = new btCompoundShape();
+
+            btTransform localTransform;
+            localTransform.setIdentity();
+            localTransform.setOrigin(btVector3(box.mOffsetTranslation.x + box.mCenter.x, box.mOffsetTranslation.y + box.mCenter.y, box.mOffsetTranslation.z + box.mCenter.z));
+            compoundShape->addChildShape(localTransform, boxShape);
+
+            data.mOwnedShapes.push_back(boxShape);
+            data.mOwnedShapes.push_back(compoundShape);
+            collisionShapes.push_back(compoundShape);
+        }
+
+        for (application::game::actor_component::ActorComponentShapeParam::PhiveShapeParam::Sphere& sphere : shapeParam->mPhiveShapeParam.mSpheres)
+        {
+            btSphereShape* sphereShape = new btSphereShape(sphere.mRadius);
+            btCompoundShape* compoundShape = new btCompoundShape();
+
+            btTransform localTransform;
+            localTransform.setIdentity();
+            localTransform.setOrigin(btVector3(sphere.mCenter.x, sphere.mCenter.y, sphere.mCenter.z));
+            compoundShape->addChildShape(localTransform, sphereShape);
+
+            data.mOwnedShapes.push_back(sphereShape);
+            data.mOwnedShapes.push_back(compoundShape);
+            collisionShapes.push_back(compoundShape);
+        }
+
+        for (application::game::actor_component::ActorComponentShapeParam::PhiveShapeParam::Polytope& polytope : shapeParam->mPhiveShapeParam.mPolytopes)
+        {
+            btConvexHullShape* convexHull = new btConvexHullShape();
+            for (size_t i = 0; i < polytope.mVertices.size(); i++)
+            {
+                convexHull->addPoint(btVector3(polytope.mVertices[i].x, polytope.mVertices[i].y, polytope.mVertices[i].z), false);
+            }
+            convexHull->recalcLocalAabb();
+            convexHull->optimizeConvexHull();
+
+            btCompoundShape* compoundShape = new btCompoundShape();
+            btTransform localTransform;
+            localTransform.setIdentity();
+            localTransform.setOrigin(btVector3(polytope.mOffsetTranslation.x, polytope.mOffsetTranslation.y, polytope.mOffsetTranslation.z));
+            compoundShape->addChildShape(localTransform, convexHull);
+
+            data.mOwnedShapes.push_back(convexHull);
+            data.mOwnedShapes.push_back(compoundShape);
+            collisionShapes.push_back(compoundShape);
+        }
+
+        if (collisionShapes.empty())
+            return std::nullopt;
+
+        if (collisionShapes.size() == 1)
+        {
+            data.mCollisionShape = collisionShapes[0];
+        }
+        else
+        {
+            btCompoundShape* compoundShape = new btCompoundShape();
+            for (btCollisionShape* shape : collisionShapes)
+            {
+                btTransform origin;
+                origin.setIdentity();
+                origin.setOrigin(btVector3(0, 0, 0));
+                compoundShape->addChildShape(origin, shape);
+            }
+            data.mOwnedShapes.push_back(compoundShape);
+            data.mCollisionShape = compoundShape;
+        }
+
+        data.mCollisionShape->setLocalScaling(btVector3(Job.mScale.x, Job.mScale.y, Job.mScale.z));
+
+        PlaySessionRigidBodyEntity prebuiltBody;
+        prebuiltBody.mCollisionShape = data.mCollisionShape;
+
+        btQuaternion quat;
+        quat.setEulerZYX(glm::radians(Job.mRotate.z), glm::radians(Job.mRotate.y), glm::radians(Job.mRotate.x));
+
+        btTransform motionState;
+        motionState.setIdentity();
+        motionState.setOrigin(btVector3(Job.mTranslate.x, Job.mTranslate.y, Job.mTranslate.z));
+        motionState.setRotation(quat);
+        prebuiltBody.mMotionState = new btDefaultMotionState(motionState);
+
+        btVector3 inertia(0, 0, 0);
+        if (Job.mDynamic)
+            prebuiltBody.mCollisionShape->calculateLocalInertia(Job.mMass, inertia);
+
+        btRigidBody::btRigidBodyConstructionInfo body(
+            Job.mDynamic ? Job.mMass : 0.0f,
+            prebuiltBody.mMotionState,
+            prebuiltBody.mCollisionShape,
+            inertia
+        );
+        prebuiltBody.mRigidBody = new btRigidBody(body);
+        prebuiltBody.mInWorld = false;
+        data.mBody = prebuiltBody;
+
+        return data;
+    }
+
+    void PlaySession::ActorCollisionLoaderMain()
+    {
+        while (true)
+        {
+            ActorCollisionJob job;
+            {
+                std::unique_lock<std::mutex> lock(mActorCollisionMutex);
+                mActorCollisionCv.wait(lock, [this]() {
+                    return mActorCollisionStop.load() || !mActorCollisionQueue.empty();
+                });
+
+                if (mActorCollisionStop.load() && mActorCollisionQueue.empty())
+                    return;
+
+                job = mActorCollisionQueue.top();
+                mActorCollisionQueue.pop();
+                mActorCollisionQueued.erase(job.mEntity);
+            }
+
+            std::optional<AsyncActorCollisionData> builtData = BuildActorCollisionData(job);
+            if (!builtData.has_value())
+                continue;
+
+            std::lock_guard<std::mutex> lock(mActorCollisionMutex);
+            mActorCollisionReady[job.mEntity] = std::move(*builtData);
+        }
+    }
+
+    void PlaySession::StartActorCollisionLoader()
+    {
+        mActorCollisionStop.store(false);
+        if (mActorCollisionLoaderThread.joinable())
+            return;
+        mActorCollisionLoaderThread = std::thread(&PlaySession::ActorCollisionLoaderMain, this);
+    }
+
+    void PlaySession::StopActorCollisionLoader()
+    {
+        mActorCollisionStop.store(true);
+        mActorCollisionCv.notify_all();
+        if (mActorCollisionLoaderThread.joinable())
+            mActorCollisionLoaderThread.join();
+    }
+
+    bool PlaySession::EnsureDynamicRigidBody(application::game::Scene::BancEntityRenderInfo* Entity)
+    {
+        if (Entity == nullptr)
+            return false;
+        if (mRigidBodies.contains(Entity))
+            return false;
+
+        if (!mActorCollisionLoaded.contains(Entity))
+        {
+            QueueActorCollisionLoad(Entity);
+            return false;
+        }
+
+        AsyncActorCollisionData& loadedCollision = mActorCollisionLoaded[Entity];
+        if (loadedCollision.mCollisionShape == nullptr ||
+            loadedCollision.mBody.mCollisionShape == nullptr ||
+            loadedCollision.mBody.mMotionState == nullptr ||
+            loadedCollision.mBody.mRigidBody == nullptr)
+            return false;
+
+        // Keep ownership in loadedCollision; move only runtime rigid body pointers to active map.
+        mRigidBodies[Entity] = loadedCollision.mBody;
+        loadedCollision.mBody = {};
+
+        btQuaternion quat;
+        quat.setEulerZYX(glm::radians(Entity->mRotate.z), glm::radians(Entity->mRotate.y), glm::radians(Entity->mRotate.x));
+
+        btTransform motionState;
+        motionState.setIdentity();
+        motionState.setOrigin(btVector3(Entity->mTranslate.x, Entity->mTranslate.y, Entity->mTranslate.z));
+        motionState.setRotation(quat);
+        mRigidBodies[Entity].mRigidBody->setWorldTransform(motionState);
+        mRigidBodies[Entity].mMotionState->setWorldTransform(motionState);
+        mRigidBodies[Entity].mRigidBody->setInterpolationWorldTransform(motionState);
+        mRigidBodies[Entity].mInWorld = false;
+        return true;
+    }
+
+    void PlaySession::UpdatePhysicsActivation(const glm::vec3& PlayerPosition)
+    {
+        uint32_t createdActorBodies = 0;
+        uint32_t actorStateChanges = 0;
+
+        struct ActorActivationCandidate
+        {
+            application::game::Scene::BancEntityRenderInfo* mEntity = nullptr;
+            float mDistanceSq = 0.0f;
+        };
+
+        std::vector<ActorActivationCandidate> addCandidates;
+        std::vector<ActorActivationCandidate> removeCandidates;
+        addCandidates.reserve(mPhysicsCandidates.size());
+        removeCandidates.reserve(mPhysicsCandidates.size());
+
+        FlushPendingActorCollisionRequests(PlayerPosition);
+        ConsumeReadyActorCollisionData();
+
+        for (application::game::Scene::BancEntityRenderInfo* entity : mPhysicsCandidates)
+        {
+            if (entity == nullptr)
+                continue;
+            if (entity == mPlayerEntityInfo)
+                continue;
+
+            float activationRadius = mPhysicsActivationRadius;
+            if (auto it = mActorActivationRadius.find(entity); it != mActorActivationRadius.end() && it->second > 0.0f)
+                activationRadius = it->second;
+
+            const float addRadiusSq = activationRadius * activationRadius;
+            const float removeRadius = activationRadius + mActivationHysteresis;
+            const float removeRadiusSq = removeRadius * removeRadius;
+
+            const glm::vec3 delta = entity->mTranslate - PlayerPosition;
+            const float distanceSq = glm::dot(delta, delta);
+
+            if (distanceSq <= addRadiusSq)
+            {
+                addCandidates.push_back({ entity, distanceSq });
+            }
+            else if (mRigidBodies.contains(entity) && distanceSq >= removeRadiusSq)
+            {
+                removeCandidates.push_back({ entity, distanceSq });
+            }
+        }
+
+        std::sort(addCandidates.begin(), addCandidates.end(),
+            [](const ActorActivationCandidate& lhs, const ActorActivationCandidate& rhs) {
+                return lhs.mDistanceSq < rhs.mDistanceSq;
+            });
+        std::sort(removeCandidates.begin(), removeCandidates.end(),
+            [](const ActorActivationCandidate& lhs, const ActorActivationCandidate& rhs) {
+                return lhs.mDistanceSq > rhs.mDistanceSq;
+            });
+
+        for (const ActorActivationCandidate& candidate : addCandidates)
+        {
+            application::game::Scene::BancEntityRenderInfo* entity = candidate.mEntity;
+            if (entity == nullptr)
+                continue;
+
+            if (!mRigidBodies.contains(entity))
+            {
+                if (createdActorBodies < mMaxActorBodiesCreatedPerActivation)
                 {
-                    btVector3 halfExtents(Box.mHalfExtents.x, Box.mHalfExtents.y, Box.mHalfExtents.z);
-                    btBoxShape* boxShape = new btBoxShape(halfExtents);
-                    btCompoundShape* compoundShape = new btCompoundShape();
-
-                    btTransform localTransform;
-                    localTransform.setIdentity();
-                    localTransform.setOrigin(btVector3(Box.mOffsetTranslation.x + Box.mCenter.x, Box.mOffsetTranslation.y + Box.mCenter.y, Box.mOffsetTranslation.z + Box.mCenter.z));
-
-                    compoundShape->addChildShape(localTransform, boxShape);
-
-                    CollisionShapes.push_back(compoundShape);
-
-                    mShapesToDelete.push_back(boxShape);
-                }
-
-                for (application::game::actor_component::ActorComponentShapeParam::PhiveShapeParam::Sphere& Sphere : ShapeParam->mPhiveShapeParam.mSpheres)
-                {
-                    btSphereShape* sphereShape = new btSphereShape(Sphere.mRadius);
-                    btCompoundShape* compoundShape = new btCompoundShape();
-
-                    btTransform localTransform;
-                    localTransform.setIdentity();
-                    localTransform.setOrigin(btVector3(Sphere.mCenter.x, Sphere.mCenter.y, Sphere.mCenter.z));
-
-                    compoundShape->addChildShape(localTransform, sphereShape);
-
-                    CollisionShapes.push_back(compoundShape);
-
-                    mShapesToDelete.push_back(sphereShape);
-                }
-
-                for (application::game::actor_component::ActorComponentShapeParam::PhiveShapeParam::Polytope& Polytope : ShapeParam->mPhiveShapeParam.mPolytopes)
-                {
-                    btConvexHullShape* ConvexHull = new btConvexHullShape();
-
-                    for (size_t i = 0; i < Polytope.mVertices.size(); i++)
-                    {
-                        ConvexHull->addPoint(btVector3(
-                            Polytope.mVertices[i].x,
-                            Polytope.mVertices[i].y,
-                            Polytope.mVertices[i].z
-                        ), false);
-                    }
-
-                    ConvexHull->recalcLocalAabb();
-                    ConvexHull->optimizeConvexHull();
-
-                    btCompoundShape* compoundShape = new btCompoundShape();
-
-                    btTransform localTransform;
-                    localTransform.setIdentity();
-                    localTransform.setOrigin(btVector3(Polytope.mOffsetTranslation.x, Polytope.mOffsetTranslation.y, Polytope.mOffsetTranslation.z));
-
-                    compoundShape->addChildShape(localTransform, ConvexHull);
-
-                    CollisionShapes.push_back(compoundShape);
-
-                    mShapesToDelete.push_back(ConvexHull);
-                }
-
-                if (CollisionShapes.size() == 1)
-                {
-                    CollisionShapes[0]->setLocalScaling(btVector3(
-                        Entity->mScale.x,
-                        Entity->mScale.y,
-                        Entity->mScale.z
-                    ));
-
-                    mCollisionShapes[
-                        Hash +
-                            "_" + std::to_string(Entity->mScale.x) +
-                            "_" + std::to_string(Entity->mScale.y) +
-                            "_" + std::to_string(Entity->mScale.z)
-                    ] = CollisionShapes[0];
+                    if (EnsureDynamicRigidBody(entity))
+                        createdActorBodies++;
                 }
                 else
                 {
-                    btCompoundShape* CompoundShape = new btCompoundShape();
-
-                    for (btCollisionShape* Shape : CollisionShapes)
-                    {
-                        btTransform Origin;
-                        Origin.setIdentity();
-                        Origin.setOrigin(btVector3(0, 0, 0));
-                        CompoundShape->addChildShape(Origin, Shape);
-                    }
-
-                    CompoundShape->setLocalScaling(btVector3(
-                        Entity->mScale.x,
-                        Entity->mScale.y,
-                        Entity->mScale.z
-                    ));
-
-                    mCollisionShapes[
-                        Hash +
-                            "_" + std::to_string(Entity->mScale.x) +
-                            "_" + std::to_string(Entity->mScale.y) +
-                            "_" + std::to_string(Entity->mScale.z)
-                    ] = CompoundShape;
-
-                    mShapesToDelete.insert(mShapesToDelete.end(), CollisionShapes.begin(), CollisionShapes.end());
+                    QueueActorCollisionLoad(entity);
                 }
             }
 
-            PhysicsEntity.mCollisionShape = mCollisionShapes[Hash +
-                "_" + std::to_string(Entity->mScale.x) +
-                "_" + std::to_string(Entity->mScale.y) +
-                "_" + std::to_string(Entity->mScale.z)];
-
-            btQuaternion Quat;
-            Quat.setEulerZYX(glm::radians(Entity->mRotate.z), glm::radians(Entity->mRotate.y), glm::radians(Entity->mRotate.x));
-
-            btTransform MotionState;
-            MotionState.setIdentity();
-            MotionState.setOrigin(btVector3(Entity->mTranslate.x, Entity->mTranslate.y, Entity->mTranslate.z));
-            MotionState.setRotation(Quat);
-            PhysicsEntity.mMotionState = new btDefaultMotionState(MotionState);
-
-            btVector3 Inertia(0, 0, 0);
-            if (Entity->mEntity->mActorPack->mMass > 0.0f && Entity->mEntity->mActorPack->mNeedsPhysicsHash)
+            if (mRigidBodies.contains(entity))
             {
-                PhysicsEntity.mCollisionShape->calculateLocalInertia(Entity->mEntity->mActorPack->mMass, Inertia);
+                PlaySessionRigidBodyEntity& body = mRigidBodies[entity];
+                if (!body.mInWorld && actorStateChanges < mMaxActorBodiesStateChangesPerActivation)
+                {
+                    SetRigidBodyActive(body, true);
+                    actorStateChanges++;
+                }
             }
-
-            btRigidBody::btRigidBodyConstructionInfo Body(Entity->mEntity->mActorPack->mNeedsPhysicsHash ? Entity->mEntity->mActorPack->mMass : 0.0f, PhysicsEntity.mMotionState, PhysicsEntity.mCollisionShape, Inertia);
-            PhysicsEntity.mRigidBody = new btRigidBody(Body);
-
-            mRigidBodies[Entity] = PhysicsEntity;
         }
 
-        for (auto& [Entity, Body] : mRigidBodies)
+        for (const ActorActivationCandidate& candidate : removeCandidates)
         {
-            mDynamicsWorld->addRigidBody(Body.mRigidBody);
+            if (actorStateChanges >= mMaxActorBodiesStateChangesPerActivation)
+                break;
+
+            application::game::Scene::BancEntityRenderInfo* entity = candidate.mEntity;
+            if (!mRigidBodies.contains(entity))
+                continue;
+
+            PlaySessionRigidBodyEntity& body = mRigidBodies[entity];
+            if (body.mInWorld)
+            {
+                SetRigidBodyActive(body, false);
+                actorStateChanges++;
+            }
         }
 
-        for (auto& Body : mTerrainRigidBodies)
+        FlushPendingActorCollisionRequests(PlayerPosition);
+        ConsumeReadyActorCollisionData();
+
+        const float terrainAddRadiusSq = mTerrainActivationRadius * mTerrainActivationRadius;
+        const float terrainRemoveRadiusSq = (mTerrainActivationRadius + mActivationHysteresis) * (mTerrainActivationRadius + mActivationHysteresis);
+        for (PendingTerrainBody& terrainBody : mPendingTerrainBodies)
         {
-            mDynamicsWorld->addRigidBody(Body.mRigidBody);
+            const glm::vec3 delta = terrainBody.mCenter - PlayerPosition;
+            const float distanceSq = glm::dot(delta, delta);
+
+            if (distanceSq <= terrainAddRadiusSq)
+            {
+                EnsureTerrainRigidBody(terrainBody);
+                if (terrainBody.mBody.has_value())
+                    SetRigidBodyActive(*terrainBody.mBody, true);
+            }
+            else if (terrainBody.mBody.has_value() && terrainBody.mBody->mInWorld && distanceSq >= terrainRemoveRadiusSq)
+            {
+                SetRigidBodyActive(*terrainBody.mBody, false);
+            }
         }
-	}
+    }
 
 	void PlaySession::Update(float dt)
 	{
@@ -427,11 +757,20 @@ namespace application::play
             }
         }
 
+        mActivationUpdateTimer += dt;
+        if (mActivationUpdateTimer >= mActivationUpdateInterval)
+        {
+            const btTransform playerTransform = mPlayerPhysicsEntity.mPlayerGhostObject->getWorldTransform();
+            const btVector3 playerPos = playerTransform.getOrigin();
+            UpdatePhysicsActivation(glm::vec3(playerPos.x(), playerPos.y(), playerPos.z()));
+            mActivationUpdateTimer = 0.0f;
+        }
+
         mDynamicsWorld->stepSimulation(dt, 10, 1.0f/240.0f);
         glm::mat4 camMatrix = mCamera.GetProjectionMatrix() * mCamera.GetViewMatrix();
         mDebugDrawer->mCameraMatrix = camMatrix; // assign current camera
-        mDynamicsWorld->debugDrawWorld();
-        mDebugDrawer->Render(mDebugShader);
+        //mDynamicsWorld->debugDrawWorld();
+        //mDebugDrawer->Render(mDebugShader);
 
         btTransform trans = mPlayerPhysicsEntity.mPlayerGhostObject->getWorldTransform();
 
@@ -478,7 +817,10 @@ namespace application::play
                 continue;
             }
 
-            if (RenderInfo.mEntity->mActorPack->mNeedsPhysicsHash && RenderInfo.mEntity->mActorPack->mMass > 0.0f && mRigidBodies.contains(&RenderInfo))
+            if (RenderInfo.mEntity->mActorPack->mNeedsPhysicsHash &&
+                RenderInfo.mEntity->mActorPack->mMass > 0.0f &&
+                mRigidBodies.contains(&RenderInfo) &&
+                mRigidBodies[&RenderInfo].mInWorld)
             {
                 PlaySessionRigidBodyEntity& Entity = mRigidBodies[&RenderInfo];
                 
@@ -541,16 +883,21 @@ namespace application::play
 
 	void PlaySession::Shutdown()
 	{
+        StopActorCollisionLoader();
+
         mDynamicsWorld->removeAction(mPlayerPhysicsEntity.mCharacterController);
+        mDynamicsWorld->removeCollisionObject(mPlayerPhysicsEntity.mPlayerGhostObject);
 
         for (auto& [Entity, Body] : mRigidBodies)
         {
-            mDynamicsWorld->removeRigidBody(Body.mRigidBody);
+            if (Body.mInWorld)
+                mDynamicsWorld->removeRigidBody(Body.mRigidBody);
         }
 
-        for (auto& Body : mTerrainRigidBodies)
+        for (auto& PendingBody : mPendingTerrainBodies)
         {
-            mDynamicsWorld->removeRigidBody(Body.mRigidBody);
+            if (PendingBody.mBody.has_value() && PendingBody.mBody->mInWorld)
+                mDynamicsWorld->removeRigidBody(PendingBody.mBody->mRigidBody);
         }
 
         for (auto& [Entity, Body] : mRigidBodies)
@@ -559,15 +906,13 @@ namespace application::play
             delete Body.mRigidBody;
         }
 
-        for (auto& Body : mTerrainRigidBodies)
+        for (auto& PendingBody : mPendingTerrainBodies)
         {
-            delete Body.mMotionState;
-            delete Body.mRigidBody;
-        }
+            if (!PendingBody.mBody.has_value())
+                continue;
 
-        for (auto& [Name, Shape] : mCollisionShapes)
-        {
-            delete Shape;
+            delete PendingBody.mBody->mMotionState;
+            delete PendingBody.mBody->mRigidBody;
         }
 
         for (auto& Shape : mShapesToDelete)
@@ -581,11 +926,48 @@ namespace application::play
         }
 
         mRigidBodies.clear();
+        mPhysicsCandidates.clear();
+        mActorActivationRadius.clear();
+        mPendingTerrainBodies.clear();
         mCollisionShapes.clear();
         mCollisionMeshes.clear();
         mShapesToDelete.clear();
+        mActorCollisionQueued.clear();
+        mActorCollisionPendingRequests.clear();
+        while (!mActorCollisionQueue.empty())
+            mActorCollisionQueue.pop();
+
+        for (auto& [Entity, CollisionData] : mActorCollisionLoaded)
+        {
+            if (CollisionData.mBody.mMotionState != nullptr)
+                delete CollisionData.mBody.mMotionState;
+            if (CollisionData.mBody.mRigidBody != nullptr)
+                delete CollisionData.mBody.mRigidBody;
+
+            for (btCollisionShape* shape : CollisionData.mOwnedShapes)
+                delete shape;
+            for (btTriangleMesh* mesh : CollisionData.mOwnedMeshes)
+                delete mesh;
+        }
+        for (auto& [Entity, CollisionData] : mActorCollisionReady)
+        {
+            if (CollisionData.mBody.mMotionState != nullptr)
+                delete CollisionData.mBody.mMotionState;
+            if (CollisionData.mBody.mRigidBody != nullptr)
+                delete CollisionData.mBody.mRigidBody;
+
+            for (btCollisionShape* shape : CollisionData.mOwnedShapes)
+                delete shape;
+            for (btTriangleMesh* mesh : CollisionData.mOwnedMeshes)
+                delete mesh;
+        }
+        mActorCollisionLoaded.clear();
+        mActorCollisionReady.clear();
 
         delete mPlayerPhysicsEntity.mCharacterController;
+        delete mPlayerPhysicsEntity.mPlayerGhostObject;
+        delete mPlayerPhysicsEntity.mPlayerCapsuleShape;
+        delete mDebugDrawer;
         delete mDynamicsWorld;
         delete mSolver;
         delete mBroadphase;

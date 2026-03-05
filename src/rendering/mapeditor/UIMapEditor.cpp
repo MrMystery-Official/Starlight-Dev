@@ -18,6 +18,25 @@
 #include <tool/scene/static_compound/StaticCompoundImplementationSingleScene.h>
 #include <file/game/zstd/ZStdBackend.h>
 #include <util/ImGuiNotify.h>
+#include <filesystem>
+#include <glm/gtx/norm.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <unordered_map>
+
+namespace
+{
+    std::string TrimString(const std::string& Value)
+    {
+        const size_t Start = Value.find_first_not_of(" \t\r\n");
+        if (Start == std::string::npos)
+        {
+            return "";
+        }
+
+        const size_t End = Value.find_last_not_of(" \t\r\n");
+        return Value.substr(Start, End - Start + 1);
+    }
+}
 
 namespace application::rendering::map_editor
 {
@@ -25,6 +44,7 @@ namespace application::rendering::map_editor
     application::gl::Shader* UIMapEditor::gPickingShader = nullptr;
     application::gl::Shader* UIMapEditor::gSelectedShader = nullptr;
     application::gl::Shader* UIMapEditor::gNavMeshShader = nullptr;
+    application::gl::Shader* UIMapEditor::gTemplatePreviewShader = nullptr;
 
     application::rendering::popup::PopUpBuilder UIMapEditor::gAddNewDynamicTypeParameterPopUp;
     application::rendering::popup::PopUpBuilder UIMapEditor::gAddBancEntityPopUp;
@@ -488,9 +508,13 @@ namespace application::rendering::map_editor
             gSelectedShader = application::manager::ShaderMgr::GetShader("Selected");
         if (gNavMeshShader == nullptr)
             gNavMeshShader = application::manager::ShaderMgr::GetShader("NavMesh");
+        if (gTemplatePreviewShader == nullptr)
+            gTemplatePreviewShader = application::manager::ShaderMgr::GetShader("TemplatePreview");
 
         mSceneWindowFramebuffer = application::manager::FramebufferMgr::CreateFramebuffer(1, 1, "SceneView_" + std::to_string(mWindowId));
         mCamera.mWindow = application::manager::UIMgr::gWindow;
+
+        LoadTemplatesFromDisk();
     }
 
     void UIMapEditor::DrawOutlinerWindow()
@@ -741,6 +765,611 @@ namespace application::rendering::map_editor
         //ImGui::EndDisabled();
 
         ImGui::End();
+    }
+
+    void UIMapEditor::DrawTemplatesWindow()
+    {
+        ImGui::Begin(CreateID("Templates").c_str());
+        DrawTemplatePanel();
+        ImGui::End();
+    }
+
+    std::string UIMapEditor::GetTemplateStorageFilePath() const
+    {
+        return application::util::FileUtil::GetWorkingDirFilePath("Templates/MapEditorTemplates.byml");
+    }
+
+    void UIMapEditor::EnsureTemplateStorageDirectory() const
+    {
+        std::filesystem::create_directories(application::util::FileUtil::GetWorkingDirFilePath("Templates"));
+    }
+
+    void UIMapEditor::LoadTemplatesFromDisk()
+    {
+        EnsureTemplateStorageDirectory();
+        StopTemplatePreview();
+        mTemplates.clear();
+        mSelectedTemplateIndex = -1;
+        mTemplateBuilderSelectedActorIndex = -1;
+
+        const std::string StoragePath = GetTemplateStorageFilePath();
+        if (!application::util::FileUtil::FileExists(StoragePath))
+        {
+            return;
+        }
+
+        application::file::game::byml::BymlFile TemplateFile(StoragePath);
+        if (TemplateFile.GetType() != application::file::game::byml::BymlFile::Type::Dictionary || !TemplateFile.HasChild("Templates"))
+        {
+            application::util::Logger::Warning("UIMapEditor", "Template file has an invalid structure, path: %s", StoragePath.c_str());
+            return;
+        }
+
+        application::file::game::byml::BymlFile::Node* TemplatesNode = TemplateFile.GetNode("Templates");
+        if (TemplatesNode == nullptr || TemplatesNode->GetType() != application::file::game::byml::BymlFile::Type::Array)
+        {
+            return;
+        }
+
+        for (application::file::game::byml::BymlFile::Node& TemplateNode : TemplatesNode->GetChildren())
+        {
+            if (!TemplateNode.HasChild("Name") || !TemplateNode.HasChild("Actors"))
+            {
+                continue;
+            }
+
+            ActorTemplate Template;
+            Template.mName = TemplateNode.GetChild("Name")->GetValue<std::string>();
+
+            application::file::game::byml::BymlFile::Node* ActorsNode = TemplateNode.GetChild("Actors");
+            if (ActorsNode == nullptr || ActorsNode->GetType() != application::file::game::byml::BymlFile::Type::Array)
+            {
+                continue;
+            }
+
+            for (application::file::game::byml::BymlFile::Node& ActorNode : ActorsNode->GetChildren())
+            {
+                if (!ActorNode.HasChild("Entity"))
+                {
+                    continue;
+                }
+
+                application::game::BancEntity Actor;
+                if (!Actor.FromByml(*ActorNode.GetChild("Entity")))
+                {
+                    continue;
+                }
+
+                if (Actor.mBancType == application::game::BancEntity::BancType::MERGED)
+                {
+                    // Template placement spawns scene actors, so merged children are flattened to static actors.
+                    Actor.mBancType = application::game::BancEntity::BancType::STATIC;
+                }
+
+                Actor.mMergedActorChildren = nullptr;
+                Actor.mMergedActorChildrenModified = false;
+                Template.mActors.push_back(Actor);
+            }
+
+            if (!Template.mName.empty() && !Template.mActors.empty())
+            {
+                mTemplates.push_back(Template);
+            }
+        }
+
+        if (!mTemplates.empty())
+        {
+            mSelectedTemplateIndex = 0;
+        }
+    }
+
+    bool UIMapEditor::SaveTemplatesToDisk()
+    {
+        EnsureTemplateStorageDirectory();
+
+        application::file::game::byml::BymlFile TemplateFile;
+        TemplateFile.GetType() = application::file::game::byml::BymlFile::Type::Dictionary;
+        TemplateFile.GetNodes().clear();
+
+        application::file::game::byml::BymlFile::Node TemplatesNode(application::file::game::byml::BymlFile::Type::Array, "Templates");
+        for (const ActorTemplate& Template : mTemplates)
+        {
+            application::file::game::byml::BymlFile::Node TemplateNode(application::file::game::byml::BymlFile::Type::Dictionary);
+            TemplateNode.AddChild(application::file::game::byml::BymlFile::Node(application::file::game::byml::BymlFile::Type::StringIndex, "Name", Template.mName));
+
+            application::file::game::byml::BymlFile::Node ActorsNode(application::file::game::byml::BymlFile::Type::Array, "Actors");
+            for (const application::game::BancEntity& Actor : Template.mActors)
+            {
+                application::file::game::byml::BymlFile::Node ActorNode(application::file::game::byml::BymlFile::Type::Dictionary);
+                application::game::BancEntity MutableActor = Actor;
+                application::file::game::byml::BymlFile::Node EntityNode = MutableActor.ToByml();
+                EntityNode.GetKey() = "Entity";
+                ActorNode.AddChild(EntityNode);
+                ActorsNode.AddChild(ActorNode);
+            }
+
+            TemplateNode.AddChild(ActorsNode);
+            TemplatesNode.AddChild(TemplateNode);
+        }
+
+        TemplateFile.GetNodes().push_back(TemplatesNode);
+        TemplateFile.WriteToFile(GetTemplateStorageFilePath(), application::file::game::byml::BymlFile::TableGeneration::AUTO);
+
+        return true;
+    }
+
+    void UIMapEditor::AddSelectedActorToTemplateBuilder()
+    {
+        if (!IsAnyActorSelected())
+        {
+            return;
+        }
+
+        application::game::Scene::BancEntityRenderInfo* SelectedActor = GetSelectedActor();
+        if (SelectedActor == nullptr)
+        {
+            return;
+        }
+
+        application::game::BancEntity Actor = *SelectedActor->mEntity;
+        Actor.mTranslate = SelectedActor->mTranslate;
+        Actor.mRotate = SelectedActor->mRotate;
+        Actor.mScale = SelectedActor->mScale;
+        Actor.mMergedActorChildren = nullptr;
+        Actor.mMergedActorChildrenModified = false;
+
+        if (Actor.mBancType == application::game::BancEntity::BancType::MERGED)
+        {
+            Actor.mBancType = application::game::BancEntity::BancType::STATIC;
+        }
+
+        for (const application::game::BancEntity& Existing : mTemplateBuilderActors)
+        {
+            if (Existing.mHash == Actor.mHash &&
+                Existing.mSRTHash == Actor.mSRTHash &&
+                glm::distance2(Existing.mTranslate, Actor.mTranslate) < 0.0001f)
+            {
+                return;
+            }
+        }
+
+        mTemplateBuilderActors.push_back(Actor);
+        mTemplateBuilderSelectedActorIndex = static_cast<int32_t>(mTemplateBuilderActors.size() - 1);
+    }
+
+    void UIMapEditor::StartTemplatePreview(int32_t TemplateIndex)
+    {
+        if (TemplateIndex < 0 || TemplateIndex >= mTemplates.size() || !mScene.IsLoaded())
+        {
+            return;
+        }
+
+        DeselectActor();
+
+        mTemplatePreviewState.mActive = true;
+        mTemplatePreviewState.mTemplateIndex = TemplateIndex;
+        mTemplatePreviewState.mTranslate = mCamera.mPosition + mCamera.mOrientation * 6.0f;
+        mTemplatePreviewState.mRotate = glm::vec3(0.0f, 0.0f, 0.0f);
+        mTemplatePreviewState.mScale = glm::vec3(1.0f, 1.0f, 1.0f);
+    }
+
+    void UIMapEditor::StopTemplatePreview()
+    {
+        mTemplatePreviewState = TemplatePreviewState();
+    }
+
+    void UIMapEditor::EvaluateTemplateWorldTransform(const application::game::BancEntity& LocalActor, glm::vec3& OutTranslate, glm::vec3& OutRotate, glm::vec3& OutScale) const
+    {
+        glm::quat PreviewRotation = glm::quat(glm::radians(mTemplatePreviewState.mRotate));
+        glm::quat ActorRotation = glm::quat(glm::radians(LocalActor.mRotate));
+
+        glm::vec3 ScaledLocalTranslate = LocalActor.mTranslate * mTemplatePreviewState.mScale;
+        OutTranslate = mTemplatePreviewState.mTranslate + PreviewRotation * ScaledLocalTranslate;
+
+        glm::quat WorldRotation = PreviewRotation * ActorRotation;
+        OutRotate = glm::degrees(glm::eulerAngles(WorldRotation));
+        OutScale = LocalActor.mScale * mTemplatePreviewState.mScale;
+    }
+
+    bool UIMapEditor::PlaceTemplatePreviewIntoScene()
+    {
+        if (!mTemplatePreviewState.mActive || mTemplatePreviewState.mTemplateIndex < 0 || mTemplatePreviewState.mTemplateIndex >= mTemplates.size())
+        {
+            return false;
+        }
+
+        const ActorTemplate& Template = mTemplates[mTemplatePreviewState.mTemplateIndex];
+        if (Template.mActors.empty())
+        {
+            return false;
+        }
+
+        struct PendingPlacementEntity
+        {
+            application::game::BancEntity mTemplateEntity;
+            application::game::BancEntity mSpawnEntity;
+        };
+
+        std::vector<PendingPlacementEntity> PendingEntities;
+        PendingEntities.reserve(Template.mActors.size());
+
+        std::unordered_map<uint64_t, uint64_t> HashRemap;
+
+        uint64_t FirstHash = 0;
+        bool HasFirstHash = false;
+
+        for (const application::game::BancEntity& LocalActor : Template.mActors)
+        {
+            std::optional<application::game::BancEntity> NewEntityOpt = mScene.CreateBancEntity(LocalActor);
+            if (!NewEntityOpt.has_value())
+            {
+                continue;
+            }
+
+            application::game::BancEntity NewEntity = NewEntityOpt.value();
+            if (NewEntity.mBancType == application::game::BancEntity::BancType::MERGED)
+            {
+                NewEntity.mBancType = application::game::BancEntity::BancType::STATIC;
+            }
+            NewEntity.mMergedActorChildren = nullptr;
+            NewEntity.mMergedActorChildrenModified = false;
+
+            HashRemap.insert_or_assign(LocalActor.mHash, NewEntity.mHash);
+
+            if (!HasFirstHash)
+            {
+                FirstHash = NewEntity.mHash;
+                HasFirstHash = true;
+            }
+
+            PendingPlacementEntity Pending;
+            Pending.mTemplateEntity = LocalActor;
+            Pending.mSpawnEntity = NewEntity;
+            PendingEntities.push_back(Pending);
+        }
+
+        if (PendingEntities.empty())
+        {
+            return false;
+        }
+
+        for (PendingPlacementEntity& Pending : PendingEntities)
+        {
+            for (const auto& [OldHash, NewHash] : HashRemap)
+            {
+                mScene.mStaticCompoundImplementation->SyncBancEntityHashes(Pending.mSpawnEntity, OldHash, NewHash);
+            }
+
+            for (application::game::BancEntity::Rail& Rail : Pending.mSpawnEntity.mRails)
+            {
+                const auto NewDest = HashRemap.find(Rail.mDest);
+                if (NewDest != HashRemap.end())
+                {
+                    Rail.mDest = NewDest->second;
+                }
+            }
+        }
+
+        for (PendingPlacementEntity& Pending : PendingEntities)
+        {
+            EvaluateTemplateWorldTransform(Pending.mTemplateEntity, Pending.mSpawnEntity.mTranslate, Pending.mSpawnEntity.mRotate, Pending.mSpawnEntity.mScale);
+            mScene.mBancEntities.push_back(Pending.mSpawnEntity);
+        }
+
+        mScene.GenerateDrawList();
+
+        if (HasFirstHash)
+        {
+            for (application::game::Scene::BancEntityRenderInfo* RenderInfo : mScene.mDrawListRenderInfoIndices)
+            {
+                if (RenderInfo->mEntity->mHash == FirstHash)
+                {
+                    SelectActor(RenderInfo->mEntityIndex);
+                    break;
+                }
+            }
+        }
+
+        StopTemplatePreview();
+
+        return true;
+    }
+
+    void UIMapEditor::RenderTemplatePreview()
+    {
+        if (!mTemplatePreviewState.mActive || mTemplatePreviewState.mTemplateIndex < 0 || mTemplatePreviewState.mTemplateIndex >= mTemplates.size())
+        {
+            return;
+        }
+
+        const ActorTemplate& Template = mTemplates[mTemplatePreviewState.mTemplateIndex];
+        if (Template.mActors.empty())
+        {
+            return;
+        }
+
+        gTemplatePreviewShader->Bind();
+        mCamera.Matrix(gTemplatePreviewShader, "camMatrix");
+        glUniform3fv(glGetUniformLocation(gTemplatePreviewShader->mID, "lightColor"), 1, &gLightColor[0]);
+        glUniform3fv(glGetUniformLocation(gTemplatePreviewShader->mID, "lightPos"), 1, &mCamera.mPosition[0]);
+        glUniform4f(glGetUniformLocation(gTemplatePreviewShader->mID, "previewTint"), 0.18f, 0.78f, 0.86f, 0.45f);
+        glUniform1f(glGetUniformLocation(gTemplatePreviewShader->mID, "previewAlpha"), 0.38f);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
+        for (const application::game::BancEntity& LocalActor : Template.mActors)
+        {
+            if (LocalActor.mBfresRenderer == nullptr)
+            {
+                continue;
+            }
+
+            glm::vec3 ActorTranslate;
+            glm::vec3 ActorRotate;
+            glm::vec3 ActorScale;
+            EvaluateTemplateWorldTransform(LocalActor, ActorTranslate, ActorRotate, ActorScale);
+
+            std::vector<glm::mat4> InstanceMatrix(1);
+            glm::mat4& ModelMatrix = InstanceMatrix[0];
+            ModelMatrix = glm::mat4(1.0f);
+            ModelMatrix = glm::translate(ModelMatrix, ActorTranslate);
+            ModelMatrix = glm::rotate(ModelMatrix, glm::radians(ActorRotate.z), glm::vec3(0.0, 0.0f, 1.0));
+            ModelMatrix = glm::rotate(ModelMatrix, glm::radians(ActorRotate.y), glm::vec3(0.0f, 1.0, 0.0));
+            ModelMatrix = glm::rotate(ModelMatrix, glm::radians(ActorRotate.x), glm::vec3(1.0, 0.0f, 0.0f));
+            ModelMatrix = glm::scale(ModelMatrix, ActorScale);
+
+            LocalActor.mBfresRenderer->Draw(InstanceMatrix);
+        }
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
+
+    void UIMapEditor::DrawTemplatePanel()
+    {
+        ImGui::TextWrapped("Create reusable actor groups, preview them as transparent ghosts, and place them into the scene.");
+        ImGui::Text("Templates: %zu", mTemplates.size());
+        ImGui::SameLine();
+        ImGui::Text("Builder actors: %zu", mTemplateBuilderActors.size());
+
+        ImGui::SeparatorText("Create");
+
+        if (!IsAnyActorSelected() || mEditingMode != EditingMode::BANC_ENTITY)
+        {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button("Add selected actor", ImVec2(-FLT_MIN, 0)))
+        {
+            AddSelectedActorToTemplateBuilder();
+        }
+        if (!IsAnyActorSelected() || mEditingMode != EditingMode::BANC_ENTITY)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::Columns(2);
+        if (mTemplateBuilderSelectedActorIndex < 0 || mTemplateBuilderSelectedActorIndex >= static_cast<int32_t>(mTemplateBuilderActors.size()))
+        {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button("Remove selected", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+        {
+            mTemplateBuilderActors.erase(mTemplateBuilderActors.begin() + mTemplateBuilderSelectedActorIndex);
+            if (mTemplateBuilderActors.empty())
+            {
+                mTemplateBuilderSelectedActorIndex = -1;
+            }
+            else if (mTemplateBuilderSelectedActorIndex >= static_cast<int32_t>(mTemplateBuilderActors.size()))
+            {
+                mTemplateBuilderSelectedActorIndex = static_cast<int32_t>(mTemplateBuilderActors.size()) - 1;
+            }
+        }
+        if (mTemplateBuilderSelectedActorIndex < 0 || mTemplateBuilderSelectedActorIndex >= static_cast<int32_t>(mTemplateBuilderActors.size()))
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::NextColumn();
+        if (mTemplateBuilderActors.empty())
+        {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button("Clear", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+        {
+            mTemplateBuilderActors.clear();
+            mTemplateBuilderSelectedActorIndex = -1;
+        }
+        if (mTemplateBuilderActors.empty())
+        {
+            ImGui::EndDisabled();
+        }
+        ImGui::Columns();
+
+        if (ImGui::BeginListBox("##TemplateBuilderActors", ImVec2(-FLT_MIN, 120.0f)))
+        {
+            for (size_t i = 0; i < mTemplateBuilderActors.size(); i++)
+            {
+                const application::game::BancEntity& Actor = mTemplateBuilderActors[i];
+                const bool IsSelected = mTemplateBuilderSelectedActorIndex == static_cast<int32_t>(i);
+                const std::string Label = Actor.mGyml + "##TemplateBuilderActor" + std::to_string(i);
+                if (ImGui::Selectable(Label.c_str(), IsSelected))
+                {
+                    mTemplateBuilderSelectedActorIndex = static_cast<int32_t>(i);
+                }
+            }
+            ImGui::EndListBox();
+        }
+
+        ImGui::InputTextWithHint("##TemplateName", "Template name", &mTemplateBuilderName);
+
+        const std::string BaseTemplateName = TrimString(mTemplateBuilderName);
+        const bool CanSaveTemplate = !BaseTemplateName.empty() && !mTemplateBuilderActors.empty();
+        if (!CanSaveTemplate)
+        {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button("Save template", ImVec2(-FLT_MIN, 0)))
+        {
+            std::string UniqueName = BaseTemplateName;
+            uint32_t Suffix = 2;
+            auto NameAlreadyUsed = [this](const std::string& Name)
+                {
+                    return std::find_if(mTemplates.begin(), mTemplates.end(), [&Name](const ActorTemplate& Template)
+                        {
+                            return Template.mName == Name;
+                        }) != mTemplates.end();
+                };
+
+            while (NameAlreadyUsed(UniqueName))
+            {
+                UniqueName = BaseTemplateName + " (" + std::to_string(Suffix++) + ")";
+            }
+
+            glm::vec3 Center = glm::vec3(0.0f, 0.0f, 0.0f);
+            for (const application::game::BancEntity& Actor : mTemplateBuilderActors)
+            {
+                Center += Actor.mTranslate;
+            }
+            Center /= static_cast<float>(mTemplateBuilderActors.size());
+
+            ActorTemplate NewTemplate;
+            NewTemplate.mName = UniqueName;
+            NewTemplate.mActors.reserve(mTemplateBuilderActors.size());
+
+            for (const application::game::BancEntity& Actor : mTemplateBuilderActors)
+            {
+                application::game::BancEntity LocalActor = Actor;
+                LocalActor.mTranslate -= Center;
+                LocalActor.mMergedActorChildren = nullptr;
+                LocalActor.mMergedActorChildrenModified = false;
+                NewTemplate.mActors.push_back(LocalActor);
+            }
+
+            mTemplates.push_back(NewTemplate);
+            SaveTemplatesToDisk();
+
+            mSelectedTemplateIndex = static_cast<int32_t>(mTemplates.size() - 1);
+            mTemplateBuilderActors.clear();
+            mTemplateBuilderSelectedActorIndex = -1;
+            mTemplateBuilderName.clear();
+
+            ImGui::InsertNotification({ ImGuiToastType::Success, 3000, "Template saved." });
+        }
+        if (!CanSaveTemplate)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SeparatorText("Library");
+        ImGui::InputTextWithHint("##TemplateSearch", "Search template...", &mTemplateSearchFieldText);
+
+        if (ImGui::BeginListBox("##TemplateLibrary", ImVec2(-FLT_MIN, 180.0f)))
+        {
+            std::string Filter = mTemplateSearchFieldText;
+            std::transform(Filter.begin(), Filter.end(), Filter.begin(), [](unsigned char C) { return std::tolower(C); });
+
+            for (size_t i = 0; i < mTemplates.size(); i++)
+            {
+                const ActorTemplate& Template = mTemplates[i];
+
+                std::string LowerName = Template.mName;
+                std::transform(LowerName.begin(), LowerName.end(), LowerName.begin(), [](unsigned char C) { return std::tolower(C); });
+                if (!Filter.empty() && LowerName.find(Filter) == std::string::npos)
+                {
+                    continue;
+                }
+
+                const bool IsSelected = mSelectedTemplateIndex == static_cast<int32_t>(i);
+                const std::string Label = Template.mName + " (" + std::to_string(Template.mActors.size()) + " actors)##TemplateLibraryItem" + std::to_string(i);
+                if (ImGui::Selectable(Label.c_str(), IsSelected))
+                {
+                    mSelectedTemplateIndex = static_cast<int32_t>(i);
+                }
+            }
+            ImGui::EndListBox();
+        }
+
+        if (mSelectedTemplateIndex < 0 || mSelectedTemplateIndex >= static_cast<int32_t>(mTemplates.size()))
+        {
+            return;
+        }
+
+        const bool IsPreviewingSelectedTemplate =
+            mTemplatePreviewState.mActive &&
+            mTemplatePreviewState.mTemplateIndex == mSelectedTemplateIndex;
+
+        const ActorTemplate& SelectedTemplate = mTemplates[mSelectedTemplateIndex];
+        ImGui::Text("Selected: %s", SelectedTemplate.mName.c_str());
+        ImGui::Text("Actors: %zu", SelectedTemplate.mActors.size());
+        ImGui::TextColored(IsPreviewingSelectedTemplate ? ImVec4(0.2f, 0.9f, 0.5f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
+            IsPreviewingSelectedTemplate ? "Preview: Active" : "Preview: Inactive");
+
+        ImGui::Columns(2);
+        if (!mScene.IsLoaded())
+        {
+            ImGui::BeginDisabled();
+        }
+        if (!IsPreviewingSelectedTemplate)
+        {
+            if (ImGui::Button("Preview", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+            {
+                StartTemplatePreview(mSelectedTemplateIndex);
+            }
+        }
+        else
+        {
+            if (ImGui::Button("Stop preview", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+            {
+                StopTemplatePreview();
+            }
+        }
+        if (!mScene.IsLoaded())
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::NextColumn();
+        if (ImGuiExt::ButtonDelete("Delete template", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ScrollbarSize, 0)))
+        {
+            const int32_t DeletedIndex = mSelectedTemplateIndex;
+            mTemplates.erase(mTemplates.begin() + DeletedIndex);
+
+            if (mTemplatePreviewState.mActive)
+            {
+                if (mTemplatePreviewState.mTemplateIndex == DeletedIndex)
+                {
+                    StopTemplatePreview();
+                }
+                else if (mTemplatePreviewState.mTemplateIndex > DeletedIndex)
+                {
+                    mTemplatePreviewState.mTemplateIndex--;
+                }
+            }
+
+            if (mSelectedTemplateIndex >= static_cast<int32_t>(mTemplates.size()))
+            {
+                mSelectedTemplateIndex = static_cast<int32_t>(mTemplates.size()) - 1;
+            }
+
+            SaveTemplatesToDisk();
+            ImGui::Columns();
+            return;
+        }
+        ImGui::Columns();
+
+        if (IsPreviewingSelectedTemplate)
+        {
+            ImGui::TextWrapped("Use the gizmo in the scene to move the preview. Place inserts once and automatically exits preview mode.");
+            if (ImGui::Button("Place in scene", ImVec2(-FLT_MIN, 0)))
+            {
+                if (PlaceTemplatePreviewIntoScene())
+                {
+                    ImGui::InsertNotification({ ImGuiToastType::Success, 3000, "Template placed in scene." });
+                }
+            }
+        }
     }
 
     void UIMapEditor::DrawDynamicTypePropertiesHeader(const std::string& Title, std::map<std::string, std::variant<std::string, bool, int32_t, int64_t, uint32_t, uint64_t, float, glm::vec3>>& Map, bool& SyncBancEntity, bool& UpdateColumnWidth, ImGuiTreeNodeFlags Flags, int IndentationLevel)
@@ -2080,7 +2709,7 @@ namespace application::rendering::map_editor
 
     void UIMapEditor::RenderPickingFramebuffer(const ImVec2& WindowSize, const ImVec2& MousePos)
     {
-        if (!mRenderSettings.mAllowActorSelection || mActorPainter.mEnabled || mTerrainEditor.mEnabled) return;
+        if (!mRenderSettings.mAllowActorSelection || mActorPainter.mEnabled || mTerrainEditor.mEnabled || mTemplatePreviewState.mActive) return;
         if (glfwGetMouseButton(application::manager::UIMgr::gWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && glfwGetMouseButton(application::manager::UIMgr::gWindow, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS && !ImGui::IsAnyItemHovered())
         {
             if (!(WindowSize.x > MousePos.x && WindowSize.y > MousePos.y && MousePos.x > 0 && MousePos.y > 0)) return;
@@ -2421,6 +3050,8 @@ namespace application::rendering::map_editor
             DrawInstancedBancEntityRenderInfo(Entities);
         }
 
+        RenderTemplatePreview();
+
         if (application::game::Scene::BancEntityRenderInfo* Info = GetSelectedActor(); Info != nullptr)
         {
             gSelectedShader->Bind();
@@ -2497,7 +3128,15 @@ namespace application::rendering::map_editor
 
         DrawOverlay();
 
-        if (application::game::Scene::BancEntityRenderInfo* Info = GetSelectedActor(); Info != nullptr)
+        if (mTemplatePreviewState.mActive)
+        {
+            ImGuizmo::RecomposeMatrixFromComponents(&mTemplatePreviewState.mTranslate.x, &mTemplatePreviewState.mRotate.x, &mTemplatePreviewState.mScale.x, mGuizmoObjectMatrix);
+
+            ImGuizmo::SetRect(ImGui::GetWindowPos().x + ImGui::GetStyle().WindowPadding.x, ImGui::GetWindowPos().y + ImGui::GetStyle().WindowPadding.y, WindowSize.x, WindowSize.y);
+
+            ImGuizmo::Manipulate(glm::value_ptr(mCamera.GetViewMatrix()), glm::value_ptr(mCamera.GetProjectionMatrix()), mGuizmoOperation, mGuizmoMode, mGuizmoObjectMatrix);
+        }
+        else if (application::game::Scene::BancEntityRenderInfo* Info = GetSelectedActor(); Info != nullptr)
         {
             ImGuizmo::RecomposeMatrixFromComponents(&Info->mTranslate.x, &Info->mRotate.x, &Info->mScale.x, mGuizmoObjectMatrix);
 
@@ -2508,9 +3147,19 @@ namespace application::rendering::map_editor
 
         if (ImGuizmo::IsUsingAny())
         {
-            application::game::Scene::BancEntityRenderInfo* RenderInfo = GetSelectedActor();
-            ImGuizmo::DecomposeMatrixToComponents(mGuizmoObjectMatrix, &RenderInfo->mTranslate.x, &RenderInfo->mRotate.x, &RenderInfo->mScale.x);
-            mScene.SyncBancEntity(RenderInfo);
+            if (mTemplatePreviewState.mActive)
+            {
+                ImGuizmo::DecomposeMatrixToComponents(mGuizmoObjectMatrix, &mTemplatePreviewState.mTranslate.x, &mTemplatePreviewState.mRotate.x, &mTemplatePreviewState.mScale.x);
+            }
+            else
+            {
+                application::game::Scene::BancEntityRenderInfo* RenderInfo = GetSelectedActor();
+                if (RenderInfo != nullptr)
+                {
+                    ImGuizmo::DecomposeMatrixToComponents(mGuizmoObjectMatrix, &RenderInfo->mTranslate.x, &RenderInfo->mRotate.x, &RenderInfo->mScale.x);
+                    mScene.SyncBancEntity(RenderInfo);
+                }
+            }
         }
 
         mSceneWindowFramebuffer->Unbind();
@@ -2675,11 +3324,14 @@ namespace application::rendering::map_editor
             ImGui::DockBuilderSplitNode(DockspaceId, ImGuiDir_Left, 0.15f, &DockLeft, &DockMiddle);
             ImGui::DockBuilderSplitNode(DockMiddle, ImGuiDir_Right, 0.25f, &DockRight, &DockMiddle);
 
-            ImGuiID DockLeftTop, DockLeftBottom;
-            ImGui::DockBuilderSplitNode(DockLeft, ImGuiDir_Up, 0.5f, &DockLeftTop, &DockLeftBottom);
+            ImGuiID DockLeftTop, DockLeftLower;
+            ImGui::DockBuilderSplitNode(DockLeft, ImGuiDir_Up, 0.35f, &DockLeftTop, &DockLeftLower);
+            ImGuiID DockLeftMiddle, DockLeftBottom;
+            ImGui::DockBuilderSplitNode(DockLeftLower, ImGuiDir_Up, 0.50f, &DockLeftMiddle, &DockLeftBottom);
 
-            ImGui::DockBuilderDockWindow(CreateID("Tools").c_str(), DockLeftBottom);
             ImGui::DockBuilderDockWindow(CreateID("Outliner").c_str(), DockLeftTop);
+            ImGui::DockBuilderDockWindow(CreateID("Templates").c_str(), DockLeftMiddle);
+            ImGui::DockBuilderDockWindow(CreateID("Tools").c_str(), DockLeftBottom);
 
             ImGui::DockBuilderDockWindow(CreateID("Scene").c_str(), DockMiddle);
             ImGui::DockBuilderDockWindow(CreateID("Properties").c_str(), DockRight);
@@ -2706,6 +3358,7 @@ namespace application::rendering::map_editor
         ImGui::End();
 
         DrawOutlinerWindow();
+        DrawTemplatesWindow();
         DrawToolsWindow();
         DrawDetailsWindow();
         DrawViewportWindow();

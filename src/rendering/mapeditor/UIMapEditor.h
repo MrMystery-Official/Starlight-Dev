@@ -26,6 +26,7 @@ namespace application::rendering::map_editor
 		static application::gl::Shader* gPickingShader;
 		static application::gl::Shader* gSelectedShader;
 		static application::gl::Shader* gNavMeshShader;
+		static application::gl::Shader* gTemplatePreviewShader;
 		static glm::vec3 gLightColor;
 
 		struct RenderSettings
@@ -110,6 +111,18 @@ namespace application::rendering::map_editor
 		void ExitPlayMode();
 
 		void DrawOverlay();
+		void DrawTemplatesWindow();
+		void DrawTemplatePanel();
+		void AddSelectedActorToTemplateBuilder();
+		void StartTemplatePreview(int32_t TemplateIndex);
+		void StopTemplatePreview();
+		bool PlaceTemplatePreviewIntoScene();
+		void RenderTemplatePreview();
+		void LoadTemplatesFromDisk();
+		bool SaveTemplatesToDisk();
+		std::string GetTemplateStorageFilePath() const;
+		void EnsureTemplateStorageDirectory() const;
+		void EvaluateTemplateWorldTransform(const application::game::BancEntity& LocalActor, glm::vec3& OutTranslate, glm::vec3& OutRotate, glm::vec3& OutScale) const;
 
 		bool IsBancEntityRenderInfoCulled(const application::game::Scene::BancEntityRenderInfo& RenderInfo);
 
@@ -144,6 +157,29 @@ namespace application::rendering::map_editor
 		uint16_t mHotkeyBlockFrameCount = 0;
 
 		std::unique_ptr<application::play::PlaySession> mPlaySession = nullptr;
+
+		struct ActorTemplate
+		{
+			std::string mName;
+			std::vector<application::game::BancEntity> mActors;
+		};
+
+		struct TemplatePreviewState
+		{
+			bool mActive = false;
+			int32_t mTemplateIndex = -1;
+			glm::vec3 mTranslate = glm::vec3(0.0f, 0.0f, 0.0f);
+			glm::vec3 mRotate = glm::vec3(0.0f, 0.0f, 0.0f);
+			glm::vec3 mScale = glm::vec3(1.0f, 1.0f, 1.0f);
+		};
+
+		std::vector<ActorTemplate> mTemplates;
+		std::vector<application::game::BancEntity> mTemplateBuilderActors;
+		std::string mTemplateBuilderName;
+		std::string mTemplateSearchFieldText;
+		int32_t mTemplateBuilderSelectedActorIndex = -1;
+		int32_t mSelectedTemplateIndex = -1;
+		TemplatePreviewState mTemplatePreviewState;
 
 		static application::rendering::popup::PopUpBuilder gAddNewDynamicTypeParameterPopUp;
 		static application::rendering::popup::PopUpBuilder gAddBancEntityPopUp;

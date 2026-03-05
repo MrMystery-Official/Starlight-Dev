@@ -64,6 +64,7 @@ namespace application
         std::filesystem::create_directories(application::util::FileUtil::GetWorkingDirFilePath("")); //Creating WorkingDir
         std::filesystem::create_directories(application::util::FileUtil::GetWorkingDirFilePath("Cache"));
         std::filesystem::create_directories(application::util::FileUtil::GetWorkingDirFilePath("Projects"));
+        std::filesystem::create_directories(application::util::FileUtil::GetWorkingDirFilePath("Templates"));
 
         if (!application::manager::AINBNodeMgr::Initialize())
         {
