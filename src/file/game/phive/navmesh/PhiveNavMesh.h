@@ -13,6 +13,17 @@ namespace application::file::game::phive::navmesh
 	class PhiveNavMesh
 	{
 	public:
+		static float SnapToTileBoundary(float Value, float HalfExtent, float Epsilon);
+		static void SnapVerticesToTileBounds(std::vector<glm::vec3>& Vertices, float HalfExtent, float Epsilon);
+		static bool TriangleTouchesSeamStrip(const glm::vec3& A, const glm::vec3& B, const glm::vec3& C, const glm::vec3& NeighbourOffset, float HalfExtent, float StripWidth);
+		static void AppendNeighbourGuideMesh(
+			PhiveNavMesh& Neighbour,
+			const glm::vec3& NeighbourOffsetFromCurrent,
+			float HalfExtent,
+			float StripWidth,
+			std::vector<glm::vec3>& VerticesOut,
+			std::vector<uint32_t>& IndicesOut);
+
 		struct PhiveNavMeshHeader
 		{
 			char mMagic[6]; //Includes null terminator
@@ -49,6 +60,9 @@ namespace application::file::game::phive::navmesh
 
 		struct GeneratorData
 		{
+			std::vector<glm::vec3> mNonOptimizeVertices;
+			std::vector<uint32_t> mNonOptimizeIndices;
+
 			std::vector<glm::vec3> mVertices;
 			std::vector<uint32_t> mIndices;
 

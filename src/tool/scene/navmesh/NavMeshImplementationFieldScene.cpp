@@ -209,14 +209,12 @@ namespace application::tool::scene::navmesh
 		ImGuiExt::InputFloatSliderCombo("Cell size", "NavMeshCellSize", &mGenerator.mGeometryConfig.mCellSize, 0.1f, 10.0f);
 		ImGuiExt::InputFloatSliderCombo("Cell height", "NavMeshCellHeight", &mGenerator.mGeometryConfig.mCellHeight, 0.1f, 10.0f);
 		ImGuiExt::InputFloatSliderCombo("Walkable slope angle", "NavMeshSlopeAngle", &mGenerator.mGeometryConfig.mWalkableSlopeAngle, 0.001f, 180.0f);
-		ImGuiExt::InputFloatSliderCombo("Walkable height", "NavMeshHeight", &mGenerator.mGeometryConfig.mWalkableHeight, 0.001f, 10.0f);
-		ImGuiExt::InputFloatSliderCombo("Walkable climb", "NavMeshClimb", &mGenerator.mGeometryConfig.mWalkableClimb, 0.001f, 10.0f);
-		ImGuiExt::InputFloatSliderCombo("Walkable radius", "NavMeshRadius", &mGenerator.mGeometryConfig.mWalkableRadius, 0.001f, 10.0f);
-		ImGuiExt::InputIntSliderCombo("Min Region Area", "NavMeshMinRegionArea", &mGenerator.mGeometryConfig.mMinRegionArea, 1, 256);
 		ImGui::NewLine();
 		ImGui::InputScalar("NavMesh Index (0-15)", ImGuiDataType_U32, &mGenerationNavMeshIndex);
-		ImGui::Checkbox("Merging Mode", &mMergingMode);
+		ImGui::Checkbox("Include Vanilla NavMesh", &mIncludeVanillaNavMesh);
 		ImGui::Checkbox("Include Terrain Geometry", &mIncludeTerrainGeometry);
+		ImGui::Checkbox("Include Volumes", &mIncludeVolumes);
+		ImGui::Checkbox("Include Actors", &mIncludeActors);
 
 		if (ImGui::Button("Generate"))
 		{
@@ -240,117 +238,10 @@ namespace application::tool::scene::navmesh
 			StartPoint.z -= 125.0f;
 
 			mGenerator.mIsSingleSceneNavMesh = false;
+			mGenerator.mNonOptimizeVertices.clear();
+			mGenerator.mNonOptimizeIndices.clear();
 			mGenerator.mVertices.clear();
 			mGenerator.mIndices.clear();
-
-				if (mIncludeTerrainGeometry)
-				{
-					std::pair<std::vector<glm::vec3>, std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>>> Model = mScene->mTerrainRenderer->GenerateTerrainTileCollisionModel(glm::vec2(StartPoint.x, StartPoint.z), nullptr);
-
-					mGenerator.mVertices.reserve(Model.first.size());
-					for (const glm::vec3& Vertex : Model.first)
-					{
-						mGenerator.mVertices.emplace_back(Vertex.x - 125.0f, Vertex.y, Vertex.z - 125.0f);
-					}
-
-					mGenerator.mIndices.reserve(Model.second.size() * 3);
-					for (auto& [Triangle, Material] : Model.second)
-					{
-						mGenerator.mIndices.push_back(std::get<0>(Triangle));
-						mGenerator.mIndices.push_back(std::get<1>(Triangle));
-						mGenerator.mIndices.push_back(std::get<2>(Triangle));
-					}
-				}
-
-			std::pair<std::vector<glm::vec3>, std::vector<unsigned int>> SceneModelData = mScene->GetSceneModel([](application::game::Scene::BancEntityRenderInfo* Info)
-				{
-					return Info->mEntity->mBakeable;
-				});
-
-			std::vector<std::pair<glm::vec3, glm::vec3>> ProhibitionBoxes;
-			std::vector<std::pair<glm::vec3, glm::vec3>> VolumeBoxes;
-
-			for (application::game::Scene::BancEntityRenderInfo* RenderInfo : mScene->mDrawListRenderInfoIndices)
-			{
-				if (RenderInfo->mEntity->mGyml == "Area" && RenderInfo->mEntity->mDynamic.contains("Starlight_NavMeshVolume"))
-				{
-					glm::vec4 MinPoint(-1, 0, -1, 1);
-					glm::vec4 MaxPoint(1, 2, 1, 1);
-
-					glm::mat4 GLMModel = glm::mat4(1.0f); // Identity matrix
-
-					GLMModel = glm::translate(GLMModel, RenderInfo->mTranslate);
-
-					GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.z), glm::vec3(0.0, 0.0f, 1.0));
-					GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.y), glm::vec3(0.0f, 1.0, 0.0));
-					GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.x), glm::vec3(1.0, 0.0f, 0.0));
-
-					GLMModel = glm::scale(GLMModel, RenderInfo->mScale);
-
-					MinPoint = GLMModel * MinPoint;
-					MaxPoint = GLMModel * MaxPoint;
-
-					if (std::get<bool>(RenderInfo->mEntity->mDynamic["Starlight_NavMeshVolume"]))
-						VolumeBoxes.push_back(std::make_pair(glm::vec3(MinPoint.x, MinPoint.y, MinPoint.z), glm::vec3(MaxPoint.x, MaxPoint.y, MaxPoint.z)));
-					else
-						ProhibitionBoxes.push_back(std::make_pair(glm::vec3(MinPoint.x, MinPoint.y, MinPoint.z), glm::vec3(MaxPoint.x, MaxPoint.y, MaxPoint.z)));
-				}
-			}
-
-			StartPoint.y = -1000.0f;
-			
-			glm::vec3 EndPoint = StartPoint;
-			EndPoint.x += 250.0f;
-			EndPoint.y = 1000.0f;
-			EndPoint.z += 250.0f;
-
-			SceneModelData = application::util::Math::ClipMeshToBoxes(SceneModelData, VolumeBoxes);
-			SceneModelData = application::util::Math::ClipMeshToBox(SceneModelData, std::make_pair(StartPoint, EndPoint));
-			SceneModelData = application::util::Math::ClipOutsideMeshToBoxes(SceneModelData, ProhibitionBoxes);
-
-			//Merging scene model into navmesh generation model
-			uint32_t IndexOffset = mGenerator.mVertices.size();
-
-			mGenerator.mVertices.reserve(mGenerator.mVertices.size() + SceneModelData.first.size());
-			for (const glm::vec3& Pos : SceneModelData.first)
-			{
-				mGenerator.mVertices.emplace_back(Pos.x - StartPoint.x - 125.0f, Pos.y, Pos.z - StartPoint.z - 125.0f);
-			}
-
-			mGenerator.mIndices.reserve(mGenerator.mIndices.size() + SceneModelData.second.size());
-			for (uint32_t Index : SceneModelData.second)
-			{
-				mGenerator.mIndices.push_back(Index + IndexOffset);
-			}
-
-			if (mScene->GetSceneTypeName(mScene->mSceneType) == "MinusField")
-			{
-				for (glm::vec3& Vertex : mGenerator.mVertices)
-				{
-					Vertex.y += 200.0f;
-				}
-			}
-
-			if (mMergingMode)
-			{
-				std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> MergingModelData = NavMeshPair.second.ToVerticesIndices();
-
-				uint32_t IndexOffset = mGenerator.mVertices.size();
-
-				mGenerator.mVertices.reserve(mGenerator.mVertices.size() + MergingModelData.first.size());
-				for (const glm::vec3& Pos : MergingModelData.first)
-				{
-					mGenerator.mVertices.emplace_back(Pos);
-				}
-
-				mGenerator.mIndices.reserve(mGenerator.mIndices.size() + MergingModelData.second.size());
-				for (uint32_t Index : MergingModelData.second)
-				{
-					mGenerator.mIndices.push_back(Index + IndexOffset);
-				}
-
-				//RemoveDuplicateVertices(mGenerator);
-			}
 
 			auto LoadNavMeshNeighbour = [this, &FieldName](const std::string& TileName, uint8_t Index)
 				{
@@ -385,6 +276,237 @@ namespace application::tool::scene::navmesh
 			LoadNavMeshNeighbour("X" + std::to_string(NavMeshPair.first.mXIndex + 1) + "_Z" + std::to_string(NavMeshPair.first.mZIndex), 1);
 			LoadNavMeshNeighbour("X" + std::to_string(NavMeshPair.first.mXIndex) + "_Z" + std::to_string(NavMeshPair.first.mZIndex - 1), 2);
 			LoadNavMeshNeighbour("X" + std::to_string(NavMeshPair.first.mXIndex) + "_Z" + std::to_string(NavMeshPair.first.mZIndex + 1), 3);
+
+			if (mIncludeVanillaNavMesh)
+			{
+				application::file::game::phive::navmesh::PhiveNavMesh NavMesh;
+				NavMesh.Initialize(application::file::game::ZStdBackend::Decompress(application::util::FileUtil::GetRomFSFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + NavMeshPair.first.GetSectionName() + ".Nin_NX_NVN.bphnm.zs", false)));
+
+				std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> VanillaModelData = NavMesh.ToVerticesIndices();
+
+				mGenerator.mNonOptimizeVertices = VanillaModelData.first;
+				mGenerator.mNonOptimizeIndices = VanillaModelData.second;
+			}
+
+			if (mIncludeTerrainGeometry)
+			{
+				std::pair<std::vector<glm::vec3>, std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>>> Model = mScene->mTerrainRenderer->GenerateTerrainTileCollisionModel(glm::vec2(StartPoint.x, StartPoint.z), nullptr);
+
+				for (glm::vec3& Vertex : Model.first)
+				{
+					Vertex.x -= 125.0f;
+					Vertex.z -= 125.0f;
+				}
+
+				if (mScene->GetSceneTypeName(mScene->mSceneType) == "MinusField")
+				{
+					for (glm::vec3& Vertex : Model.first)
+					{
+						Vertex.y += 200.0f;
+					}
+				}
+
+				const std::array<glm::vec3, 4> NeighbourOffsets = {
+					glm::vec3(-250.0f, 0.0f, 0.0f),
+					glm::vec3(250.0f, 0.0f, 0.0f),
+					glm::vec3(0.0f, 0.0f, -250.0f),
+					glm::vec3(0.0f, 0.0f, 250.0f),
+				};
+
+				std::vector<uint32_t> RemappedIndices;
+				for (auto& [Triangle, Material] : Model.second)
+				{
+					RemappedIndices.push_back(std::get<0>(Triangle));
+					RemappedIndices.push_back(std::get<1>(Triangle));
+					RemappedIndices.push_back(std::get<2>(Triangle));
+				}
+
+				const std::pair<std::vector<glm::vec3>, std::vector<unsigned int>> ClippedMesh =
+					application::util::Math::ClipMeshToBox(
+						std::make_pair(Model.first, RemappedIndices),
+						std::make_pair(
+							glm::vec3(-125.0f, -100000.0f, -125.0f),
+							glm::vec3(125.0f, 100000.0f, 125.0f)));
+
+				if (!ClippedMesh.first.empty() && !ClippedMesh.second.empty())
+				{
+					Model.first = ClippedMesh.first;
+					RemappedIndices.assign(ClippedMesh.second.begin(), ClippedMesh.second.end());
+				}
+
+				const float SnapEpsilon = std::max(mGenerator.mGeometryConfig.mCellSize, 0.05f);
+				const float BorderGuideWidth = std::max(mGenerator.mGeometryConfig.mCellSize * 4.0f, 2.0f);
+
+				application::file::game::phive::navmesh::PhiveNavMesh::SnapVerticesToTileBounds(Model.first, 125.0f, SnapEpsilon);
+
+				for (size_t i = 0; i < mGenerator.mNeighbourNavMeshObjs.size(); ++i)
+				{
+					if (!mGenerator.mNeighbourNavMeshObjs[i])
+					{
+						continue;
+					}
+
+					application::file::game::phive::navmesh::PhiveNavMesh::AppendNeighbourGuideMesh(
+						*mGenerator.mNeighbourNavMeshObjs[i],
+						NeighbourOffsets[i],
+						125.0f,
+						BorderGuideWidth,
+						Model.first,
+						RemappedIndices);
+				}
+
+				uint32_t IndexOffset = mGenerator.mVertices.size();
+
+				mGenerator.mVertices.reserve(mGenerator.mVertices.size() + Model.first.size());
+				for (const glm::vec3& Vertex : Model.first)
+				{
+					mGenerator.mVertices.emplace_back(Vertex.x, Vertex.y, Vertex.z);
+				}
+
+				mGenerator.mIndices.reserve(mGenerator.mIndices.size() + RemappedIndices.size());
+				for (uint32_t Idx : RemappedIndices)
+				{
+					mGenerator.mIndices.push_back(IndexOffset + Idx);
+				}
+			}
+
+			if (mIncludeVolumes)
+			{
+				std::pair<std::vector<glm::vec3>, std::vector<unsigned int>> SceneModelData = mScene->GetSceneModel([](application::game::Scene::BancEntityRenderInfo* Info)
+					{
+						return Info->mEntity->mBakeable;
+					});
+
+				std::vector<std::pair<glm::vec3, glm::vec3>> ProhibitionBoxes;
+				std::vector<std::pair<glm::vec3, glm::vec3>> VolumeBoxes;
+
+				for (application::game::Scene::BancEntityRenderInfo* RenderInfo : mScene->mDrawListRenderInfoIndices)
+				{
+					if (RenderInfo->mEntity->mGyml == "Area" && RenderInfo->mEntity->mDynamic.contains("Starlight_NavMeshVolume"))
+					{
+						glm::vec4 MinPoint(-1, 0, -1, 1);
+						glm::vec4 MaxPoint(1, 2, 1, 1);
+
+						glm::mat4 GLMModel = glm::mat4(1.0f); // Identity matrix
+
+						GLMModel = glm::translate(GLMModel, RenderInfo->mTranslate);
+
+						GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.z), glm::vec3(0.0, 0.0f, 1.0));
+						GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.y), glm::vec3(0.0f, 1.0, 0.0));
+						GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.x), glm::vec3(1.0, 0.0f, 0.0));
+
+						GLMModel = glm::scale(GLMModel, RenderInfo->mScale);
+
+						MinPoint = GLMModel * MinPoint;
+						MaxPoint = GLMModel * MaxPoint;
+
+						if (std::get<bool>(RenderInfo->mEntity->mDynamic["Starlight_NavMeshVolume"]))
+							VolumeBoxes.push_back(std::make_pair(glm::vec3(MinPoint.x, MinPoint.y, MinPoint.z), glm::vec3(MaxPoint.x, MaxPoint.y, MaxPoint.z)));
+						else
+							ProhibitionBoxes.push_back(std::make_pair(glm::vec3(MinPoint.x, MinPoint.y, MinPoint.z), glm::vec3(MaxPoint.x, MaxPoint.y, MaxPoint.z)));
+					}
+				}
+
+				StartPoint.y = -1000.0f;
+
+				glm::vec3 EndPoint = StartPoint;
+				EndPoint.x += 250.0f;
+				EndPoint.y = 1000.0f;
+				EndPoint.z += 250.0f;
+
+				SceneModelData = application::util::Math::ClipMeshToBoxes(SceneModelData, VolumeBoxes);
+				SceneModelData = application::util::Math::ClipMeshToBox(SceneModelData, std::make_pair(StartPoint, EndPoint));
+
+				if (mScene->GetSceneTypeName(mScene->mSceneType) == "MinusField")
+				{
+					for (glm::vec3& Vertex : SceneModelData.first)
+					{
+						Vertex.y += 200.0f;
+					}
+				}
+
+				//Merging scene model into navmesh generation model
+				uint32_t IndexOffset = mGenerator.mVertices.size();
+
+				mGenerator.mVertices.reserve(mGenerator.mVertices.size() + SceneModelData.first.size());
+				for (const glm::vec3& Pos : SceneModelData.first)
+				{
+					mGenerator.mVertices.emplace_back(Pos.x - StartPoint.x - 125.0f, Pos.y, Pos.z - StartPoint.z - 125.0f);
+				}
+
+				mGenerator.mIndices.reserve(mGenerator.mIndices.size() + SceneModelData.second.size());
+				for (uint32_t Index : SceneModelData.second)
+				{
+					mGenerator.mIndices.push_back(Index + IndexOffset);
+				}
+
+				for (auto& [Start, End] : ProhibitionBoxes)
+				{
+					Start.y += 200;
+					End.y += 200;
+				}
+
+				std::pair<std::vector<glm::vec3>, std::vector<unsigned int>> FullModel = std::make_pair(mGenerator.mVertices, mGenerator.mIndices);
+				auto NewData = application::util::Math::ClipOutsideMeshToBoxes(FullModel, ProhibitionBoxes);
+				mGenerator.mVertices = NewData.first;
+				mGenerator.mIndices = NewData.second;
+			}
+
+			if (mIncludeActors)
+			{
+				std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> ActorModelData;
+
+				for (application::game::Scene::BancEntityRenderInfo* RenderInfo : mScene->mDrawListRenderInfoIndices)
+				{
+					if (RenderInfo->mEntity->mDynamic.contains("Starlight_NavMeshActor") && std::get<bool>(RenderInfo->mEntity->mDynamic["Starlight_NavMeshActor"]) == true)
+					{
+						const std::vector<glm::vec4>& Vertices = RenderInfo->mEntity->mBfresRenderer->mBfresFile->Models.GetByIndex(0).mValue.Shapes.GetByIndex(0).mValue.Vertices;
+
+						glm::mat4 GLMModel = glm::mat4(1.0f); // Identity matrix
+
+						GLMModel = glm::translate(GLMModel, RenderInfo->mTranslate);
+
+						GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.z), glm::vec3(0.0, 0.0f, 1.0));
+						GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.y), glm::vec3(0.0f, 1.0, 0.0));
+						GLMModel = glm::rotate(GLMModel, glm::radians(RenderInfo->mRotate.x), glm::vec3(1.0, 0.0f, 0.0));
+
+						GLMModel = glm::scale(GLMModel, RenderInfo->mScale);
+
+						uint32_t ActorModelIndexOffset = ActorModelData.first.size();
+
+						for (const glm::vec4& Vertex : Vertices)
+						{
+							glm::vec4 Processed = GLMModel * Vertex;
+							ActorModelData.first.emplace_back(Processed.x, Processed.y, Processed.z);
+						}
+
+						for (uint32_t Index : RenderInfo->mEntity->mBfresRenderer->mBfresFile->Models.GetByIndex(0).mValue.Shapes.GetByIndex(0).mValue.Meshes[0].IndexBuffer)
+						{
+							ActorModelData.second.push_back(Index + ActorModelIndexOffset);
+						}
+					}
+				}
+
+				uint32_t IndexOffset = mGenerator.mVertices.size();
+
+				mGenerator.mVertices.reserve(mGenerator.mVertices.size() + ActorModelData.first.size());
+				for (const glm::vec3& Pos : ActorModelData.first)
+				{
+					mGenerator.mVertices.emplace_back(
+						Pos.x - StartPoint.x - 125.0f,
+						Pos.y,
+						Pos.z - StartPoint.z - 125.0f
+					);
+				}
+
+				mGenerator.mIndices.reserve(mGenerator.mIndices.size() + ActorModelData.second.size());
+				for (uint32_t Index : ActorModelData.second)
+				{
+					mGenerator.mIndices.push_back(Index + IndexOffset);
+				}
+
+				//RemoveDuplicateVertices(mGenerator);
+			}
 
 			NavMeshPair.second.InjectNavMeshModel(mGenerator);
 

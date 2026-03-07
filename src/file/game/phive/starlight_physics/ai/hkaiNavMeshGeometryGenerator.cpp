@@ -1564,12 +1564,12 @@ namespace application::file::game::phive::starlight_physics::ai
         mConfig.cs = std::max(1e-4f, config.mCellSize);
         mConfig.ch = std::max(1e-4f, config.mCellHeight);
         mConfig.walkableSlopeAngle = config.mWalkableSlopeAngle;
-        mConfig.walkableHeight = static_cast<int>(std::ceil(config.mWalkableHeight / mConfig.ch));
-        mConfig.walkableClimb = static_cast<int>(std::floor(config.mWalkableClimb / mConfig.ch));
-        mConfig.walkableRadius = static_cast<int>(std::ceil(config.mWalkableRadius / mConfig.cs));
+        mConfig.walkableHeight = static_cast<int>(std::ceil(config.mWalkableHeight / mConfig.ch)); //Unused
+        mConfig.walkableClimb = static_cast<int>(std::floor(config.mWalkableClimb / mConfig.ch));  //Unused
+        mConfig.walkableRadius = static_cast<int>(std::ceil(config.mWalkableRadius / mConfig.cs));  //Unused
         mConfig.minRegionArea = std::max(0, config.mMinRegionArea * config.mMinRegionArea);
-        mConfig.mergeRegionArea = std::max(0, config.mMinRegionArea * config.mMinRegionArea * 2);
-        mConfig.maxVertsPerPoly = 3;
+        mConfig.mergeRegionArea = std::max(0, config.mMinRegionArea * config.mMinRegionArea * 2);  //Unused
+        mConfig.maxVertsPerPoly = 3;  //Unused
         mConfig.enableSimplification = config.mEnableSimplification;
         const float requestedTargetRatio = std::clamp(config.mSimplificationTargetRatio, 0.003f, 1.0f);
         const float requestedMaxError = std::clamp(config.mSimplificationMaxError, 0.001f, 1.0f);

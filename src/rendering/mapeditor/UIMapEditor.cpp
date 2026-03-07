@@ -1830,6 +1830,18 @@ namespace application::rendering::map_editor
                 ImGui::Columns();
             }
 
+            {
+				bool Disabled = RenderInfo->mEntity->mBfresRenderer == nullptr || RenderInfo->mEntity->mBfresRenderer->mBfresFile == nullptr || RenderInfo->mEntity->mBfresRenderer->mBfresFile->mDefaultModel || RenderInfo->mEntity->mDynamic.contains("Starlight_NavMeshActor");
+
+                ImGui::BeginDisabled(Disabled);
+                ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+                if (ImGui::Button("Mark as NavMesh actor", ImVec2(ImGui::GetColumnWidth() - ImGui::GetStyle().ItemSpacing.x + 2, 0)))
+                {
+					RenderInfo->mEntity->mDynamic["Starlight_NavMeshActor"] = true;
+                }
+				ImGui::EndDisabled();
+            }
+
             if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Columns(2, "TransformCameraActor");

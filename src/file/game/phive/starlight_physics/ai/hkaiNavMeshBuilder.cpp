@@ -256,7 +256,7 @@ namespace application::file::game::phive::starlight_physics::ai
 		geometryGenerator.setNavmeshBuildParams(config);
 	}
 
-	bool hkaiNavMeshBuilder::buildNavMesh(classes::HavokClasses::hkaiNavMesh* dst, std::vector<glm::vec3>& vertices, std::vector<uint32_t>& indices)
+	bool hkaiNavMeshBuilder::buildNavMesh(classes::HavokClasses::hkaiNavMesh* dst, std::vector<glm::vec3>& vertices, std::vector<uint32_t>& indices, std::vector<glm::vec3>& nonOptimizeVertices, std::vector<uint32_t>& nonOptimizeIndices)
 	{
 		if (!geometryGenerator.buildNavmeshForMesh(reinterpret_cast<float*>(vertices.data()), vertices.size(), reinterpret_cast<const int*>(indices.data()), indices.size()))
 		{
@@ -287,7 +287,6 @@ namespace application::file::game::phive::starlight_physics::ai
 		Bounds[1].y = geometryGenerator.mBoundingBoxMax[1];
 		Bounds[1].z = geometryGenerator.mBoundingBoxMax[2];
 
-
 		std::vector<glm::vec3> OptimizedVertices;
 		for (size_t i = 0; i < BVerts.size() / 3; i++)
 		{
@@ -308,6 +307,32 @@ namespace application::file::game::phive::starlight_physics::ai
 			OptimizedVertices.push_back(Vertex);
 		}
 
+		OptimizedVertices.insert(OptimizedVertices.end(), nonOptimizeVertices.begin(), nonOptimizeVertices.end());
+		BIndices.insert(BIndices.end(), nonOptimizeIndices.begin(), nonOptimizeIndices.end());
+
+		glm::vec3 BoundingBoxMin(
+			std::numeric_limits<float>::max(),
+			std::numeric_limits<float>::max(),
+			std::numeric_limits<float>::max()
+		);
+
+		glm::vec3 BoundingBoxMax(
+			std::numeric_limits<float>::lowest(),
+			std::numeric_limits<float>::lowest(),
+			std::numeric_limits<float>::lowest()
+		);
+
+		for (const auto& p : OptimizedVertices)
+		{
+			BoundingBoxMin.x = std::min(BoundingBoxMin.x, p.x);
+			BoundingBoxMin.y = std::min(BoundingBoxMin.y, p.y);
+			BoundingBoxMin.z = std::min(BoundingBoxMin.z, p.z);
+
+			BoundingBoxMax.x = std::max(BoundingBoxMax.x, p.x);
+			BoundingBoxMax.y = std::max(BoundingBoxMax.y, p.y);
+			BoundingBoxMax.z = std::max(BoundingBoxMax.z, p.z);
+		}
+
 		dst->mFaces.mElements.clear();
 		dst->mEdges.mElements.clear();
 		dst->mVertices.mElements.clear();
@@ -322,8 +347,8 @@ namespace application::file::game::phive::starlight_physics::ai
 		Up.FromVec4(glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
 		dst->mUp.mUp = Up;
 
-		dst->mAabb.mMin.FromVec4(glm::vec4(Bounds[0], 1.0f));
-		dst->mAabb.mMax.FromVec4(glm::vec4(Bounds[1], 1.0f));
+		dst->mAabb.mMin.FromVec4(glm::vec4(BoundingBoxMin, 1.0f));
+		dst->mAabb.mMax.FromVec4(glm::vec4(BoundingBoxMax, 1.0f));
 
 		dst->mErosionRadius.mParent = 0;
 		dst->mUserData.mParent = 0;

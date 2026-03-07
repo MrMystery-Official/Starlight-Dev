@@ -54,7 +54,9 @@ namespace application::tool::scene::navmesh
 		std::vector<application::gl::SimpleMesh> mMeshes;
 
 		application::file::game::phive::navmesh::PhiveNavMesh::GeneratorData mGenerator;
-		bool mMergingMode = true;
+		bool mIncludeVanillaNavMesh = true;
 		bool mIncludeTerrainGeometry = false;
+		bool mIncludeVolumes = false;
+		bool mIncludeActors = true;
 	};
 }
