@@ -1,6 +1,7 @@
 #include <file/game/phive/starlight_physics/ai/hkaiNavMeshGeometryGenerator.h>
 
 #include <glm/geometric.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 #include <algorithm>
@@ -195,6 +196,601 @@ namespace
             boundsMin[2] + static_cast<float>(vertex.mZ) * cs);
     }
 
+    struct Bucket2DKey
+    {
+        int32_t mX = 0;
+        int32_t mZ = 0;
+
+        bool operator==(const Bucket2DKey& other) const
+        {
+            return mX == other.mX && mZ == other.mZ;
+        }
+    };
+
+    struct Bucket2DKeyHash
+    {
+        size_t operator()(const Bucket2DKey& key) const
+        {
+            const uint64_t x = static_cast<uint32_t>(key.mX);
+            const uint64_t z = static_cast<uint32_t>(key.mZ);
+            return static_cast<size_t>((x * 73856093ull) ^ (z * 19349663ull));
+        }
+    };
+
+    bool SampleTriangleHeightAtXZ(
+        const glm::vec3& a,
+        const glm::vec3& b,
+        const glm::vec3& c,
+        float sampleX,
+        float sampleZ,
+        float& sampleYOut)
+    {
+        const float det = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+        if (std::fabs(det) <= 1e-8f)
+        {
+            return false;
+        }
+
+        const float u = ((b.z - c.z) * (sampleX - c.x) + (c.x - b.x) * (sampleZ - c.z)) / det;
+        const float v = ((c.z - a.z) * (sampleX - c.x) + (a.x - c.x) * (sampleZ - c.z)) / det;
+        const float w = 1.0f - u - v;
+        constexpr float baryEps = 1e-4f;
+        if (u < -baryEps || v < -baryEps || w < -baryEps)
+        {
+            return false;
+        }
+
+        sampleYOut = u * a.y + v * b.y + w * c.y;
+        return std::isfinite(sampleYOut);
+    }
+
+    inline float Cross2D(const glm::vec2& a, const glm::vec2& b, const glm::vec2& c)
+    {
+        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    }
+
+    bool PointInsideTriangleStrictXZ(
+        const glm::vec3& point,
+        const glm::vec3& a,
+        const glm::vec3& b,
+        const glm::vec3& c,
+        float eps)
+    {
+        const glm::vec2 p(point.x, point.z);
+        const glm::vec2 v0(a.x, a.z);
+        const glm::vec2 v1(b.x, b.z);
+        const glm::vec2 v2(c.x, c.z);
+
+        const float area = Cross2D(v0, v1, v2);
+        if (std::fabs(area) <= eps)
+        {
+            return false;
+        }
+
+        const float invArea = 1.0f / area;
+        const float w0 = Cross2D(v1, v2, p) * invArea;
+        const float w1 = Cross2D(v2, v0, p) * invArea;
+        const float w2 = 1.0f - w0 - w1;
+        return w0 > eps && w1 > eps && w2 > eps;
+    }
+
+    bool SegmentsIntersectStrictXZ(
+        const glm::vec3& a0,
+        const glm::vec3& a1,
+        const glm::vec3& b0,
+        const glm::vec3& b1,
+        float eps)
+    {
+        const glm::vec2 p0(a0.x, a0.z);
+        const glm::vec2 p1(a1.x, a1.z);
+        const glm::vec2 q0(b0.x, b0.z);
+        const glm::vec2 q1(b1.x, b1.z);
+
+        const float d0 = Cross2D(p0, p1, q0);
+        const float d1 = Cross2D(p0, p1, q1);
+        const float d2 = Cross2D(q0, q1, p0);
+        const float d3 = Cross2D(q0, q1, p1);
+
+        const bool straddleA = (d0 > eps && d1 < -eps) || (d0 < -eps && d1 > eps);
+        const bool straddleB = (d2 > eps && d3 < -eps) || (d2 < -eps && d3 > eps);
+        return straddleA && straddleB;
+    }
+
+    bool TrianglesOverlapInXZStrict(
+        const glm::vec3& a0,
+        const glm::vec3& a1,
+        const glm::vec3& a2,
+        const glm::vec3& b0,
+        const glm::vec3& b1,
+        const glm::vec3& b2,
+        float eps)
+    {
+        if (PointInsideTriangleStrictXZ(a0, b0, b1, b2, eps) ||
+            PointInsideTriangleStrictXZ(a1, b0, b1, b2, eps) ||
+            PointInsideTriangleStrictXZ(a2, b0, b1, b2, eps) ||
+            PointInsideTriangleStrictXZ(b0, a0, a1, a2, eps) ||
+            PointInsideTriangleStrictXZ(b1, a0, a1, a2, eps) ||
+            PointInsideTriangleStrictXZ(b2, a0, a1, a2, eps))
+        {
+            return true;
+        }
+
+        const glm::vec3 triA[3] = { a0, a1, a2 };
+        const glm::vec3 triB[3] = { b0, b1, b2 };
+        for (int ea = 0; ea < 3; ++ea)
+        {
+            const glm::vec3& aStart = triA[ea];
+            const glm::vec3& aEnd = triA[(ea + 1) % 3];
+            for (int eb = 0; eb < 3; ++eb)
+            {
+                const glm::vec3& bStart = triB[eb];
+                const glm::vec3& bEnd = triB[(eb + 1) % 3];
+                if (SegmentsIntersectStrictXZ(aStart, aEnd, bStart, bEnd, eps))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    uint32_t CountSharedVertices(const WorkingTriangle& a, const WorkingTriangle& b)
+    {
+        uint32_t shared = 0;
+        for (int i = 0; i < 3; ++i)
+        {
+            for (int j = 0; j < 3; ++j)
+            {
+                if (a.mVertices[i] == b.mVertices[j])
+                {
+                    ++shared;
+                }
+            }
+        }
+
+        return shared;
+    }
+
+    uint32_t CountSharedVertices(
+        uint32_t a0,
+        uint32_t a1,
+        uint32_t a2,
+        uint32_t b0,
+        uint32_t b1,
+        uint32_t b2)
+    {
+        const uint32_t triA[3] = { a0, a1, a2 };
+        const uint32_t triB[3] = { b0, b1, b2 };
+
+        uint32_t shared = 0;
+        for (uint32_t va : triA)
+        {
+            for (uint32_t vb : triB)
+            {
+                if (va == vb)
+                {
+                    ++shared;
+                }
+            }
+        }
+
+        return shared;
+    }
+
+    void RemoveCoveredLowerSurfaces(
+        const std::vector<glm::vec3>& vertices,
+        float cellSize,
+        float cellHeight,
+        float maxOverheadDistance,
+        std::vector<WorkingTriangle>& trianglesInOut)
+    {
+        if (trianglesInOut.size() < 2 || vertices.empty())
+        {
+            return;
+        }
+
+        struct TriInfo
+        {
+            glm::vec3 mV0 = glm::vec3(0.0f);
+            glm::vec3 mV1 = glm::vec3(0.0f);
+            glm::vec3 mV2 = glm::vec3(0.0f);
+            float mMinX = 0.0f;
+            float mMaxX = 0.0f;
+            float mMinZ = 0.0f;
+            float mMaxZ = 0.0f;
+            bool mValid = false;
+        };
+
+        const float bucketSize = std::max(cellSize * 3.0f, 0.5f);
+        const float invBucket = 1.0f / bucketSize;
+        const float heightEps = std::max(cellHeight * 0.5f, 0.02f);
+        const float overheadLimit = std::max(maxOverheadDistance, heightEps * 2.0f);
+        const float boundsEps = std::max(cellSize * 0.2f, 0.02f);
+
+        std::vector<TriInfo> triInfos(trianglesInOut.size());
+        std::unordered_map<Bucket2DKey, std::vector<uint32_t>, Bucket2DKeyHash> buckets;
+        buckets.reserve(trianglesInOut.size() * 2);
+
+        for (uint32_t triIndex = 0; triIndex < trianglesInOut.size(); ++triIndex)
+        {
+            const WorkingTriangle& tri = trianglesInOut[triIndex];
+            if (tri.mVertices[0] >= vertices.size() || tri.mVertices[1] >= vertices.size() || tri.mVertices[2] >= vertices.size())
+            {
+                continue;
+            }
+
+            TriInfo& info = triInfos[triIndex];
+            info.mV0 = vertices[tri.mVertices[0]];
+            info.mV1 = vertices[tri.mVertices[1]];
+            info.mV2 = vertices[tri.mVertices[2]];
+            if (!IsFiniteVec3(info.mV0) || !IsFiniteVec3(info.mV1) || !IsFiniteVec3(info.mV2))
+            {
+                continue;
+            }
+
+            info.mMinX = std::min({ info.mV0.x, info.mV1.x, info.mV2.x });
+            info.mMaxX = std::max({ info.mV0.x, info.mV1.x, info.mV2.x });
+            info.mMinZ = std::min({ info.mV0.z, info.mV1.z, info.mV2.z });
+            info.mMaxZ = std::max({ info.mV0.z, info.mV1.z, info.mV2.z });
+
+            const int32_t minBX = static_cast<int32_t>(std::floor(info.mMinX * invBucket));
+            const int32_t maxBX = static_cast<int32_t>(std::floor(info.mMaxX * invBucket));
+            const int32_t minBZ = static_cast<int32_t>(std::floor(info.mMinZ * invBucket));
+            const int32_t maxBZ = static_cast<int32_t>(std::floor(info.mMaxZ * invBucket));
+
+            for (int32_t bz = minBZ; bz <= maxBZ; ++bz)
+            {
+                for (int32_t bx = minBX; bx <= maxBX; ++bx)
+                {
+                    buckets[Bucket2DKey{ bx, bz }].push_back(triIndex);
+                }
+            }
+
+            info.mValid = true;
+        }
+
+        std::vector<uint8_t> removeTriangle(trianglesInOut.size(), 0);
+        for (uint32_t triIndex = 0; triIndex < trianglesInOut.size(); ++triIndex)
+        {
+            if (!triInfos[triIndex].mValid)
+            {
+                continue;
+            }
+
+            const TriInfo& info = triInfos[triIndex];
+            const glm::vec3 samplePoints[7] = {
+                (info.mV0 + info.mV1 + info.mV2) / 3.0f,
+                (info.mV0 + info.mV1) * 0.5f,
+                (info.mV1 + info.mV2) * 0.5f,
+                (info.mV2 + info.mV0) * 0.5f,
+                info.mV0 * 0.80f + info.mV1 * 0.10f + info.mV2 * 0.10f,
+                info.mV1 * 0.80f + info.mV2 * 0.10f + info.mV0 * 0.10f,
+                info.mV2 * 0.80f + info.mV0 * 0.10f + info.mV1 * 0.10f
+            };
+
+            int coveredSamples = 0;
+            for (const glm::vec3& sample : samplePoints)
+            {
+                const int32_t sampleBX = static_cast<int32_t>(std::floor(sample.x * invBucket));
+                const int32_t sampleBZ = static_cast<int32_t>(std::floor(sample.z * invBucket));
+
+                bool sampleCovered = false;
+                for (int32_t dz = -1; dz <= 1 && !sampleCovered; ++dz)
+                {
+                    for (int32_t dx = -1; dx <= 1 && !sampleCovered; ++dx)
+                    {
+                        const Bucket2DKey key{ sampleBX + dx, sampleBZ + dz };
+                        auto bucketIter = buckets.find(key);
+                        if (bucketIter == buckets.end())
+                        {
+                            continue;
+                        }
+
+                        for (uint32_t candidateTri : bucketIter->second)
+                        {
+                            if (candidateTri == triIndex || !triInfos[candidateTri].mValid)
+                            {
+                                continue;
+                            }
+
+                            const TriInfo& candidate = triInfos[candidateTri];
+                            if (sample.x < candidate.mMinX - boundsEps || sample.x > candidate.mMaxX + boundsEps ||
+                                sample.z < candidate.mMinZ - boundsEps || sample.z > candidate.mMaxZ + boundsEps)
+                            {
+                                continue;
+                            }
+
+                            float candidateY = 0.0f;
+                            if (!SampleTriangleHeightAtXZ(candidate.mV0, candidate.mV1, candidate.mV2, sample.x, sample.z, candidateY))
+                            {
+                                continue;
+                            }
+
+                            const float deltaY = candidateY - sample.y;
+                            if (deltaY > heightEps && deltaY < overheadLimit + heightEps)
+                            {
+                                sampleCovered = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (sampleCovered)
+                {
+                    coveredSamples++;
+                }
+            }
+
+            if (coveredSamples == static_cast<int>(std::size(samplePoints)))
+            {
+                removeTriangle[triIndex] = 1;
+            }
+        }
+
+        bool anyRemoved = false;
+        for (uint8_t removed : removeTriangle)
+        {
+            anyRemoved |= (removed != 0);
+        }
+
+        if (!anyRemoved)
+        {
+            return;
+        }
+
+        std::vector<WorkingTriangle> filtered;
+        filtered.reserve(trianglesInOut.size());
+        for (uint32_t triIndex = 0; triIndex < trianglesInOut.size(); ++triIndex)
+        {
+            if (!removeTriangle[triIndex])
+            {
+                filtered.push_back(trianglesInOut[triIndex]);
+            }
+        }
+
+        trianglesInOut.swap(filtered);
+    }
+
+    void RemoveOverlappingWalkableSurfaces(
+        const std::vector<glm::vec3>& vertices,
+        float cellSize,
+        float cellHeight,
+        std::vector<WorkingTriangle>& trianglesInOut)
+    {
+        if (trianglesInOut.size() < 2 || vertices.empty())
+        {
+            return;
+        }
+
+        struct TriInfo
+        {
+            glm::vec3 mV0 = glm::vec3(0.0f);
+            glm::vec3 mV1 = glm::vec3(0.0f);
+            glm::vec3 mV2 = glm::vec3(0.0f);
+            float mMinX = 0.0f;
+            float mMaxX = 0.0f;
+            float mMinZ = 0.0f;
+            float mMaxZ = 0.0f;
+            float mCentroidY = 0.0f;
+            float mArea = 0.0f;
+            bool mValid = false;
+        };
+
+        const float bucketSize = std::max(cellSize * 3.0f, 0.5f);
+        const float invBucket = 1.0f / bucketSize;
+        const float overlapEps = std::max(cellSize * 0.04f, 1e-4f);
+        const float heightEps = std::max(cellHeight * 0.8f, 0.04f);
+
+        std::vector<TriInfo> infos(trianglesInOut.size());
+        std::unordered_map<Bucket2DKey, std::vector<uint32_t>, Bucket2DKeyHash> buckets;
+        buckets.reserve(trianglesInOut.size() * 2);
+
+        for (uint32_t triIndex = 0; triIndex < trianglesInOut.size(); ++triIndex)
+        {
+            const WorkingTriangle& tri = trianglesInOut[triIndex];
+            if (tri.mVertices[0] >= vertices.size() || tri.mVertices[1] >= vertices.size() || tri.mVertices[2] >= vertices.size())
+            {
+                continue;
+            }
+
+            TriInfo& info = infos[triIndex];
+            info.mV0 = vertices[tri.mVertices[0]];
+            info.mV1 = vertices[tri.mVertices[1]];
+            info.mV2 = vertices[tri.mVertices[2]];
+            if (!IsFiniteVec3(info.mV0) || !IsFiniteVec3(info.mV1) || !IsFiniteVec3(info.mV2))
+            {
+                continue;
+            }
+
+            const glm::vec3 cross = glm::cross(info.mV1 - info.mV0, info.mV2 - info.mV0);
+            const float crossLen = glm::length(cross);
+            if (crossLen <= 1e-8f)
+            {
+                continue;
+            }
+
+            info.mArea = crossLen * 0.5f;
+            info.mCentroidY = (info.mV0.y + info.mV1.y + info.mV2.y) / 3.0f;
+            info.mMinX = std::min({ info.mV0.x, info.mV1.x, info.mV2.x });
+            info.mMaxX = std::max({ info.mV0.x, info.mV1.x, info.mV2.x });
+            info.mMinZ = std::min({ info.mV0.z, info.mV1.z, info.mV2.z });
+            info.mMaxZ = std::max({ info.mV0.z, info.mV1.z, info.mV2.z });
+
+            const int32_t minBX = static_cast<int32_t>(std::floor(info.mMinX * invBucket));
+            const int32_t maxBX = static_cast<int32_t>(std::floor(info.mMaxX * invBucket));
+            const int32_t minBZ = static_cast<int32_t>(std::floor(info.mMinZ * invBucket));
+            const int32_t maxBZ = static_cast<int32_t>(std::floor(info.mMaxZ * invBucket));
+
+            for (int32_t bz = minBZ; bz <= maxBZ; ++bz)
+            {
+                for (int32_t bx = minBX; bx <= maxBX; ++bx)
+                {
+                    buckets[Bucket2DKey{ bx, bz }].push_back(triIndex);
+                }
+            }
+
+            info.mValid = true;
+        }
+
+        std::vector<uint8_t> removeTriangle(trianglesInOut.size(), 0);
+        std::vector<uint32_t> seenStamp(trianglesInOut.size(), 0);
+        uint32_t stamp = 1;
+        std::vector<uint32_t> candidates;
+        candidates.reserve(256);
+
+        for (uint32_t triIndex = 0; triIndex < trianglesInOut.size(); ++triIndex)
+        {
+            if (!infos[triIndex].mValid || removeTriangle[triIndex])
+            {
+                continue;
+            }
+
+            if (++stamp == 0)
+            {
+                stamp = 1;
+                std::fill(seenStamp.begin(), seenStamp.end(), 0);
+            }
+
+            const TriInfo& triInfo = infos[triIndex];
+            const int32_t minBX = static_cast<int32_t>(std::floor(triInfo.mMinX * invBucket));
+            const int32_t maxBX = static_cast<int32_t>(std::floor(triInfo.mMaxX * invBucket));
+            const int32_t minBZ = static_cast<int32_t>(std::floor(triInfo.mMinZ * invBucket));
+            const int32_t maxBZ = static_cast<int32_t>(std::floor(triInfo.mMaxZ * invBucket));
+
+            candidates.clear();
+            for (int32_t bz = minBZ; bz <= maxBZ; ++bz)
+            {
+                for (int32_t bx = minBX; bx <= maxBX; ++bx)
+                {
+                    auto bucketIter = buckets.find(Bucket2DKey{ bx, bz });
+                    if (bucketIter == buckets.end())
+                    {
+                        continue;
+                    }
+
+                    for (uint32_t candidateIndex : bucketIter->second)
+                    {
+                        if (candidateIndex <= triIndex || !infos[candidateIndex].mValid || removeTriangle[candidateIndex])
+                        {
+                            continue;
+                        }
+
+                        if (seenStamp[candidateIndex] == stamp)
+                        {
+                            continue;
+                        }
+
+                        seenStamp[candidateIndex] = stamp;
+                        candidates.push_back(candidateIndex);
+                    }
+                }
+            }
+
+            for (uint32_t candidateIndex : candidates)
+            {
+                if (removeTriangle[triIndex] || removeTriangle[candidateIndex])
+                {
+                    continue;
+                }
+
+                if (CountSharedVertices(trianglesInOut[triIndex], trianglesInOut[candidateIndex]) >= 2)
+                {
+                    continue;
+                }
+
+                const TriInfo& candidateInfo = infos[candidateIndex];
+                if (triInfo.mMaxX < candidateInfo.mMinX - overlapEps || triInfo.mMinX > candidateInfo.mMaxX + overlapEps ||
+                    triInfo.mMaxZ < candidateInfo.mMinZ - overlapEps || triInfo.mMinZ > candidateInfo.mMaxZ + overlapEps)
+                {
+                    continue;
+                }
+
+                if (!TrianglesOverlapInXZStrict(
+                        triInfo.mV0,
+                        triInfo.mV1,
+                        triInfo.mV2,
+                        candidateInfo.mV0,
+                        candidateInfo.mV1,
+                        candidateInfo.mV2,
+                        overlapEps))
+                {
+                    continue;
+                }
+
+                if (std::fabs(triInfo.mCentroidY - candidateInfo.mCentroidY) > heightEps)
+                {
+                    continue;
+                }
+
+                const bool firstIsSmaller = triInfo.mArea < candidateInfo.mArea;
+                const TriInfo& smaller = firstIsSmaller ? triInfo : candidateInfo;
+                const TriInfo& larger = firstIsSmaller ? candidateInfo : triInfo;
+
+                const glm::vec3 samplePoints[7] = {
+                    (smaller.mV0 + smaller.mV1 + smaller.mV2) / 3.0f,
+                    (smaller.mV0 + smaller.mV1) * 0.5f,
+                    (smaller.mV1 + smaller.mV2) * 0.5f,
+                    (smaller.mV2 + smaller.mV0) * 0.5f,
+                    smaller.mV0 * 0.80f + smaller.mV1 * 0.10f + smaller.mV2 * 0.10f,
+                    smaller.mV1 * 0.80f + smaller.mV2 * 0.10f + smaller.mV0 * 0.10f,
+                    smaller.mV2 * 0.80f + smaller.mV0 * 0.10f + smaller.mV1 * 0.10f
+                };
+
+                int coveredSamples = 0;
+                for (const glm::vec3& sample : samplePoints)
+                {
+                    float largerY = 0.0f;
+                    if (!SampleTriangleHeightAtXZ(larger.mV0, larger.mV1, larger.mV2, sample.x, sample.z, largerY))
+                    {
+                        continue;
+                    }
+
+                    if (std::fabs(largerY - sample.y) <= heightEps)
+                    {
+                        coveredSamples++;
+                    }
+                }
+
+                if (coveredSamples == static_cast<int>(std::size(samplePoints)))
+                {
+                    if (firstIsSmaller)
+                    {
+                        removeTriangle[triIndex] = 1;
+                    }
+                    else
+                    {
+                        removeTriangle[candidateIndex] = 1;
+                    }
+                }
+            }
+        }
+
+        bool anyRemoved = false;
+        for (uint8_t removed : removeTriangle)
+        {
+            anyRemoved |= (removed != 0);
+        }
+
+        if (!anyRemoved)
+        {
+            return;
+        }
+
+        std::vector<WorkingTriangle> filtered;
+        filtered.reserve(trianglesInOut.size());
+        for (uint32_t triIndex = 0; triIndex < trianglesInOut.size(); ++triIndex)
+        {
+            if (!removeTriangle[triIndex])
+            {
+                filtered.push_back(trianglesInOut[triIndex]);
+            }
+        }
+
+        trianglesInOut.swap(filtered);
+    }
+
     void RebuildWorkingTrianglesFromIndexBuffer(
         const std::vector<uint32_t>& indices,
         const std::vector<glm::vec3>& vertices,
@@ -246,7 +842,7 @@ namespace
             }
 
             glm::vec3 normal = cross / crossLength;
-            if (normal.y < walkableCos)
+            if (std::fabs(normal.y) < walkableCos)
             {
                 continue;
             }
@@ -254,6 +850,10 @@ namespace
             if (cross.y < 0.0f)
             {
                 std::swap(b, c);
+                normal = -normal;
+            }
+            if (normal.y < 0.0f)
+            {
                 normal = -normal;
             }
 
@@ -270,6 +870,58 @@ namespace
             triangle.mNormal = normal;
             triangle.mArea = area;
             trianglesOut.push_back(triangle);
+        }
+    }
+
+    void NormalizeInputTriangleWinding(
+        const float* inputVertices,
+        int inputVertexCount,
+        const int* inputIndices,
+        int inputIndexCount,
+        std::vector<int32_t>& woundIndicesOut)
+    {
+        woundIndicesOut.clear();
+        if (inputVertices == nullptr || inputIndices == nullptr || inputVertexCount <= 0 || inputIndexCount < 3)
+        {
+            return;
+        }
+
+        woundIndicesOut.reserve(static_cast<size_t>(inputIndexCount - (inputIndexCount % 3)));
+        for (int32_t tri = 0; tri + 2 < inputIndexCount; tri += 3)
+        {
+            int32_t ia = inputIndices[tri + 0];
+            int32_t ib = inputIndices[tri + 1];
+            int32_t ic = inputIndices[tri + 2];
+
+            if (ia >= 0 && ib >= 0 && ic >= 0 &&
+                ia < inputVertexCount && ib < inputVertexCount && ic < inputVertexCount)
+            {
+                const glm::vec3 va(
+                    inputVertices[ia * 3 + 0],
+                    inputVertices[ia * 3 + 1],
+                    inputVertices[ia * 3 + 2]);
+                const glm::vec3 vb(
+                    inputVertices[ib * 3 + 0],
+                    inputVertices[ib * 3 + 1],
+                    inputVertices[ib * 3 + 2]);
+                const glm::vec3 vc(
+                    inputVertices[ic * 3 + 0],
+                    inputVertices[ic * 3 + 1],
+                    inputVertices[ic * 3 + 2]);
+
+                if (IsFiniteVec3(va) && IsFiniteVec3(vb) && IsFiniteVec3(vc))
+                {
+                    const glm::vec3 cross = glm::cross(vb - va, vc - va);
+                    if (cross.y < 0.0f)
+                    {
+                        std::swap(ib, ic);
+                    }
+                }
+            }
+
+            woundIndicesOut.push_back(ia);
+            woundIndicesOut.push_back(ib);
+            woundIndicesOut.push_back(ic);
         }
     }
 
@@ -593,6 +1245,300 @@ namespace
                 128,
                 std::min<size_t>(targetReduction * 20, currentTriCount));
 
+            std::vector<std::vector<uint32_t>> incidentTriangles(vertices.size());
+            for (uint32_t triIndex = 0; triIndex < static_cast<uint32_t>(currentTriCount); ++triIndex)
+            {
+                const uint32_t ia = indices[triIndex * 3 + 0];
+                const uint32_t ib = indices[triIndex * 3 + 1];
+                const uint32_t ic = indices[triIndex * 3 + 2];
+                if (ia < incidentTriangles.size()) incidentTriangles[ia].push_back(triIndex);
+                if (ib < incidentTriangles.size()) incidentTriangles[ib].push_back(triIndex);
+                if (ic < incidentTriangles.size()) incidentTriangles[ic].push_back(triIndex);
+            }
+
+            struct SimplificationTriInfo
+            {
+                uint32_t mA = 0;
+                uint32_t mB = 0;
+                uint32_t mC = 0;
+                glm::vec3 mV0 = glm::vec3(0.0f);
+                glm::vec3 mV1 = glm::vec3(0.0f);
+                glm::vec3 mV2 = glm::vec3(0.0f);
+                float mMinX = 0.0f;
+                float mMaxX = 0.0f;
+                float mMinZ = 0.0f;
+                float mMaxZ = 0.0f;
+                float mCentroidY = 0.0f;
+                bool mValid = false;
+            };
+
+            const float simplifyBucketSize = std::max(std::sqrt(avgLenSq) * 3.0f, 0.5f);
+            const float simplifyInvBucket = 1.0f / simplifyBucketSize;
+            const float simplifyOverlapEps = std::max(simplifyBucketSize * 0.015f, 1e-4f);
+            const float simplifyOverlapHeightEps = std::max(0.05f, std::sqrt(std::max(minTriangleArea, 1e-8f)) * 6.0f);
+
+            std::vector<SimplificationTriInfo> simplificationTriInfos(currentTriCount);
+            std::unordered_map<Bucket2DKey, std::vector<uint32_t>, Bucket2DKeyHash> simplificationBuckets;
+            simplificationBuckets.reserve(currentTriCount * 2);
+
+            for (uint32_t triIndex = 0; triIndex < static_cast<uint32_t>(currentTriCount); ++triIndex)
+            {
+                const uint32_t ia = indices[triIndex * 3 + 0];
+                const uint32_t ib = indices[triIndex * 3 + 1];
+                const uint32_t ic = indices[triIndex * 3 + 2];
+                if (ia >= vertices.size() || ib >= vertices.size() || ic >= vertices.size())
+                {
+                    continue;
+                }
+
+                if (ia == ib || ib == ic || ic == ia)
+                {
+                    continue;
+                }
+
+                const glm::vec3& v0 = vertices[ia];
+                const glm::vec3& v1 = vertices[ib];
+                const glm::vec3& v2 = vertices[ic];
+                if (!IsFiniteVec3(v0) || !IsFiniteVec3(v1) || !IsFiniteVec3(v2))
+                {
+                    continue;
+                }
+
+                SimplificationTriInfo& info = simplificationTriInfos[triIndex];
+                info.mA = ia;
+                info.mB = ib;
+                info.mC = ic;
+                info.mV0 = v0;
+                info.mV1 = v1;
+                info.mV2 = v2;
+                info.mMinX = std::min({ v0.x, v1.x, v2.x });
+                info.mMaxX = std::max({ v0.x, v1.x, v2.x });
+                info.mMinZ = std::min({ v0.z, v1.z, v2.z });
+                info.mMaxZ = std::max({ v0.z, v1.z, v2.z });
+                info.mCentroidY = (v0.y + v1.y + v2.y) / 3.0f;
+                info.mValid = true;
+
+                const int32_t minBX = static_cast<int32_t>(std::floor(info.mMinX * simplifyInvBucket));
+                const int32_t maxBX = static_cast<int32_t>(std::floor(info.mMaxX * simplifyInvBucket));
+                const int32_t minBZ = static_cast<int32_t>(std::floor(info.mMinZ * simplifyInvBucket));
+                const int32_t maxBZ = static_cast<int32_t>(std::floor(info.mMaxZ * simplifyInvBucket));
+
+                for (int32_t bz = minBZ; bz <= maxBZ; ++bz)
+                {
+                    for (int32_t bx = minBX; bx <= maxBX; ++bx)
+                    {
+                        simplificationBuckets[Bucket2DKey{ bx, bz }].push_back(triIndex);
+                    }
+                }
+            }
+
+            std::vector<uint32_t> affectedStamp(currentTriCount, 0);
+            std::vector<uint32_t> candidateStamp(currentTriCount, 0);
+            uint32_t affectedStampValue = 1;
+            uint32_t candidateStampValue = 1;
+
+            const auto IsCollapseLocallyValid = [&](uint32_t keep, uint32_t remove, const glm::vec3& mergedPos)
+                {
+                    if (keep >= incidentTriangles.size() || remove >= incidentTriangles.size())
+                    {
+                        return false;
+                    }
+
+                    std::vector<uint32_t> affectedTriangles;
+                    affectedTriangles.reserve(incidentTriangles[keep].size() + incidentTriangles[remove].size());
+                    affectedTriangles.insert(
+                        affectedTriangles.end(),
+                        incidentTriangles[keep].begin(),
+                        incidentTriangles[keep].end());
+                    affectedTriangles.insert(
+                        affectedTriangles.end(),
+                        incidentTriangles[remove].begin(),
+                        incidentTriangles[remove].end());
+                    std::sort(affectedTriangles.begin(), affectedTriangles.end());
+                    affectedTriangles.erase(std::unique(affectedTriangles.begin(), affectedTriangles.end()), affectedTriangles.end());
+
+                    if (++affectedStampValue == 0)
+                    {
+                        std::fill(affectedStamp.begin(), affectedStamp.end(), 0);
+                        affectedStampValue = 1;
+                    }
+                    for (uint32_t triIndex : affectedTriangles)
+                    {
+                        if (triIndex < currentTriCount)
+                        {
+                            affectedStamp[triIndex] = affectedStampValue;
+                        }
+                    }
+
+                    struct ProposedTriangle
+                    {
+                        uint32_t mA = 0;
+                        uint32_t mB = 0;
+                        uint32_t mC = 0;
+                        glm::vec3 mV0 = glm::vec3(0.0f);
+                        glm::vec3 mV1 = glm::vec3(0.0f);
+                        glm::vec3 mV2 = glm::vec3(0.0f);
+                        float mMinX = 0.0f;
+                        float mMaxX = 0.0f;
+                        float mMinZ = 0.0f;
+                        float mMaxZ = 0.0f;
+                        float mCentroidY = 0.0f;
+                    };
+
+                    std::vector<ProposedTriangle> proposedTriangles;
+                    proposedTriangles.reserve(affectedTriangles.size());
+
+                    for (uint32_t triIndex : affectedTriangles)
+                    {
+                        if (triIndex >= currentTriCount)
+                        {
+                            continue;
+                        }
+
+                        uint32_t t0 = indices[triIndex * 3 + 0];
+                        uint32_t t1 = indices[triIndex * 3 + 1];
+                        uint32_t t2 = indices[triIndex * 3 + 2];
+                        if (t0 == remove) t0 = keep;
+                        if (t1 == remove) t1 = keep;
+                        if (t2 == remove) t2 = keep;
+
+                        if (t0 == t1 || t1 == t2 || t2 == t0)
+                        {
+                            continue;
+                        }
+
+                        if (t0 >= vertices.size() || t1 >= vertices.size() || t2 >= vertices.size())
+                        {
+                            return false;
+                        }
+
+                        const glm::vec3 v0 = (t0 == keep) ? mergedPos : vertices[t0];
+                        const glm::vec3 v1 = (t1 == keep) ? mergedPos : vertices[t1];
+                        const glm::vec3 v2 = (t2 == keep) ? mergedPos : vertices[t2];
+                        if (!IsFiniteVec3(v0) || !IsFiniteVec3(v1) || !IsFiniteVec3(v2))
+                        {
+                            return false;
+                        }
+
+                        const glm::vec3 cross = glm::cross(v1 - v0, v2 - v0);
+                        const float crossLen = glm::length(cross);
+                        if (crossLen <= 1e-8f)
+                        {
+                            return false;
+                        }
+
+                        const float area = crossLen * 0.5f;
+                        if (area <= minTriangleArea)
+                        {
+                            return false;
+                        }
+
+                        const float normalY = cross.y / crossLen;
+                        if (std::fabs(normalY) < walkableCos)
+                        {
+                            return false;
+                        }
+
+                        ProposedTriangle tri;
+                        tri.mA = t0;
+                        tri.mB = t1;
+                        tri.mC = t2;
+                        tri.mV0 = v0;
+                        tri.mV1 = v1;
+                        tri.mV2 = v2;
+                        tri.mMinX = std::min({ v0.x, v1.x, v2.x });
+                        tri.mMaxX = std::max({ v0.x, v1.x, v2.x });
+                        tri.mMinZ = std::min({ v0.z, v1.z, v2.z });
+                        tri.mMaxZ = std::max({ v0.z, v1.z, v2.z });
+                        tri.mCentroidY = (v0.y + v1.y + v2.y) / 3.0f;
+                        proposedTriangles.push_back(tri);
+                    }
+
+                    std::vector<uint32_t> nearbyCandidates;
+                    nearbyCandidates.reserve(128);
+                    for (const ProposedTriangle& tri : proposedTriangles)
+                    {
+                        if (++candidateStampValue == 0)
+                        {
+                            std::fill(candidateStamp.begin(), candidateStamp.end(), 0);
+                            candidateStampValue = 1;
+                        }
+
+                        nearbyCandidates.clear();
+                        const int32_t minBX = static_cast<int32_t>(std::floor(tri.mMinX * simplifyInvBucket));
+                        const int32_t maxBX = static_cast<int32_t>(std::floor(tri.mMaxX * simplifyInvBucket));
+                        const int32_t minBZ = static_cast<int32_t>(std::floor(tri.mMinZ * simplifyInvBucket));
+                        const int32_t maxBZ = static_cast<int32_t>(std::floor(tri.mMaxZ * simplifyInvBucket));
+
+                        for (int32_t bz = minBZ; bz <= maxBZ; ++bz)
+                        {
+                            for (int32_t bx = minBX; bx <= maxBX; ++bx)
+                            {
+                                auto bucketIter = simplificationBuckets.find(Bucket2DKey{ bx, bz });
+                                if (bucketIter == simplificationBuckets.end())
+                                {
+                                    continue;
+                                }
+
+                                for (uint32_t candidateTriIndex : bucketIter->second)
+                                {
+                                    if (candidateTriIndex >= currentTriCount || !simplificationTriInfos[candidateTriIndex].mValid)
+                                    {
+                                        continue;
+                                    }
+
+                                    if (affectedStamp[candidateTriIndex] == affectedStampValue)
+                                    {
+                                        continue;
+                                    }
+
+                                    if (candidateStamp[candidateTriIndex] == candidateStampValue)
+                                    {
+                                        continue;
+                                    }
+
+                                    candidateStamp[candidateTriIndex] = candidateStampValue;
+                                    nearbyCandidates.push_back(candidateTriIndex);
+                                }
+                            }
+                        }
+
+                        for (uint32_t candidateTriIndex : nearbyCandidates)
+                        {
+                            const SimplificationTriInfo& candidateTri = simplificationTriInfos[candidateTriIndex];
+                            if (tri.mMaxX < candidateTri.mMinX - simplifyOverlapEps || tri.mMinX > candidateTri.mMaxX + simplifyOverlapEps ||
+                                tri.mMaxZ < candidateTri.mMinZ - simplifyOverlapEps || tri.mMinZ > candidateTri.mMaxZ + simplifyOverlapEps)
+                            {
+                                continue;
+                            }
+
+                            if (CountSharedVertices(tri.mA, tri.mB, tri.mC, candidateTri.mA, candidateTri.mB, candidateTri.mC) >= 2)
+                            {
+                                continue;
+                            }
+
+                            if (!TrianglesOverlapInXZStrict(
+                                    tri.mV0,
+                                    tri.mV1,
+                                    tri.mV2,
+                                    candidateTri.mV0,
+                                    candidateTri.mV1,
+                                    candidateTri.mV2,
+                                    simplifyOverlapEps))
+                            {
+                                continue;
+                            }
+
+                            if (std::fabs(tri.mCentroidY - candidateTri.mCentroidY) <= simplifyOverlapHeightEps)
+                            {
+                                return false;
+                            }
+                        }
+                    }
+
+                    return true;
+                };
+
             std::vector<uint8_t> lockedVertex(vertices.size(), 0);
             std::vector<uint32_t> remap(vertices.size());
             for (uint32_t i = 0; i < remap.size(); ++i)
@@ -624,6 +1570,11 @@ namespace
 
                 glm::vec3 merged = (vertices[keep] + vertices[remove]) * 0.5f;
                 ClampVertexToBounds(merged);
+                if (!IsCollapseLocallyValid(keep, remove, merged))
+                {
+                    continue;
+                }
+
                 vertices[keep] = merged;
                 remap[remove] = keep;
                 lockedVertex[a] = 1;
@@ -751,6 +1702,17 @@ namespace
                     const uint32_t d = i1.mOpp;
 
                     if (a == b || c == d || a == c || a == d || b == c || b == d)
+                    {
+                        continue;
+                    }
+
+                    const float flipIntersectionEps = 1e-5f;
+                    if (!SegmentsIntersectStrictXZ(
+                            vertices[a],
+                            vertices[b],
+                            vertices[c],
+                            vertices[d],
+                            flipIntersectionEps))
                     {
                         continue;
                     }
@@ -937,6 +1899,7 @@ namespace
         const float boundarySnapTolerance = std::max(cellSize * 0.6f, weldStep * 2.0f);
         const float walkableCos = std::cos(config.walkableSlopeAngle * DEG_TO_RAD);
         const float minTriangleArea = std::max(1e-7f, cellSize * cellSize * 1e-4f);
+        const float coveredSurfaceDistanceLimit = std::max(2.0f, static_cast<float>(config.walkableHeight) * cellHeight);
         const SimplificationSettings simplificationSettings{
             config.enableSimplification,
             config.simplificationTargetRatio,
@@ -998,17 +1961,29 @@ namespace
             return false;
         }
 
+        std::vector<int32_t> woundInputIndices;
+        NormalizeInputTriangleWinding(
+            inputVertices,
+            inputVertexCount,
+            inputIndices,
+            inputIndexCount,
+            woundInputIndices);
+        if (woundInputIndices.empty())
+        {
+            return false;
+        }
+
         std::vector<WorkingTriangle> workingTriangles;
-        workingTriangles.reserve(static_cast<size_t>(inputIndexCount / 3));
+        workingTriangles.reserve(static_cast<size_t>(woundInputIndices.size() / 3));
 
         std::unordered_set<TriangleKey, TriangleKeyHash> seenInputTriangles;
-        seenInputTriangles.reserve(static_cast<size_t>(inputIndexCount / 3));
+        seenInputTriangles.reserve(static_cast<size_t>(woundInputIndices.size() / 3));
 
-        for (int32_t tri = 0; tri + 2 < inputIndexCount; tri += 3)
+        for (size_t tri = 0; tri + 2 < woundInputIndices.size(); tri += 3)
         {
-            const int32_t ia = inputIndices[tri + 0];
-            const int32_t ib = inputIndices[tri + 1];
-            const int32_t ic = inputIndices[tri + 2];
+            const int32_t ia = woundInputIndices[tri + 0];
+            const int32_t ib = woundInputIndices[tri + 1];
+            const int32_t ic = woundInputIndices[tri + 2];
 
             if (ia < 0 || ib < 0 || ic < 0 || ia >= inputVertexCount || ib >= inputVertexCount || ic >= inputVertexCount)
             {
@@ -1055,7 +2030,7 @@ namespace
             }
 
             glm::vec3 normal = cross / crossLength;
-            if (normal.y < walkableCos)
+            if (std::fabs(normal.y) < walkableCos)
             {
                 continue;
             }
@@ -1063,6 +2038,10 @@ namespace
             if (cross.y < 0.0f)
             {
                 std::swap(b, c);
+                normal = -normal;
+            }
+            if (normal.y < 0.0f)
+            {
                 normal = -normal;
             }
 
@@ -1081,6 +2060,13 @@ namespace
             workingTriangles.push_back(triangle);
         }
 
+        if (workingTriangles.empty())
+        {
+            return false;
+        }
+
+        RemoveCoveredLowerSurfaces(weldedVertices, cellSize, cellHeight, coveredSurfaceDistanceLimit, workingTriangles);
+        RemoveOverlappingWalkableSurfaces(weldedVertices, cellSize, cellHeight, workingTriangles);
         if (workingTriangles.empty())
         {
             return false;
@@ -1214,6 +2200,13 @@ namespace
             forcedMinZ,
             forcedMaxZ,
             workingTriangles);
+
+        RemoveCoveredLowerSurfaces(weldedVertices, cellSize, cellHeight, coveredSurfaceDistanceLimit, workingTriangles);
+        RemoveOverlappingWalkableSurfaces(weldedVertices, cellSize, cellHeight, workingTriangles);
+        if (workingTriangles.empty())
+        {
+            return false;
+        }
 
         std::vector<uint8_t> isVertexUsed(weldedVertices.size(), 0);
         for (const WorkingTriangle& face : workingTriangles)
@@ -1365,7 +2358,7 @@ namespace
             }
 
             glm::vec3 normal = cross / crossLength;
-            if (normal.y < walkableCos)
+            if (std::fabs(normal.y) < walkableCos)
             {
                 continue;
             }
@@ -1373,6 +2366,10 @@ namespace
             if (cross.y < 0.0f)
             {
                 std::swap(b, c);
+                normal = -normal;
+            }
+            if (normal.y < 0.0f)
+            {
                 normal = -normal;
             }
 
@@ -1390,6 +2387,20 @@ namespace
             quantizedTriangles.push_back(face);
         }
 
+        if (quantizedTriangles.empty())
+        {
+            return false;
+        }
+
+        std::vector<glm::vec3> dequantizedVertices;
+        dequantizedVertices.reserve(compactQuantizedVertices.size());
+        for (const QuantizedVertexKey& vertex : compactQuantizedVertices)
+        {
+            dequantizedVertices.push_back(DequantizeVertex(vertex, outBoundsMin, cellSize, cellHeight));
+        }
+
+        RemoveCoveredLowerSurfaces(dequantizedVertices, cellSize, cellHeight, coveredSurfaceDistanceLimit, quantizedTriangles);
+        RemoveOverlappingWalkableSurfaces(dequantizedVertices, cellSize, cellHeight, quantizedTriangles);
         if (quantizedTriangles.empty())
         {
             return false;

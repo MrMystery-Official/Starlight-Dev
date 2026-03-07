@@ -307,8 +307,55 @@ namespace application::file::game::phive::starlight_physics::ai
 			OptimizedVertices.push_back(Vertex);
 		}
 
+		const uint32_t nonOptimizedVertexBase = static_cast<uint32_t>(OptimizedVertices.size());
 		OptimizedVertices.insert(OptimizedVertices.end(), nonOptimizeVertices.begin(), nonOptimizeVertices.end());
-		BIndices.insert(BIndices.end(), nonOptimizeIndices.begin(), nonOptimizeIndices.end());
+
+		if (!nonOptimizeIndices.empty())
+		{
+			if (nonOptimizeIndices.size() % 3 != 0)
+			{
+				application::util::Logger::Warning(
+					"PhiveNavMesh",
+					"Non-optimized index buffer has trailing indices (%u values), dropping remainder",
+					static_cast<uint32_t>(nonOptimizeIndices.size()));
+			}
+
+			const size_t nonOptimizedTriangleCount = nonOptimizeIndices.size() / 3;
+			BIndices.reserve(BIndices.size() + nonOptimizedTriangleCount * 6);
+			for (size_t tri = 0; tri < nonOptimizedTriangleCount; ++tri)
+			{
+				const uint32_t localA = nonOptimizeIndices[tri * 3 + 0];
+				const uint32_t localB = nonOptimizeIndices[tri * 3 + 1];
+				const uint32_t localC = nonOptimizeIndices[tri * 3 + 2];
+				if (localA >= nonOptimizeVertices.size() ||
+					localB >= nonOptimizeVertices.size() ||
+					localC >= nonOptimizeVertices.size())
+				{
+					continue;
+				}
+
+				const uint32_t a = nonOptimizedVertexBase + localA;
+				const uint32_t b = nonOptimizedVertexBase + localB;
+				const uint32_t c = nonOptimizedVertexBase + localC;
+				if (a > 0xFFFFu || b > 0xFFFFu || c > 0xFFFFu)
+				{
+					application::util::Logger::Error(
+						"PhiveNavMesh",
+						"Non-optimized triangle vertex index overflow (%u, %u, %u); max supported is 65535",
+						a,
+						b,
+						c);
+					return false;
+				}
+
+				BIndices.push_back(static_cast<uint16_t>(a));
+				BIndices.push_back(static_cast<uint16_t>(b));
+				BIndices.push_back(static_cast<uint16_t>(c));
+				BIndices.push_back(0xFFFFu);
+				BIndices.push_back(0xFFFFu);
+				BIndices.push_back(0xFFFFu);
+			}
+		}
 
 		glm::vec3 BoundingBoxMin(
 			std::numeric_limits<float>::max(),
