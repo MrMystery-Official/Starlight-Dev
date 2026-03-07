@@ -7,6 +7,33 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
+find_package(Git QUIET)
+
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE STARLIGHT_GIT_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} diff --quiet --ignore-submodules HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESULT_VARIABLE STARLIGHT_GIT_DIRTY
+    )
+
+    if(STARLIGHT_GIT_DIRTY)
+        set(STARLIGHT_GIT_COMMIT "${STARLIGHT_GIT_COMMIT}-dirty")
+    endif()
+else()
+    set(STARLIGHT_GIT_COMMIT "Unknown")
+endif()
+
+message(STATUS "Git commit: ${STARLIGHT_GIT_COMMIT}")
+
+add_compile_definitions(STARLIGHT_GIT_COMMIT="${STARLIGHT_GIT_COMMIT}")
+
 if(APPLE)
     if(NOT CMAKE_OSX_ARCHITECTURES)
         execute_process(
