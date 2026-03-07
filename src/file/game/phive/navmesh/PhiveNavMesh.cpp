@@ -1,13 +1,127 @@
 #include "PhiveNavMesh.h"
+#include "PhiveNavMeshStreaming.h"
 
 #include <file/game/phive/classes/HavokClassBinaryVectorReader.h>
 #include <util/General.h>
 #include <util/Math.h>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
 
 namespace application::file::game::phive::navmesh
 {
+	namespace
+	{
+		constexpr float FIELD_TILE_HALF_EXTENT = 125.0f;
+
+		float SnapToTileBoundary(float Value, float HalfExtent, float Epsilon)
+		{
+			if (std::fabs(Value + HalfExtent) <= Epsilon || (Value < -HalfExtent && Value > -HalfExtent - Epsilon))
+			{
+				return -HalfExtent;
+			}
+
+			if (std::fabs(Value - HalfExtent) <= Epsilon || (Value > HalfExtent && Value < HalfExtent + Epsilon))
+			{
+				return HalfExtent;
+			}
+
+			return Value;
+		}
+
+		void SnapVerticesToTileBounds(std::vector<glm::vec3>& Vertices, float HalfExtent, float Epsilon)
+		{
+			for (glm::vec3& Vertex : Vertices)
+			{
+				Vertex.x = SnapToTileBoundary(Vertex.x, HalfExtent, Epsilon);
+				Vertex.z = SnapToTileBoundary(Vertex.z, HalfExtent, Epsilon);
+			}
+		}
+
+		bool TriangleTouchesSeamStrip(const glm::vec3& A, const glm::vec3& B, const glm::vec3& C, const glm::vec3& NeighbourOffset, float HalfExtent, float StripWidth)
+		{
+			const float MinX = std::min({ A.x, B.x, C.x });
+			const float MaxX = std::max({ A.x, B.x, C.x });
+			const float MinZ = std::min({ A.z, B.z, C.z });
+			const float MaxZ = std::max({ A.z, B.z, C.z });
+
+			if (MaxX < -HalfExtent - StripWidth || MinX > HalfExtent + StripWidth ||
+				MaxZ < -HalfExtent - StripWidth || MinZ > HalfExtent + StripWidth)
+			{
+				return false;
+			}
+
+			if (std::fabs(NeighbourOffset.x) > 0.0f)
+			{
+				const float SeamX = NeighbourOffset.x < 0.0f ? -HalfExtent : HalfExtent;
+				return MaxX >= SeamX - StripWidth && MinX <= SeamX + StripWidth;
+			}
+
+			if (std::fabs(NeighbourOffset.z) > 0.0f)
+			{
+				const float SeamZ = NeighbourOffset.z < 0.0f ? -HalfExtent : HalfExtent;
+				return MaxZ >= SeamZ - StripWidth && MinZ <= SeamZ + StripWidth;
+			}
+
+			return false;
+		}
+
+		void AppendNeighbourGuideMesh(
+			PhiveNavMesh& Neighbour,
+			const glm::vec3& NeighbourOffsetFromCurrent,
+			float HalfExtent,
+			float StripWidth,
+			std::vector<glm::vec3>& VerticesOut,
+			std::vector<uint32_t>& IndicesOut)
+		{
+			std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> NeighbourData = Neighbour.ToVerticesIndices();
+			if (NeighbourData.first.empty() || NeighbourData.second.size() < 3)
+			{
+				return;
+			}
+
+			std::vector<glm::vec3> TransformedVertices(NeighbourData.first.size());
+			for (size_t i = 0; i < NeighbourData.first.size(); ++i)
+			{
+				TransformedVertices[i] = NeighbourData.first[i] + NeighbourOffsetFromCurrent;
+			}
+
+			std::vector<int32_t> Remap(TransformedVertices.size(), -1);
+			for (size_t i = 0; i + 2 < NeighbourData.second.size(); i += 3)
+			{
+				const uint32_t Ia = NeighbourData.second[i + 0];
+				const uint32_t Ib = NeighbourData.second[i + 1];
+				const uint32_t Ic = NeighbourData.second[i + 2];
+				if (Ia >= TransformedVertices.size() || Ib >= TransformedVertices.size() || Ic >= TransformedVertices.size())
+				{
+					continue;
+				}
+
+				const glm::vec3& A = TransformedVertices[Ia];
+				const glm::vec3& B = TransformedVertices[Ib];
+				const glm::vec3& C = TransformedVertices[Ic];
+
+				if (!TriangleTouchesSeamStrip(A, B, C, NeighbourOffsetFromCurrent, HalfExtent, StripWidth))
+				{
+					continue;
+				}
+
+				const uint32_t InputIndices[3] = { Ia, Ib, Ic };
+				for (uint32_t InputIndex : InputIndices)
+				{
+					if (Remap[InputIndex] < 0)
+					{
+						Remap[InputIndex] = static_cast<int32_t>(VerticesOut.size());
+						VerticesOut.push_back(TransformedVertices[InputIndex]);
+					}
+
+					IndicesOut.push_back(static_cast<uint32_t>(Remap[InputIndex]));
+				}
+			}
+		}
+	}
+
 	std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> PhiveNavMesh::ToVerticesIndices()
 	{
 		if (!mModelOverride.first.empty() && !mModelOverride.second.empty())
@@ -392,10 +506,86 @@ namespace application::file::game::phive::navmesh
 		}
 		*/
 
+		const uint32_t PreviousFaceCount = static_cast<uint32_t>(mTagFile.mRootClass.mNavMeshVariant.mVariant.mObj.mFaces.mElements.size());
+		const uint32_t PreviousNodeCount = static_cast<uint32_t>(mTagFile.mRootClass.mClusterGraphVariant.mVariant.mObj.mNodes.mElements.size());
+		constexpr uint32_t DEFAULT_FACES_PER_CLUSTER = 20;
+		constexpr uint32_t MIN_FACES_PER_CLUSTER = 8;
+		constexpr uint32_t MAX_FACES_PER_CLUSTER = 128;
+		uint32_t DesiredFacesPerCluster = DEFAULT_FACES_PER_CLUSTER;
+		if (PreviousFaceCount > 0 && PreviousNodeCount > 0)
+		{
+			const uint32_t InferredFacesPerCluster = MATH_MAX(1, PreviousFaceCount / PreviousNodeCount);
+			DesiredFacesPerCluster = std::clamp(InferredFacesPerCluster, MIN_FACES_PER_CLUSTER, MAX_FACES_PER_CLUSTER);
+		}
+
+		std::vector<glm::vec3> BuildVertices = GeneratorData.mVertices;
+		std::vector<uint32_t> BuildIndices = GeneratorData.mIndices;
+
+		const std::array<glm::vec3, 4> NeighbourOffsets = {
+			glm::vec3(-250.0f, 0.0f, 0.0f),
+			glm::vec3(250.0f, 0.0f, 0.0f),
+			glm::vec3(0.0f, 0.0f, -250.0f),
+			glm::vec3(0.0f, 0.0f, 250.0f),
+		};
+
+		if (!GeneratorData.mIsSingleSceneNavMesh)
+		{
+			const std::pair<std::vector<glm::vec3>, std::vector<unsigned int>> ClippedMesh =
+				application::util::Math::ClipMeshToBox(
+					std::make_pair(BuildVertices, std::vector<unsigned int>(BuildIndices.begin(), BuildIndices.end())),
+					std::make_pair(
+						glm::vec3(-FIELD_TILE_HALF_EXTENT, -100000.0f, -FIELD_TILE_HALF_EXTENT),
+						glm::vec3(FIELD_TILE_HALF_EXTENT, 100000.0f, FIELD_TILE_HALF_EXTENT)));
+
+			if (!ClippedMesh.first.empty() && !ClippedMesh.second.empty())
+			{
+				BuildVertices = ClippedMesh.first;
+				BuildIndices.assign(ClippedMesh.second.begin(), ClippedMesh.second.end());
+			}
+
+			const float SnapEpsilon = std::max(GeneratorData.mGeometryConfig.mCellSize, 0.05f);
+			const float BorderGuideWidth = std::max(GeneratorData.mGeometryConfig.mCellSize * 4.0f, 2.0f);
+
+			SnapVerticesToTileBounds(BuildVertices, FIELD_TILE_HALF_EXTENT, SnapEpsilon);
+
+			for (size_t i = 0; i < GeneratorData.mNeighbourNavMeshObjs.size(); ++i)
+			{
+				if (!GeneratorData.mNeighbourNavMeshObjs[i])
+				{
+					continue;
+				}
+
+				AppendNeighbourGuideMesh(
+					*GeneratorData.mNeighbourNavMeshObjs[i],
+					NeighbourOffsets[i],
+					FIELD_TILE_HALF_EXTENT,
+					BorderGuideWidth,
+					BuildVertices,
+					BuildIndices);
+			}
+		}
+
 		starlight_physics::ai::hkaiNavMeshBuilder Builder;
 		Builder.initialize(GeneratorData.mGeometryConfig);
-		Builder.buildNavMesh(&mTagFile.mRootClass.mNavMeshVariant.mVariant.mObj, GeneratorData.mVertices, GeneratorData.mIndices);
-		Builder.buildClusterGraph(mTagFile.mRootClass.mNavMeshVariant.mVariant.mObj, mTagFile.mRootClass.mClusterGraphVariant.mVariant.mObj);
+		if (!GeneratorData.mIsSingleSceneNavMesh)
+		{
+			Builder.geometryGenerator.setForcedXZBounds(-FIELD_TILE_HALF_EXTENT, FIELD_TILE_HALF_EXTENT, -FIELD_TILE_HALF_EXTENT, FIELD_TILE_HALF_EXTENT);
+		}
+		else
+		{
+			Builder.geometryGenerator.clearForcedXZBounds();
+		}
+
+		if (!Builder.buildNavMesh(&mTagFile.mRootClass.mNavMeshVariant.mVariant.mObj, BuildVertices, BuildIndices))
+		{
+			application::util::Logger::Error("PhiveNavMesh", "NavMesh generation failed during buildNavMesh");
+			return;
+		}
+
+		Builder.buildClusterGraph(
+			mTagFile.mRootClass.mNavMeshVariant.mVariant.mObj,
+			mTagFile.mRootClass.mClusterGraphVariant.mVariant.mObj,
+			DesiredFacesPerCluster);
 
 		/*
 					LoadNavMeshNeighbour("X" + std::to_string(NavMeshPair.first.mXIndex - 1) + "_Z" + std::to_string(NavMeshPair.first.mZIndex), 0);
@@ -476,7 +666,26 @@ namespace application::file::game::phive::navmesh
 
 		if (!GeneratorData.mIsSingleSceneNavMesh)
 		{
-			//Generate Streaming Sets
+			const float StitchTolerance = std::max(0.05f, GeneratorData.mGeometryConfig.mCellSize * 0.75f);
+
+			for (size_t i = 0; i < GeneratorData.mNeighbourNavMeshObjs.size(); ++i)
+			{
+				if (!GeneratorData.mNeighbourNavMeshObjs[i])
+				{
+					continue;
+				}
+
+				const application::file::game::phive::navmesh::PhiveNavMeshStreaming::BuildResult StitchResult =
+					application::file::game::phive::navmesh::PhiveNavMeshStreaming::RebuildPair(*this, *GeneratorData.mNeighbourNavMeshObjs[i], NeighbourOffsets[i], StitchTolerance);
+
+				application::util::Logger::Info(
+					"PhiveNavMesh",
+					"Stitched section pair (%u <-> %u): %u mesh connections, %u graph connections",
+					mReferenceRotation.mSectionUid,
+					GeneratorData.mNeighbourNavMeshObjs[i]->mReferenceRotation.mSectionUid,
+					StitchResult.mMeshConnectionCount,
+					StitchResult.mGraphConnectionCount);
+			}
 		}
 
 		auto& Mesh = mTagFile.mRootClass.mNavMeshVariant.mVariant.mObj;

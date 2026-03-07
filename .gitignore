@@ -57,6 +57,7 @@ build/
 Build/
 libs/
 out/
+tmp/
 build-*/
 Starlight
 imgui.ini

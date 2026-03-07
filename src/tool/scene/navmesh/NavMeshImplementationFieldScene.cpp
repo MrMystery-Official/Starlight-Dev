@@ -218,7 +218,6 @@ namespace application::tool::scene::navmesh
 		ImGui::Checkbox("Merging Mode", &mMergingMode);
 		ImGui::Checkbox("Include Terrain Geometry", &mIncludeTerrainGeometry);
 
-		ImGui::BeginDisabled();
 		if (ImGui::Button("Generate"))
 		{
 			if (mScene->mTerrainRenderer == nullptr)
@@ -244,24 +243,24 @@ namespace application::tool::scene::navmesh
 			mGenerator.mVertices.clear();
 			mGenerator.mIndices.clear();
 
-			if (mIncludeTerrainGeometry)
-			{
-				std::pair<std::vector<glm::vec3>, std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>>> Model = mScene->mTerrainRenderer->GenerateTerrainTileCollisionModel(glm::vec2(StartPoint.x, StartPoint.z), nullptr);
-
-				mGenerator.mVertices.reserve(Model.first.size());
-				for (const glm::vec3& Vertex : Model.first)
+				if (mIncludeTerrainGeometry)
 				{
-					mGenerator.mVertices.emplace_back(Vertex.x - 125.0f, Vertex.y, Vertex.z - 125.0f);
-				}
+					std::pair<std::vector<glm::vec3>, std::vector<std::pair<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t>>> Model = mScene->mTerrainRenderer->GenerateTerrainTileCollisionModel(glm::vec2(StartPoint.x, StartPoint.z), nullptr);
 
-				mGenerator.mIndices.resize(Model.second.size() * 3);
-				for (auto& [Triangle, Material] : Model.second)
-				{
-					mGenerator.mIndices.push_back(std::get<0>(Triangle));
-					mGenerator.mIndices.push_back(std::get<1>(Triangle));
-					mGenerator.mIndices.push_back(std::get<2>(Triangle));
+					mGenerator.mVertices.reserve(Model.first.size());
+					for (const glm::vec3& Vertex : Model.first)
+					{
+						mGenerator.mVertices.emplace_back(Vertex.x - 125.0f, Vertex.y, Vertex.z - 125.0f);
+					}
+
+					mGenerator.mIndices.reserve(Model.second.size() * 3);
+					for (auto& [Triangle, Material] : Model.second)
+					{
+						mGenerator.mIndices.push_back(std::get<0>(Triangle));
+						mGenerator.mIndices.push_back(std::get<1>(Triangle));
+						mGenerator.mIndices.push_back(std::get<2>(Triangle));
+					}
 				}
-			}
 
 			std::pair<std::vector<glm::vec3>, std::vector<unsigned int>> SceneModelData = mScene->GetSceneModel([](application::game::Scene::BancEntityRenderInfo* Info)
 				{
@@ -393,21 +392,59 @@ namespace application::tool::scene::navmesh
 
 			std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> ModelData = NavMeshPair.second.ToVerticesIndices();
 			if (mScene->GetSceneTypeName(mScene->mSceneType) == "MinusField")
-			{
-				for (glm::vec3& Vertex : ModelData.first)
 				{
-					Vertex.y -= 200.0f;
+					for (glm::vec3& Vertex : ModelData.first)
+					{
+						Vertex.y -= 200.0f;
+					}
 				}
-			}
-			mMeshes[mGenerationNavMeshIndex] = application::gl::SimpleMesh(ModelData.first, ModelData.second);
-			//mMeshes[mGenerationNavMeshIndex] = application::gl::SimpleMesh(mGenerator.mVertices, mGenerator.mIndices);
+				mMeshes[mGenerationNavMeshIndex] = application::gl::SimpleMesh(ModelData.first, ModelData.second);
+				//mMeshes[mGenerationNavMeshIndex] = application::gl::SimpleMesh(mGenerator.mVertices, mGenerator.mIndices);
 
-			application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + NavMeshPair.first.GetSectionName() + ".Nin_NX_NVN.bphnm.zs"), application::file::game::ZStdBackend::Compress(NavMeshPair.second.ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
-				
-			application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + "X" + std::to_string(NavMeshPair.first.mXIndex - 1) + "_Z" + std::to_string(NavMeshPair.first.mZIndex) + ".Nin_NX_NVN.bphnm.zs"), application::file::game::ZStdBackend::Compress(mGenerator.mNeighbourNavMeshObjs[0]->ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
-			application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + "X" + std::to_string(NavMeshPair.first.mXIndex + 1) + "_Z" + std::to_string(NavMeshPair.first.mZIndex) + ".Nin_NX_NVN.bphnm.zs"), application::file::game::ZStdBackend::Compress(mGenerator.mNeighbourNavMeshObjs[1]->ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
-			application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + "X" + std::to_string(NavMeshPair.first.mXIndex) + "_Z" + std::to_string(NavMeshPair.first.mZIndex - 1) + ".Nin_NX_NVN.bphnm.zs"), application::file::game::ZStdBackend::Compress(mGenerator.mNeighbourNavMeshObjs[2]->ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
-			application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + "X" + std::to_string(NavMeshPair.first.mXIndex) + "_Z" + std::to_string(NavMeshPair.first.mZIndex + 1) + ".Nin_NX_NVN.bphnm.zs"), application::file::game::ZStdBackend::Compress(mGenerator.mNeighbourNavMeshObjs[3]->ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
+				application::util::FileUtil::WriteFile(application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + NavMeshPair.first.GetSectionName() + ".Nin_NX_NVN.bphnm.zs"), application::file::game::ZStdBackend::Compress(NavMeshPair.second.ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
+
+				const int32_t LocalGenerationX = static_cast<int32_t>(mGenerationNavMeshIndex % 4);
+				const int32_t LocalGenerationZ = static_cast<int32_t>(mGenerationNavMeshIndex / 4);
+				const bool IsMinusField = (mScene->GetSceneTypeName(mScene->mSceneType) == "MinusField");
+
+				auto SaveNavMeshNeighbour = [this, &FieldName, &NavMeshPair, LocalGenerationX, LocalGenerationZ, IsMinusField](uint8_t Index, int32_t XOffset, int32_t ZOffset)
+					{
+						if (!mGenerator.mNeighbourNavMeshObjs[Index])
+						{
+							return;
+						}
+
+						const std::string TileName = "X" + std::to_string(NavMeshPair.first.mXIndex + XOffset) + "_Z" + std::to_string(NavMeshPair.first.mZIndex + ZOffset);
+						application::util::FileUtil::WriteFile(
+							application::util::FileUtil::GetSaveFilePath("Phive/StitchedNavMesh/" + FieldName + "/" + TileName + ".Nin_NX_NVN.bphnm.zs"),
+							application::file::game::ZStdBackend::Compress(mGenerator.mNeighbourNavMeshObjs[Index]->ToBinary(), application::file::game::ZStdBackend::Dictionary::Base));
+
+						const int32_t LocalNeighbourX = LocalGenerationX + XOffset;
+						const int32_t LocalNeighbourZ = LocalGenerationZ + ZOffset;
+						if (LocalNeighbourX < 0 || LocalNeighbourX >= 4 || LocalNeighbourZ < 0 || LocalNeighbourZ >= 4)
+						{
+							return;
+						}
+
+						const uint32_t LocalNeighbourIndex = static_cast<uint32_t>(LocalNeighbourZ * 4 + LocalNeighbourX);
+						mNavMeshes[LocalNeighbourIndex].second = *mGenerator.mNeighbourNavMeshObjs[Index];
+
+						std::pair<std::vector<glm::vec3>, std::vector<uint32_t>> NeighbourModelData = mNavMeshes[LocalNeighbourIndex].second.ToVerticesIndices();
+						if (IsMinusField)
+						{
+							for (glm::vec3& Vertex : NeighbourModelData.first)
+							{
+								Vertex.y -= 200.0f;
+							}
+						}
+
+						mMeshes[LocalNeighbourIndex] = application::gl::SimpleMesh(NeighbourModelData.first, NeighbourModelData.second);
+					};
+
+				SaveNavMeshNeighbour(0, -1, 0);
+				SaveNavMeshNeighbour(1, 1, 0);
+				SaveNavMeshNeighbour(2, 0, -1);
+				SaveNavMeshNeighbour(3, 0, 1);
 
 			/*
 			for (auto& NavMeshPair : mNavMeshes)
@@ -418,11 +455,6 @@ namespace application::tool::scene::navmesh
 
 			//ReloadMeshes();
 		}
-		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-		{
-			ImGui::SetTooltip("This button is disabled by default.\nThis feature does NOT work and will break the fields NavMesh.\nTo enable it, build Starlight from source and modify the code in tool/scene/navmesh/NavMeshImplementationFieldScene.cpp");
-		}
-		ImGui::EndDisabled();
 	}
 
 	bool NavMeshImplementationFieldScene::SupportNavMeshGeneration()
