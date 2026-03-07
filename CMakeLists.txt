@@ -84,6 +84,8 @@ if (WIN32)
     add_compile_definitions(WIN32)
 endif()
 
+add_definitions(-DNOMINMAX)
+
 include(ExternalProject)
 
 function(CloneRepositoryOnly repositoryURL branchName targetDir)
@@ -465,6 +467,7 @@ add_library(meshcodec
 )
 target_include_directories(meshcodec PUBLIC
     ${CMAKE_SOURCE_DIR}/libs/meshcodec/src/include
+    ${CMAKE_SOURCE_DIR}/libs/meshcodec/lib/float16
     ${CMAKE_SOURCE_DIR}/libs/zstd/lib
 )
 
