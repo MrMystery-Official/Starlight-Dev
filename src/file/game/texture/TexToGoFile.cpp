@@ -11,9 +11,126 @@
 #include <glad/glad.h>
 #include <astcenc.h>
 #include <manager/UIMgr.h>
+#include <algorithm>
 
 namespace application::file::game::texture
 {
+	namespace
+	{
+		bool IsAstcFormat(const TextureFormat::Format format)
+		{
+			switch (format)
+			{
+			case TextureFormat::Format::ASTC_8x5_UNORM:
+			case TextureFormat::Format::ASTC_8x8_UNORM:
+			case TextureFormat::Format::ASTC_8x8_SRGB:
+			case TextureFormat::Format::ASTC_4x4_SRGB:
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		bool GetAstcBlockSize(const uint16_t rawFormat, unsigned int& blockX, unsigned int& blockY)
+		{
+			switch (rawFormat)
+			{
+			case 0x101:
+				blockX = 8;
+				blockY = 5;
+				return true;
+			case 0x102:
+			case 0x105:
+				blockX = 8;
+				blockY = 8;
+				return true;
+			case 0x109:
+				blockX = 4;
+				blockY = 4;
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		bool DecodeAstcSurfacesToCpu(
+			std::vector<TexToGoFile::Surface>& Surfaces,
+			const uint16_t RawFormat,
+			const std::string& FileName)
+		{
+			unsigned int BlockX = 0;
+			unsigned int BlockY = 0;
+			if (!GetAstcBlockSize(RawFormat, BlockX, BlockY))
+				return false;
+
+			astcenc_config Config;
+			astcenc_context* Context = nullptr;
+			const astcenc_error ConfigStatus = astcenc_config_init(
+				ASTCENC_PRF_LDR,
+				BlockX,
+				BlockY,
+				1,
+				ASTCENC_PRE_FAST,
+				ASTCENC_FLG_DECOMPRESS_ONLY,
+				&Config);
+			if (ConfigStatus != ASTCENC_SUCCESS)
+			{
+				application::util::Logger::Error("TexToGoFile", "ASTC config init failed for %s", FileName.c_str());
+				return false;
+			}
+
+			const astcenc_error ContextStatus = astcenc_context_alloc(&Config, 1, &Context);
+			if (ContextStatus != ASTCENC_SUCCESS || Context == nullptr)
+			{
+				application::util::Logger::Error("TexToGoFile", "ASTC context allocation failed for %s", FileName.c_str());
+				return false;
+			}
+
+			const astcenc_swizzle Swizzle = { ASTCENC_SWZ_R, ASTCENC_SWZ_G, ASTCENC_SWZ_B, ASTCENC_SWZ_A };
+			for (size_t i = 0; i < Surfaces.size(); i++)
+			{
+				TexToGoFile::Surface& Surface = Surfaces[i];
+				std::vector<float> RGBAFloatBuffer(Surface.mWidth * Surface.mHeight * 4, 0.0f);
+
+				astcenc_image ImageOut;
+				ImageOut.dim_x = Surface.mWidth;
+				ImageOut.dim_y = Surface.mHeight;
+				ImageOut.dim_z = 1;
+				ImageOut.data_type = ASTCENC_TYPE_F32;
+				void* Plane = RGBAFloatBuffer.data();
+				ImageOut.data = &Plane;
+
+				const astcenc_error DecodeStatus = astcenc_decompress_image(
+					Context,
+					Surface.mData.data(),
+					Surface.mData.size(),
+					&ImageOut,
+					&Swizzle,
+					0);
+				if (DecodeStatus != ASTCENC_SUCCESS)
+				{
+					astcenc_context_free(Context);
+					application::util::Logger::Error("TexToGoFile", "ASTC decompression failed for %s at surface %zu", FileName.c_str(), i);
+					return false;
+				}
+
+				std::vector<unsigned char> RGBABuffer(Surface.mWidth * Surface.mHeight * 4);
+				for (size_t j = 0; j < RGBABuffer.size(); j++)
+				{
+					const float clamped = std::clamp(RGBAFloatBuffer[j], 0.0f, 1.0f);
+					RGBABuffer[j] = static_cast<uint8_t>(std::lround(clamped * 255.0f));
+				}
+
+				Surface.mData = std::move(RGBABuffer);
+				Surface.mDataSize = Surface.mData.size();
+				Surface.mPolishedFormat = TextureFormat::Format::CPU_DECODED;
+			}
+
+			astcenc_context_free(Context);
+			return true;
+		}
+	}
+
 	bool TexToGoFile::Parse()
 	{
 		mReader.ReadStruct(&mHeader, sizeof(TexToGoFile::Header));
@@ -132,95 +249,14 @@ namespace application::file::game::texture
 			return TextureFormat::Format::ASTC_4x4_SRGB;
 		*/
 
-		if (!application::manager::UIMgr::gASTCSupported)
+		if (!application::manager::UIMgr::gASTCSupported && IsAstcFormat(mPolishedFormat))
 		{
-			if (mFormat == 0x101 || mFormat == 0x102 || mFormat == 0x105 || mFormat == 0x109)
-			{
-				unsigned int BlockX = 0;
-				unsigned int BlockY = 0;
+			if (!DecodeAstcSurfacesToCpu(mSurfaces, mFormat, mFileName))
+				return false;
 
-				switch (mFormat)
-				{
-				case 0x101:
-					BlockX = 8;
-					BlockY = 5;
-					break;
-				case 0x102:
-				case 0x105:
-					BlockX = 8;
-					BlockY = 8;
-					break;
-				case 0x109:
-					BlockX = 4;
-					BlockY = 4;
-					break;
-				default:
-					break;
-				}
-
-				if (BlockX > 0 && BlockY > 0)
-				{
-					astcenc_profile profile = ASTCENC_PRF_LDR;  // Low Dynamic Range
-					astcenc_config config;
-					astcenc_context* ctx;
-
-					astcenc_error status = astcenc_config_init(profile, BlockX, BlockY, 1, ASTCENC_PRE_FAST, ASTCENC_FLG_DECOMPRESS_ONLY, &config);
-					if (status != ASTCENC_SUCCESS) {
-						std::cerr << "Failed to initialize ASTC config!" << std::endl;
-						return -1;
-					}
-
-					status = astcenc_context_alloc(&config, 1, &ctx);
-					if (status != ASTCENC_SUCCESS) {
-						std::cerr << "Failed to allocate ASTC context!" << std::endl;
-						return -1;
-					}
-
-					astcenc_swizzle swizzle = { ASTCENC_SWZ_R, ASTCENC_SWZ_G, ASTCENC_SWZ_B, ASTCENC_SWZ_A };
-
-					for (uint16_t i = 0; i < mDepth; i++)
-					{
-						std::vector<float> RGBAFloatBuffer(mSurfaces[i].mWidth * mSurfaces[i].mHeight * 4, 0);
-
-						astcenc_image image_out;
-						image_out.dim_x = mSurfaces[i].mWidth;
-						image_out.dim_y = mSurfaces[i].mHeight;
-						image_out.dim_z = 1;
-						image_out.data_type = ASTCENC_TYPE_F32;  // Decompressed as float
-						image_out.data = new void* [1];  // One plane (for 2D textures)
-						image_out.data[0] = RGBAFloatBuffer.data();
-
-						// Decompress ASTC
-						status = astcenc_decompress_image(ctx, mSurfaces[i].mData.data(), mSurfaces[i].mData.size(), &image_out, &swizzle, 0);
-						if (status != ASTCENC_SUCCESS) 
-						{
-							std::cerr << "ASTC decompression failed!" << std::endl;
-							delete[] image_out.data;
-							return -1;
-						}
-
-						delete[] image_out.data;
-
-						std::vector<unsigned char> RGBABuffer(mSurfaces[i].mWidth* mSurfaces[i].mHeight * 4);
-						for (size_t j = 0; j < RGBABuffer.size(); j++)
-						{
-							RGBABuffer[j] = static_cast<uint8_t>(RGBAFloatBuffer[j] * 255.0f);
-						}
-
-						//mSurfaces[i].mData.resize(squish::GetStorageRequirements(mSurfaces[i].mWidth, mSurfaces[i].mHeight, squish::kDxt5));
-						
-						mSurfaces[i].mData = RGBABuffer;
-						mSurfaces[i].mDataSize = mSurfaces[i].mData.size();
-						mSurfaces[i].mPolishedFormat = application::file::game::texture::TextureFormat::Format::CPU_DECODED;
-						application::util::Logger::Info("TexToGoFile", "Translated ASTC texture surface %u of %u", i, mDepth);
-					}
-
-					mPolishedFormat = application::file::game::texture::TextureFormat::Format::CPU_DECODED;
-					mFormat = GetRawFormat();
-
-					astcenc_context_free(ctx);
-				}
-			}
+			mPolishedFormat = TextureFormat::Format::CPU_DECODED;
+			mFormat = GetRawFormat();
+			application::util::Logger::Info("TexToGoFile", "CPU-decoded ASTC texture %s (%u layers)", mFileName.c_str(), mDepth);
 		}
 
 		mLoaded = true;
@@ -284,8 +320,14 @@ namespace application::file::game::texture
 
 			mFormat = Reader.ReadUInt16();
 			mPolishedFormat = GetFormat();
+			if (mPolishedFormat == TextureFormat::Format::UNKNOWN)
+			{
+				application::util::Logger::Error("TexToGoFile", "Cached TexToGo called %s has unknown format 0x%X", mFileName.c_str(), mFormat);
+				return false;
+			}
 			uint32_t SurfCount = Reader.ReadUInt32();
 			mDepth = SurfCount;
+			mMipCount = 1;
 			mSurfaces.resize(SurfCount);
 
 			Reader.Seek(4, application::util::BinaryVectorReader::Position::Current);
@@ -316,6 +358,16 @@ namespace application::file::game::texture
 				mSurfaces[SurfaceIndex].mPolishedFormat = mPolishedFormat;
 
 				SurfaceIndex++;
+			}
+
+			if (!application::manager::UIMgr::gASTCSupported && IsAstcFormat(mPolishedFormat))
+			{
+				if (!DecodeAstcSurfacesToCpu(mSurfaces, mFormat, mFileName))
+					return false;
+
+				mPolishedFormat = TextureFormat::Format::CPU_DECODED;
+				mFormat = GetRawFormat();
+				application::util::Logger::Info("TexToGoFile", "CPU-decoded cached ASTC texture %s (%u layers)", mFileName.c_str(), mDepth);
 			}
 
 			mWidth = mSurfaces[0].mWidth;

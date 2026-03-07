@@ -1,4 +1,4 @@
-#version 330 core
+#version 400 core
 out vec4 oFragColor;
 in vec2 FragMateTexCoords;
 uniform sampler2DArray uMaterialAlb;
@@ -10,11 +10,13 @@ uniform int uRenderLayerB;
 
 void main()
 {
-    vec4 layerData = texture(uLayers, FragMateTexCoords);
-    float layer0 = layerData.r;
-    float layer1 = layerData.g;
+    uvec4 layerData = texture(uLayers, FragMateTexCoords);
+    uint layer0U = layerData.r;
+    uint layer1U = layerData.g;
+    float layer0 = float(layer0U);
+    float layer1 = float(layer1U);
 
-    if(int(layer0) == 120 || int(layer1) == 120)
+    if(layer0U == 120u || layer1U == 120u)
         discard;
 
     // Get mate texture dimensions and convert to float

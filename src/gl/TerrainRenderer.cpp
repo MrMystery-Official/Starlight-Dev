@@ -160,7 +160,17 @@ namespace application::gl
                 application::util::Logger::Error("TerrainRenderer", "Unable to locate MaterialAlb");
                 return;
             }
-application::util::Logger::Info("TerrainRenderer", "#0");
+
+            const auto& BaseSurface = MaterialAlbTexture->GetSurface(0);
+            const GLsizei TextureWidth = static_cast<GLsizei>(BaseSurface.mWidth);
+            const GLsizei TextureHeight = static_cast<GLsizei>(BaseSurface.mHeight);
+
+            if (TextureWidth <= 0 || TextureHeight <= 0 || MaterialAlbTexture->GetDepth() == 0)
+            {
+                application::util::Logger::Error("TerrainRenderer", "MaterialAlb texture has invalid dimensions");
+                return;
+            }
+
             glGenTextures(1, &gMaterialAlbID);
             glBindTexture(GL_TEXTURE_2D_ARRAY, gMaterialAlbID);
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -168,50 +178,61 @@ application::util::Logger::Info("TerrainRenderer", "#0");
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-application::util::Logger::Info("TerrainRenderer", "#1");
-
             if (MaterialAlbTexture->GetPolishedFormat() != application::file::game::texture::TextureFormat::Format::CPU_DECODED)
             {
-                application::util::Logger::Info("TerrainRenderer", "#1.1");
-
-                glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
-                    1024, 1024, MaterialAlbTexture->GetDepth(),
-                    0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
+                auto FormatIter = application::file::game::texture::FormatHelper::gInternalFormatList.find(MaterialAlbTexture->GetPolishedFormat());
+                if (FormatIter == application::file::game::texture::FormatHelper::gInternalFormatList.end())
+                {
+                    application::util::Logger::Error("TerrainRenderer", "MaterialAlb uses unsupported compressed format");
+                    return;
+                }
                 glCompressedTexImage3D(GL_TEXTURE_2D_ARRAY, 0,
-                    application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
-                    1024, 1024, MaterialAlbTexture->GetDepth(),
-                    0, MaterialAlbTexture->GetSurface(0).mData.size() * MaterialAlbTexture->GetDepth(), nullptr);
+                    FormatIter->second,
+                    TextureWidth, TextureHeight, MaterialAlbTexture->GetDepth(),
+                    0, static_cast<GLsizei>(MaterialAlbTexture->GetSurface(0).mData.size() * MaterialAlbTexture->GetDepth()), nullptr);
             }
             else
             {
                 glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
-                    1024, 1024, MaterialAlbTexture->GetDepth(),
+                    TextureWidth, TextureHeight, MaterialAlbTexture->GetDepth(),
                     0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-                glCompressedTexImage3D(GL_TEXTURE_2D_ARRAY, 0,
-                    application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
-                    1024, 1024, MaterialAlbTexture->GetDepth(),
-                    0, MaterialAlbTexture->GetSurface(0).mData.size() * MaterialAlbTexture->GetDepth(), nullptr);
             }
-application::util::Logger::Info("TerrainRenderer", "#2");
-            // Upload data to the immutable texture
+
+            // Upload data to the texture array.
             for (uint16_t i = 0; i < MaterialAlbTexture->GetDepth(); i++)
             {
                 application::file::game::texture::TexToGoFile::Surface& Surface = MaterialAlbTexture->GetSurface(i);
                 if (Surface.mPolishedFormat != application::file::game::texture::TextureFormat::Format::CPU_DECODED)
                 {
+                    auto FormatIter = application::file::game::texture::FormatHelper::gInternalFormatList.find(Surface.mPolishedFormat);
+                    if (FormatIter == application::file::game::texture::FormatHelper::gInternalFormatList.end())
+                    {
+                        application::util::Logger::Warning("TerrainRenderer", "Skipping MaterialAlb layer %u because its format is unsupported", i);
+                        continue;
+                    }
+
+                    if (Surface.mWidth != static_cast<uint32_t>(TextureWidth) || Surface.mHeight != static_cast<uint32_t>(TextureHeight))
+                    {
+                        application::util::Logger::Warning("TerrainRenderer", "Skipping MaterialAlb layer %u due to size mismatch (%ux%u)", i, Surface.mWidth, Surface.mHeight);
+                        continue;
+                    }
+
                     glCompressedTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
-                        1024, 1024, 1, application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()],
-                        Surface.mData.size(), Surface.mData.data());
+                        TextureWidth, TextureHeight, 1, FormatIter->second,
+                        static_cast<GLsizei>(Surface.mData.size()), Surface.mData.data());
                 }
                 else
                 {
+                    if (Surface.mWidth != static_cast<uint32_t>(TextureWidth) || Surface.mHeight != static_cast<uint32_t>(TextureHeight))
+                    {
+                        application::util::Logger::Warning("TerrainRenderer", "Skipping MaterialAlb layer %u due to size mismatch (%ux%u)", i, Surface.mWidth, Surface.mHeight);
+                        continue;
+                    }
+
                     glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
-                        1024, 1024, 1, GL_RGBA, GL_UNSIGNED_BYTE, Surface.mData.data());
+                        TextureWidth, TextureHeight, 1, GL_RGBA, GL_UNSIGNED_BYTE, Surface.mData.data());
                 }
             }
-application::util::Logger::Info("TerrainRenderer", "#4");
         }
     }
 

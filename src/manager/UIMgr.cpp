@@ -32,6 +32,38 @@
 
 namespace application::manager
 {
+    namespace
+    {
+#if TOOL_GL_DEBUG == 1
+        bool gUseDebugCallback = false;
+
+        const char* GLErrorToString(GLenum Error)
+        {
+            switch (Error)
+            {
+            case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
+            case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
+            case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
+            case GL_STACK_OVERFLOW: return "GL_STACK_OVERFLOW";
+            case GL_STACK_UNDERFLOW: return "GL_STACK_UNDERFLOW";
+            case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+            case GL_INVALID_FRAMEBUFFER_OPERATION: return "GL_INVALID_FRAMEBUFFER_OPERATION";
+            default: return "GL_UNKNOWN_ERROR";
+            }
+        }
+
+        void PollGLErrors(const char* Stage)
+        {
+            GLenum Error = glGetError();
+            while (Error != GL_NO_ERROR)
+            {
+                application::util::Logger::Error("OpenGL", "%s: %s (0x%X)", Stage, GLErrorToString(Error), Error);
+                Error = glGetError();
+            }
+        }
+#endif
+    }
+
 	GLFWwindow* UIMgr::gWindow = nullptr;
     const ImVec4 UIMgr::gClearColor = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     std::vector<std::unique_ptr<application::rendering::UIWindowBase>> UIMgr::gWindows;
@@ -420,11 +452,21 @@ namespace application::manager
         glPatchParameteri(GL_PATCH_VERTICES, 4); //4 is for terrain
 
 #if TOOL_GL_DEBUG == 1
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glDebugMessageCallback(glDebugOutput, nullptr);
-        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-        application::util::Logger::Info("UIMgr", "Enabled GL debugging");
+        if (GLAD_GL_VERSION_4_3 && glad_glDebugMessageCallback != nullptr)
+        {
+            glEnable(GL_DEBUG_OUTPUT);
+            glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+            glDebugMessageCallback(glDebugOutput, nullptr);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+            gUseDebugCallback = true;
+            application::util::Logger::Info("UIMgr", "Enabled OpenGL debug callback");
+        }
+        else
+        {
+            gUseDebugCallback = false;
+            application::util::Logger::Info("UIMgr", "OpenGL debug callback unsupported on this context, using glGetError polling");
+        }
+        PollGLErrors("UIMgr::Initialize");
 #endif
 
         GLint NumFormats = 0;
@@ -651,6 +693,11 @@ namespace application::manager
         glClearColor(gClearColor.x, gClearColor.y, gClearColor.z, gClearColor.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+#if TOOL_GL_DEBUG == 1
+        if (!gUseDebugCallback)
+            PollGLErrors("UIMgr::Render");
+#endif
 
         // Update and Render additional Platform Windows
         // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.

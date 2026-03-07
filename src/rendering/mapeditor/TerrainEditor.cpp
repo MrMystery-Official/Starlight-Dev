@@ -414,6 +414,9 @@ namespace application::rendering::map_editor
         {
             application::file::game::texture::TexToGoFile* MaterialAlbTexture = application::manager::TexToGoFileMgr::GetTexture("MaterialAlb.txtg");
             gTerrainTextureArrayViews.resize(MaterialAlbTexture->GetDepth());
+            application::file::game::texture::TexToGoFile::Surface& BaseSurface = MaterialAlbTexture->GetSurface(0);
+            const GLsizei textureWidth = static_cast<GLsizei>(BaseSurface.mWidth);
+            const GLsizei textureHeight = static_cast<GLsizei>(BaseSurface.mHeight);
 
             const GLenum MaterialAlbFormat = MaterialAlbTexture->GetPolishedFormat() != application::file::game::texture::TextureFormat::Format::CPU_DECODED ? application::file::game::texture::FormatHelper::gInternalFormatList[MaterialAlbTexture->GetPolishedFormat()] : GL_RGBA8;
 
@@ -433,15 +436,21 @@ namespace application::rendering::map_editor
 
                 if (Surface.mPolishedFormat != application::file::game::texture::TextureFormat::Format::CPU_DECODED)
                 {
+                    if (Surface.mWidth != static_cast<uint32_t>(textureWidth) || Surface.mHeight != static_cast<uint32_t>(textureHeight))
+                        continue;
+
                     glCompressedTexImage2D(GL_TEXTURE_2D, 0,
                         application::file::game::texture::FormatHelper::gInternalFormatList[Surface.mPolishedFormat],
-                        1024, 1024, 0,
+                        textureWidth, textureHeight, 0,
                         Surface.mData.size(), Surface.mData.data());
                 }
                 else
                 {
+                    if (Surface.mWidth != static_cast<uint32_t>(textureWidth) || Surface.mHeight != static_cast<uint32_t>(textureHeight))
+                        continue;
+
                     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
-                        1024, 1024, 0,
+                        textureWidth, textureHeight, 0,
                         GL_RGBA, GL_UNSIGNED_BYTE, Surface.mData.data());
                 }
             }

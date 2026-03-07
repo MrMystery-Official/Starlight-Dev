@@ -1,4 +1,4 @@
-#version 330 core
+#version 400 core
 layout(quads, fractional_even_spacing, ccw) in;
 
 uniform sampler2D uHeightMap;
